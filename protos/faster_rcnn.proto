@@ -1,0 +1,9 @@
+syntax = "proto2";
+
+package netng.protos;
+
+import "protos/anchor_generator.proto";
+
+message FasterRCNN {
+  optional AnchorGenerator anchor_generator = 1;
+}

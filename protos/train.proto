@@ -1,0 +1,41 @@
+syntax = "proto2";
+
+package netng.protos;
+
+import "protos/preprocessor.proto";
+import "protos/optimizer.proto";
+
+message TrainConfig {
+  // Input queue batch size.
+  optional uint32 batch_size = 1;
+
+  // Data augmentation options.
+  repeated PreprocessingStep data_augmentation_options = 2;
+
+  // After how many seconds to save the current model
+  optional float checkpoint_save_interval = 4;
+
+  // Checkpoint to restore variables from. Typically used to load feature
+  // extractor variables trained outside of object detection.
+  optional string fine_tune_checkpoint = 6 [default=""];
+
+  // Number of steps to train the DetectionModel for. If 0, will train the model
+  // indefinitely.
+  optional uint32 num_steps = 7 [default=0];
+
+  // Number of reader instances to create.
+  optional int32 num_readers = 8 [default=32];
+
+  // Whether to shuffle the dataset
+  optional bool shuffle = 12 [default=true];
+
+  optional bool add_regularization_loss = 13 [default=true];
+
+  // The number of GPU's to use. If not defined, use all available.
+  optional uint32 nb_gpu = 14;
+
+  optional Optimizer optimizer = 15;
+
+  // Clips if > 0
+  optional int32 gradient_clipping_by_norm = 16;
+}

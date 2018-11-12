@@ -1,0 +1,17 @@
+syntax = "proto2";
+
+package netng.protos;
+
+message EvalConfig {
+  // Input queue batch size.
+  optional uint32 batch_size = 1 [default=1];
+
+  // How often to run evaluation.
+  optional uint32 eval_interval_secs = 2 [default=300];
+
+  // Number of reader instances to create.
+  optional int32 num_readers = 3 [default=32];
+
+  // Maximum number of images to visualize in tensorboard; 0 for no limit
+  optional int32 max_num_images_to_visualize = 4 [default=0];
+}

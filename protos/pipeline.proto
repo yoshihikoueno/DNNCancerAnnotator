@@ -1,0 +1,17 @@
+syntax = "proto2";
+
+package netng.protos;
+
+import "protos/train.proto";
+import "protos/eval.proto";
+import "protos/model.proto";
+import "protos/dataset.proto";
+
+message PipelineConfig {
+  optional Model model = 1;
+  optional TrainConfig train_config = 2;
+  optional EvalConfig eval_config = 3;
+  optional Dataset dataset = 4;
+
+  optional int32 seed = 5;
+}

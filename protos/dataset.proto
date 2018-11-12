@@ -1,0 +1,23 @@
+syntax = "proto2";
+
+package netng.protos;
+
+import "protos/prostate_cancer_dataset.proto";
+
+message Dataset {
+  optional string dataset_path = 1;
+  optional string label_map_path = 2;
+
+  optional bool subtract_channel_means = 3;
+
+  // 0: 0 - 255
+  // 1: 0 - 1
+  // 2: -1 - 1
+  optional int32 val_range = 4;
+
+  optional bool balance_classes = 5;
+
+  oneof dataset_type {
+    ProstateCancerDataset prostate_cancer = 6;
+  }
+}

@@ -1,0 +1,17 @@
+syntax = "proto2";
+
+package netng.protos;
+
+import "protos/faster_rcnn.proto";
+import "protos/unet.proto";
+
+message Model {
+  optional int32 input_image_size_x = 1;
+  optional int32 input_image_size_y = 2;
+  optional int32 input_image_channels = 3;
+  
+  oneof model_type {
+    FasterRCNN faster_rcnn = 4;
+    UNet unet = 5;
+  }
+}

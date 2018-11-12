@@ -1,0 +1,11 @@
+syntax = "proto2";
+
+package netng.protos;
+
+message ProstateCancerDataset {
+  optional bool only_cancer_images = 1;
+  // In order to balance the dataset, remove the smallest patient set first
+  optional bool balance_remove_smallest_patient_set = 6;
+  // In order to balance the dataset, remove random patient sets
+  optional bool balance_remove_random_patient_set = 7;
+}
