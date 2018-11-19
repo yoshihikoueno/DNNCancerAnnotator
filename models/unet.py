@@ -34,7 +34,7 @@ class UNet(object):
     self.input_image_dims = (pipeline_config.model.input_image_size_x,
                              pipeline_config.model.input_image_size_y,
                              pipeline_config.model.input_image_channels)
-    self.weight_decay = 0.0
+    self.weight_decay = pipeline_config.train_config.weight_decay
     self.use_batch_norm = False
     self.is_training = is_training
     self.config = pipeline_config
@@ -159,52 +159,78 @@ class UNet(object):
 
 
 def estimator_fn(features, pipeline_config, mode):
-  if mode == tf.estimator.ModeKeys.TRAIN:
-    return train_fn(features, pipeline_config)
-  elif mode == tf.estimator.ModeKeys.EVAL:
-    return eval_fn(features, pipeline_config)
-  else:
-    assert(False)
-
-
-def train_fn(tensor_dict,
-             pipeline_config):
-  optimizer, optimizer_summary_vars = optimizer_builder.build(
-      pipeline_config.train_config.optimizer)
-
-  regularization_losses = (
-    None if pipeline_config.train_config.add_regularization_loss else [])
-
   net = UNet(pipeline_config, is_training=True)
 
-  images = tensor_dict[standard_fields.InputDataFields.image_decoded]
-  annotation_mask = tensor_dict[
+  images = features[standard_fields.InputDataFields.image_decoded]
+
+  annotation_mask = features[
     standard_fields.InputDataFields.annotation_mask]
 
   network_output = net.build_network(images)
 
   losses_dict = net.loss(network_output, annotation_mask)
 
-  total_loss = 0
-  for loss_tensor in losses_dict.values():
-    tf.losses.add_loss(loss_tensor)
-    total_loss += loss_tensor
+  loss = tf.add_n(list(losses_dict.values()), name='ModelLoss')
+  tf.summary.scalar(loss.op.name, loss, family='Loss')
+  total_loss = tf.identity(loss, name='Total_Loss')
 
-  grads_and_vars = optimizer.compute_gradients(total_loss)
+  if mode == tf.estimator.ModeKeys.TRAIN:
+    if pipeline_config.train_config.add_regularization_loss:
+      regularization_losses = tf.get_collection(
+        tf.GraphKeys.REGULARIZATION_LOSSES)
+      if regularization_losses:
+        regularization_loss = tf.add_n(regularization_losses,
+                                       name='RegularizationLoss')
+        total_loss = tf.add_n([loss, regularization_loss],
+                              name='TotalLoss')
+        tf.summary.scalar(regularization_loss.op.name, regularization_loss,
+                          family='Loss')
 
-  # Optionally clip gradients
-  if pipeline_config.train_config.gradient_clipping_by_norm > 0:
-    grads_and_vars = slim.learning.clip_gradient_norms(
-      grads_and_vars, pipeline_config.train_config.gradient_clipping_by_norm)
+  tf.summary.scalar(total_loss.op.name, total_loss, family='Loss')
+  total_loss = tf.check_numerics(total_loss, 'LossTensor is inf or nan.')
 
-  train_op = optimizer.apply_gradients(
-    grads_and_vars, global_step=tf.train.get_global_step())
+  scaffold = None
+  train_op = tf.identity(total_loss)
+  if mode == tf.estimator.ModeKeys.TRAIN:
+    if pipeline_config.train_config.optimizer.use_moving_average:
+      # EMA's are currently not supported with tf's DistributionStrategy.
+      # Reenable once they fixed the bugs
+      logging.warn(
+        'EMA is currently not supported with tf DistributionStrategy.')
+      pipeline_config.train_config.optimizer.use_moving_average = False
+      # The swapping saver will swap the trained variables with their moving
+      # averages before saving, thus removing the need to care for moving
+      # averages during evaluation
+      # scaffold = tf.train.Scaffold(saver=optimizer.swapping_saver())
+
+    optimizer, optimizer_summary_vars = optimizer_builder.build(
+      pipeline_config.train_config.optimizer)
+    for var in optimizer_summary_vars:
+      tf.summary.scalar(var.op.name, var, family='LearningRate')
+
+    grads_and_vars = optimizer.compute_gradients(total_loss)
+
+    # Optionally clip gradients
+    if pipeline_config.train_config.gradient_clipping_by_norm > 0:
+      grads_and_vars = slim.learning.clip_gradient_norms(
+        grads_and_vars, pipeline_config.train_config.gradient_clipping_by_norm)
+
+    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    with tf.control_dependencies(update_ops):
+      train_op = optimizer.apply_gradients(
+        grads_and_vars, global_step=tf.train.get_global_step())
 
   logging.info("Total number of trainable parameters: {}".format(np.sum([
     np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])))
 
-  return tf.estimator.EstimatorSpec(tf.estimator.ModeKeys.TRAIN,
-                                    loss=total_loss, train_op=train_op)
+  if mode == tf.estimator.ModeKeys.TRAIN:
+    return tf.estimator.EstimatorSpec(mode,
+                                      loss=total_loss, train_op=train_op,
+                                      scaffold=scaffold)
+  elif mode == tf.estimator.ModeKeys.EVAL:
+    return tf.estimator.EstimatorSpec(mode, loss=total_loss)
+  else:
+    assert(False)
 
 
 def eval_fn(queue, pipeline_config):
@@ -244,12 +270,15 @@ def eval_batch_processor_fn(eval_config, categories, result_folder, tensor_dict,
   background, foreground = tf.split(tf.sigmoid(network_output), 2, axis=3)
   img_size = background.get_shape().as_list()[1]
 
-  gt_mask = tf.expand_dims(combine_and_crop_masks(tensor_dict['gt_masks'], img_size), axis=3)
+  gt_mask = tf.expand_dims(combine_and_crop_masks(tensor_dict['gt_masks'],
+                                                  img_size), axis=3)
 
   background = tf.tile(background, [1, 1, 1, 3]) * 255
   foreground = tf.tile(foreground, [1, 1, 1, 3]) * 255
-  gt_mask = tf.concat([gt_mask, tf.zeros_like(gt_mask), tf.zeros_like(gt_mask)], axis = 3) * 255
-  original_image = central_crop(tf.tile(tensor_dict['network_input'], [1, 1, 1, 3]), img_size)
+  gt_mask = tf.concat([gt_mask, tf.zeros_like(gt_mask),
+                       tf.zeros_like(gt_mask)], axis = 3) * 255
+  original_image = central_crop(tf.tile(tensor_dict['network_input'],
+                                        [1, 1, 1, 3]), img_size)
 
   masked_img = tf.clip_by_value(original_image + gt_mask, 0, 255)
 

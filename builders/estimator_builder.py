@@ -1,0 +1,40 @@
+import functools
+import os
+
+import numpy as np
+import tensorflow as tf
+
+from models import unet
+
+
+def build_estimator(pipeline_config, result_dir, warm_start_path,
+                    train_distribution, eval_distribution,
+                    warm_start_ckpt_name=None):
+  np.random.seed(pipeline_config.seed)
+  tf.set_random_seed(pipeline_config.seed)
+
+  model_fn = functools.partial(unet.estimator_fn,
+                               pipeline_config=pipeline_config)
+
+  run_config = tf.estimator.RunConfig(
+    model_dir=result_dir, tf_random_seed=pipeline_config.seed,
+    save_summary_steps=pipeline_config.train_config.save_summary_steps,
+    save_checkpoints_secs=pipeline_config.train_config.save_checkpoints_secs,
+    session_config=tf.ConfigProto(allow_soft_placement=True,
+                                  log_device_placement=False),
+    keep_checkpoint_max=None, log_step_count_steps=10,
+    train_distribute=train_distribution, eval_distribute=eval_distribution)
+
+  if warm_start_path:
+    warm_start_path = result_dir
+    if warm_start_ckpt_name:
+      warm_start_path = os.path.join(warm_start_path, warm_start_ckpt_name)
+    warm_start_from = tf.estimator.WarmStartSettings(
+      ckpt_to_initialize_from=warm_start_path)
+  else:
+    warm_start_from = None
+
+  estimator = tf.estimator.Estimator(model_fn=model_fn, config=run_config,
+                                     warm_start_from=warm_start_from)
+
+  return estimator

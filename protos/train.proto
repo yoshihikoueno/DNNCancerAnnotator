@@ -13,7 +13,7 @@ message TrainConfig {
   repeated PreprocessingStep data_augmentation_options = 2;
 
   // After how many seconds to save the current model
-  optional float checkpoint_save_interval = 4;
+  optional int32 save_checkpoints_secs = 4;
 
   // Checkpoint to restore variables from. Typically used to load feature
   // extractor variables trained outside of object detection.
@@ -32,10 +32,19 @@ message TrainConfig {
   optional bool add_regularization_loss = 13 [default=true];
 
   // The number of GPU's to use. If not defined, use all available.
-  optional uint32 nb_gpu = 14;
+  optional uint32 num_gpu = 14;
 
   optional Optimizer optimizer = 15;
 
   // Clips if > 0
   optional int32 gradient_clipping_by_norm = 16;
+
+  // Save summaries every this many steps.
+  optional int32 save_summary_steps = 17;
+
+  optional float weight_decay = 18;
+
+  optional int32 shuffle_buffer_size = 19;
+
+  
 }

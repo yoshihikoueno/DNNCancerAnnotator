@@ -27,9 +27,7 @@ class PickledDatasetInfo:
   split_to_size = 'split_to_size'
   seed = 'seed'
   dataset_size = 'dataset_size'
-  train_patient_ids = 'train_patient_ids'
-  val_patient_ids = 'val_patient_ids'
-  test_patient_ids = 'test_patient_ids'
+  patient_ids = 'patient_ids'
 
 
 class SplitNames:

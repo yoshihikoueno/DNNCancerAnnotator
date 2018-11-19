@@ -30,7 +30,7 @@ def _extract_annotation(decoded_annotation):
   return tf.cast(bool_mask, dtype=tf.float32)
 
 
-def preprocess_image(image_decoded, target_dims, is_annotation_mask):
+def _preprocess_image(image_decoded, target_dims, is_annotation_mask):
   # Image should be quadratic
   image_shape = tf.shape(image_decoded)
   quadratic_assert_op = tf.Assert(tf.equal(image_shape[0], image_shape[1]),
@@ -42,7 +42,9 @@ def preprocess_image(image_decoded, target_dims, is_annotation_mask):
 
   with tf.control_dependencies([quadratic_assert_op, size_assert_op]):
     # Resize to common size
-    common_size = [512, 512]
+    # Since the prostate area is around 1/3 of the image size, we want to make
+    # Sure that our crop also captures this area
+    common_size = [max(512, target_dims[0] * 3), max(512, target_dims[1] * 3)]
     image_resized = tf.squeeze(tf.image.resize_bicubic(
       tf.expand_dims(image_decoded, axis=0), tf.constant(common_size)), axis=0)
 
@@ -93,13 +95,13 @@ def _decode_example(example_dict, target_dims):
                                               annotation_decoded.get_shape()]))
     with tf.control_dependencies([same_size_assert_op]):
       annotation_mask = _extract_annotation(annotation_decoded)
-      annotation_mask_preprocessed = preprocess_image(
+      annotation_mask_preprocessed = _preprocess_image(
         annotation_mask, target_dims, True)
-      annotation_preprocessed = preprocess_image(
+      annotation_preprocessed = _preprocess_image(
         annotation_decoded, target_dims, False)
-      image_preprocessed = preprocess_image(image_decoded, target_dims, False)
+      image_preprocessed = _preprocess_image(image_decoded, target_dims, False)
   else:
-    image_preprocessed = preprocess_image(image_decoded, target_dims, False)
+    image_preprocessed = _preprocess_image(image_decoded, target_dims, False)
     annotation_mask_preprocessed = tf.zeros(target_dims[:2], dtype=tf.float32)
     annotation_preprocessed = tf.image.grayscale_to_rgb(image_preprocessed)
 
@@ -295,11 +297,10 @@ def _sort_files(dataset_folder, balance_classes, balance_remove_smallest,
           standard_fields.SplitNames.val: [val_data, val_size],
           standard_fields.SplitNames.test: [test_data, test_size],
           standard_fields.PickledDatasetInfo.dataset_size: dataset_size,
-          standard_fields.PickledDatasetInfo.train_patient_ids:
-          train_patient_ids,
-          standard_fields.PickledDatasetInfo.val_patient_ids: val_patient_ids,
-          standard_fields.PickledDatasetInfo.test_patient_ids:
-          test_patient_ids}
+          standard_fields.PickledDatasetInfo.patient_ids:
+          {standard_fields.SplitNames.train: train_patient_ids,
+           standard_fields.SplitNames.val: val_patient_ids,
+           standard_fields.SplitNames.test: test_patient_ids}}
 
 
 def _build_patient_dataset(full_dataset, target_patient_id):
@@ -315,7 +316,7 @@ def _build_train_dataset(patient_data, patient_ids):
   return patient_id_dataset.interleave(
     lambda patient_id: _build_patient_dataset(
       patient_data, patient_id).shuffle(256).repeat(None), cycle_length=1,
-    block_length=1).shuffle(len(patient_ids)).repeat(None)
+    block_length=1, num_parallel_calls=20)
 
 
 def _load_from_files(dataset_config, input_image_dims, seed):
@@ -351,11 +352,14 @@ def _load_from_files(dataset_config, input_image_dims, seed):
     standard_fields.PickledDatasetInfo.dataset_size]
 
   train_patient_ids = dataset_files_dict[
-    standard_fields.PickledDatasetInfo.train_patient_ids]
+    standard_fields.PickledDatasetInfo.patient_ids][
+      standard_fields.SplitNames.train]
   val_patient_ids = dataset_files_dict[
-    standard_fields.PickledDatasetInfo.val_patient_ids]
+    standard_fields.PickledDatasetInfo.patient_ids][
+      standard_fields.SplitNames.val]
   test_patient_ids = dataset_files_dict[
-    standard_fields.PickledDatasetInfo.test_patient_ids]
+    standard_fields.PickledDatasetInfo.patient_ids][
+      standard_fields.SplitNames.test]
 
   split_to_size = {standard_fields.SplitNames.train:
                    dataset_files_dict[standard_fields.SplitNames.train][1],
@@ -368,9 +372,10 @@ def _load_from_files(dataset_config, input_image_dims, seed):
     standard_fields.PickledDatasetInfo.split_to_size: split_to_size,
     standard_fields.PickledDatasetInfo.seed: seed,
     standard_fields.PickledDatasetInfo.dataset_size: dataset_size,
-    standard_fields.PickledDatasetInfo.train_patient_ids: train_patient_ids,
-    standard_fields.PickledDatasetInfo.val_patient_ids: val_patient_ids,
-    standard_fields.PickledDatasetInfo.test_patient_ids: test_patient_ids}
+    standard_fields.PickledDatasetInfo.patient_ids: {
+      standard_fields.SplitNames.train: train_patient_ids,
+      standard_fields.SplitNames.val: val_patient_ids,
+      standard_fields.SplitNames.test: test_patient_ids}}
 
   train_dataset = tf.data.Dataset.from_tensor_slices(
       tuple([list(t) for t in zip(
@@ -430,19 +435,18 @@ def _deserialize_example(example):
   return tf.parse_single_example(example, features)
 
 
-def create_tfrecords(dataset, writer):
+def create_tfrecords(sess, dataset, writer):
   it = dataset.make_one_shot_iterator()
 
   elem = it.get_next()
 
-  with tf.Session() as sess:
-    while True:
-      try:
-        elem_result = _serialize_example(sess.run(elem))
+  while True:
+    try:
+      elem_result = _serialize_example(sess.run(elem))
 
-        writer.write(elem_result)
-      except tf.errors.OutOfRangeError:
-        break
+      writer.write(elem_result)
+    except tf.errors.OutOfRangeError:
+      break
 
 
 def build_tfrecords_from_files(dataset_config, input_image_dims, seed,
@@ -450,25 +454,27 @@ def build_tfrecords_from_files(dataset_config, input_image_dims, seed,
   train_dataset, val_dataset, test_dataset, pickle_data = \
     _load_from_files(dataset_config, input_image_dims, seed)
 
-  train_writer = tf.python_io.TFRecordWriter(
-    os.path.join(output_dir, standard_fields.SplitNames.train + '.tfrecords'))
-  create_tfrecords(train_dataset, train_writer)
-  train_writer.close()
+  with tf.Session() as sess:
+    train_writer = tf.python_io.TFRecordWriter(
+      os.path.join(output_dir, standard_fields.SplitNames.train + '.tfrecords'))
+    create_tfrecords(sess, train_dataset, train_writer)
+    train_writer.close()
 
-  val_writer = tf.python_io.TFRecordWriter(
-    os.path.join(output_dir, standard_fields.SplitNames.val + '.tfrecords'))
-  create_tfrecords(val_dataset, val_writer)
-  val_writer.close()
+    val_writer = tf.python_io.TFRecordWriter(
+      os.path.join(output_dir, standard_fields.SplitNames.val + '.tfrecords'))
+    create_tfrecords(sess, val_dataset, val_writer)
+    val_writer.close()
 
-  test_writer = tf.python_io.TFRecordWriter(
-    os.path.join(output_dir, standard_fields.SplitNames.test + '.tfrecords'))
-  create_tfrecords(test_dataset, test_writer)
-  test_writer.close()
+    test_writer = tf.python_io.TFRecordWriter(
+      os.path.join(output_dir, standard_fields.SplitNames.test + '.tfrecords'))
+    create_tfrecords(sess, test_dataset, test_writer)
+    test_writer.close()
 
   f = open(os.path.join(
     output_dir, standard_fields.PickledDatasetInfo.pickled_file_name), 'wb')
   pickle.dump(pickle_data, f)
   f.close()
+
 
 def build_tf_dataset_from_files(dataset_config, input_image_dims, seed):
   train_dataset, val_dataset, test_dataset, pickle_data = \
@@ -482,7 +488,8 @@ def build_tf_dataset_from_files(dataset_config, input_image_dims, seed):
 
   train_dataset = _build_train_dataset(
     train_dataset, pickle_data[
-      standard_fields.PickledDatasetInfo.train_patient_ids])
+      standard_fields.PickledDatasetInfo.patient_ids][
+        standard_fields.SplitNames.train])
 
   return train_dataset, val_dataset, test_dataset, pickle_data
 
