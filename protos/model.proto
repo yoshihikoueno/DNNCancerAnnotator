@@ -14,4 +14,9 @@ message Model {
     FasterRCNN faster_rcnn = 4;
     UNet unet = 5;
   }
+
+  // Should only be used with batch size > 1
+  optional bool use_batch_norm = 6;
+  optional float batch_norm_momentum = 7;
+  optional float batch_norm_epsilon = 8;
 }

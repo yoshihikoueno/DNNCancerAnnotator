@@ -27,7 +27,9 @@ def _extract_annotation(decoded_annotation):
   bool_mask = tf.greater(tf.subtract(decoded_annotation[:, :, 0],
                                      decoded_annotation[:, :, 1]), 200)
 
-  return tf.cast(bool_mask, dtype=tf.float32)
+  assert(len(bool_mask.get_shape().as_list()) == 2)
+
+  return tf.expand_dims(tf.cast(bool_mask, dtype=tf.float32), 2)
 
 
 def _preprocess_image(image_decoded, target_dims, is_annotation_mask):
@@ -45,8 +47,9 @@ def _preprocess_image(image_decoded, target_dims, is_annotation_mask):
     # Since the prostate area is around 1/3 of the image size, we want to make
     # Sure that our crop also captures this area
     common_size = [max(512, target_dims[0] * 3), max(512, target_dims[1] * 3)]
-    image_resized = tf.squeeze(tf.image.resize_bicubic(
-      tf.expand_dims(image_decoded, axis=0), tf.constant(common_size)), axis=0)
+    image_resized = tf.squeeze(tf.clip_by_value(tf.image.resize_bicubic(
+      tf.expand_dims(image_decoded, axis=0),
+      tf.constant(common_size)), 0, 255), axis=0)
 
     # Get crop offset
     offset_height = int(np.floor((common_size[0] - target_dims[0]) / 2.0))
@@ -57,14 +60,19 @@ def _preprocess_image(image_decoded, target_dims, is_annotation_mask):
       image_resized = tf.cast(tf.greater(image_resized, 0), tf.float32)
       # Get bounding box around masked region, in order to check if our crop
       # will cut it off
-      mask_min = tf.reduce_min(tf.where(tf.equal(image_resized, 1.0)), axis=0)
-      mask_max = tf.reduce_max(tf.where(tf.equal(image_resized, 1.0)), axis=0)
+      mask_min = tf.reduce_min(tf.where(tf.equal(image_resized, 1.0)),
+                               axis=0)[:2]
+      mask_max = tf.reduce_max(tf.where(tf.equal(image_resized, 1.0)),
+                               axis=0)[:2]
 
       mask_min_crop_assert = tf.Assert(
-        tf.greater(mask_min, [offset_height, offset_width]))
+        tf.reduce_all(tf.greater(mask_min, [offset_height, offset_width])),
+        data=[mask_min, [offset_height, offset_width]])
       mask_max_crop_assert = tf.Assert(
-        tf.lesser(mask_max, [offset_height + target_dims[0],
-                             offset_width + target_dims[1]]))
+        tf.reduce_all(tf.less(mask_max, [offset_height + target_dims[0],
+                                           offset_width + target_dims[1]])),
+        data=[mask_max, [offset_height + target_dims[0],
+                         offset_width + target_dims[1]]])
       with tf.control_dependencies([mask_min_crop_assert,
                                     mask_max_crop_assert]):
         image_cropped = tf.image.crop_to_bounding_box(
@@ -80,30 +88,22 @@ def _preprocess_image(image_decoded, target_dims, is_annotation_mask):
 
 def _decode_example(example_dict, target_dims):
   image_string = example_dict[standard_fields.TfExampleFields.image_encoded]
-  image_decoded = tf.image.decode_png(
-    image_string, channels=target_dims[2], dtype=tf.uint8)
+  image_decoded = tf.to_float(tf.image.decode_png(
+    image_string, channels=target_dims[2], dtype=tf.uint8))
 
   label = example_dict[standard_fields.TfExampleFields.label]
-  if label == 1:
-    annotation_string = example_dict[
+
+  annotation_string = example_dict[
       standard_fields.TfExampleFields.annotation_encoded]
-    annotation_decoded = tf.image.decode_png(
-      annotation_string, channels=3, dtype=tf.uint8)
-    same_size_assert_op = tf.Assert(tf.equal(image_decoded.get_shape(),
-                                             annotation_decoded.get_shape(),
-                                             [image_decoded.get_shape(),
-                                              annotation_decoded.get_shape()]))
-    with tf.control_dependencies([same_size_assert_op]):
-      annotation_mask = _extract_annotation(annotation_decoded)
-      annotation_mask_preprocessed = _preprocess_image(
-        annotation_mask, target_dims, True)
-      annotation_preprocessed = _preprocess_image(
-        annotation_decoded, target_dims, False)
-      image_preprocessed = _preprocess_image(image_decoded, target_dims, False)
-  else:
-    image_preprocessed = _preprocess_image(image_decoded, target_dims, False)
-    annotation_mask_preprocessed = tf.zeros(target_dims[:2], dtype=tf.float32)
-    annotation_preprocessed = tf.image.grayscale_to_rgb(image_preprocessed)
+  annotation_decoded = tf.to_float(tf.image.decode_png(
+      annotation_string, channels=3, dtype=tf.uint8))
+
+  annotation_mask = _extract_annotation(annotation_decoded)
+  annotation_mask_preprocessed = _preprocess_image(
+    annotation_mask, target_dims, True)
+  annotation_preprocessed = _preprocess_image(
+    annotation_decoded, target_dims, False)
+  image_preprocessed = _preprocess_image(image_decoded, target_dims, False)
 
   features = {
     standard_fields.InputDataFields.patient_id:
@@ -126,11 +126,7 @@ def _decode_example(example_dict, target_dims):
 
 def _parse_from_file(image_file, annotation_file, label, patient_id, slice_id):
   image_string = tf.read_file(image_file)
-
-  if label == 1:
-    annotation_string = tf.read_file(annotation_file)
-  else:
-    annotation_string = b''
+  annotation_string = tf.read_file(annotation_file)
 
   return {
     standard_fields.TfExampleFields.patient_id: patient_id,
@@ -187,8 +183,8 @@ def _sort_files(dataset_folder, balance_classes, balance_remove_smallest,
       healthy_patient_nb += 1
       for filename in filenames:
         healthy_images[patient_id].append([
-          os.path.join(dirpath, filename), '', 0, patient_id,
-          int(filename.split('.')[0])])
+          os.path.join(dirpath, filename), os.path.join(dirpath, filename), 0,
+          patient_id, int(filename.split('.')[0])])
         healthy_nb += 1
 
   # Cancer Cases
@@ -316,7 +312,7 @@ def _build_train_dataset(patient_data, patient_ids):
   return patient_id_dataset.interleave(
     lambda patient_id: _build_patient_dataset(
       patient_data, patient_id).shuffle(256).repeat(None), cycle_length=1,
-    block_length=1, num_parallel_calls=20)
+    block_length=1, num_parallel_calls=None)
 
 
 def _load_from_files(dataset_config, input_image_dims, seed):
@@ -456,7 +452,8 @@ def build_tfrecords_from_files(dataset_config, input_image_dims, seed,
 
   with tf.Session() as sess:
     train_writer = tf.python_io.TFRecordWriter(
-      os.path.join(output_dir, standard_fields.SplitNames.train + '.tfrecords'))
+      os.path.join(output_dir, standard_fields.SplitNames.train
+                   + '.tfrecords'))
     create_tfrecords(sess, train_dataset, train_writer)
     train_writer.close()
 

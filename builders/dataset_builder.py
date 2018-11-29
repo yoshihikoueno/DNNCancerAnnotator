@@ -6,37 +6,36 @@ from dataset_helpers import prostate_cancer_utils as pc
 from utils import standard_fields
 
 
-def _load_existing_tfrecords(directory, split_name, target_dims, dataset_name):
+def _load_existing_tfrecords(directory, split_name, target_dims, dataset_name,
+                             dataset_info):
   tfrecords_file = os.path.join(directory, split_name + '.tfrecords')
-  meta_file = os.path.join(
-    directory, standard_fields.PickledDatasetInfo.pickled_file_name)
 
-  f = open(meta_file, 'rb')
-  meta_data = pickle.load(f)
-  f.close()
-
-  ids = meta_data[standard_fields.PickledDatasetInfo.patient_ids][split_name]
+  ids = dataset_info[standard_fields.PickledDatasetInfo.patient_ids][
+    split_name]
 
   if dataset_name == 'prostate_cancer':
     return pc.build_tf_dataset_from_tfrecords(
       tfrecords_file, target_dims, ids,
-      split_name == standard_fields.SplitNames.train), meta_data
+      split_name == standard_fields.SplitNames.train)
   else:
     assert(False)
 
 
-def build_dataset(dataset_config, directory, existing_tfrecords_directory,
-                  split_name, target_dims, seed, batch_size, shuffle,
-                  shuffle_buffer_size):
-  assert split_name in standard_fields.SplitNames.available_names
+# Create tfrecords files if necessary and return meta info as dict
+def prepare_dataset(dataset_config, directory, existing_tfrecords,
+                    target_dims, seed):
+  if existing_tfrecords:
+    meta_file = os.path.join(
+      directory, standard_fields.PickledDatasetInfo.pickled_file_name)
 
-  dataset_name = dataset_config.WhichOneof('dataset_type')
+    f = open(meta_file, 'rb')
+    meta_data = pickle.load(f)
+    f.close()
 
-  if existing_tfrecords_directory:
-    dataset, meta_info = _load_existing_tfrecords(
-      existing_tfrecords_directory, split_name, target_dims, dataset_name)
-
+    return meta_data
   else:
+    dataset_name = dataset_config.WhichOneof('dataset_type')
+
     # We need to create a tfrecords, and use it as dataset
 
     # Tfrecords files and meta file are created in result dir
@@ -46,14 +45,31 @@ def build_dataset(dataset_config, directory, existing_tfrecords_directory,
     else:
       assert(False)
 
-    # Load tfrecords into dataset
-    dataset, meta_info = _load_existing_tfrecords(
-      directory, split_name, target_dims, dataset_name)
+    meta_file = os.path.join(
+      directory, standard_fields.PickledDatasetInfo.pickled_file_name)
+
+    f = open(meta_file, 'rb')
+    meta_data = pickle.load(f)
+    f.close()
+
+    return meta_data
+
+
+def build_dataset(dataset_config, directory,
+                  split_name, target_dims, seed, batch_size, shuffle,
+                  shuffle_buffer_size, is_training, dataset_info):
+  assert split_name in standard_fields.SplitNames.available_names
+
+  dataset_name = dataset_config.WhichOneof('dataset_type')
+
+  dataset = _load_existing_tfrecords(
+      directory, split_name, target_dims, dataset_name,
+      dataset_info)
 
   if shuffle:
     dataset = dataset.shuffle(shuffle_buffer_size)
 
-  if split_name == standard_fields.SplitNames.train:
+  if is_training:
     dataset = dataset.repeat(None)
 
   dataset = dataset.batch(batch_size)

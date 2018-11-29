@@ -34,7 +34,7 @@ FLAGS = flags.FLAGS
 
 
 def main(_):
-  assert(not (repeated and checkpoint_name))
+  assert(not (FLAGS.repeated and FLAGS.checkpoint_name))
   if not FLAGS.use_gpu:
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ["CUDA_VISIBLE_DEVICES"] = ''
@@ -44,8 +44,8 @@ def main(_):
     debugger = pdb.Pdb(stdout=sys.__stdout__)
     debugger.set_trace()
 
-  if not os.path.isdir(FLAGS.result_dir):
-    raise ValueError("Result directory does not exist!")
+  if not os.path.isdir(FLAGS.checkpoint_dir):
+    raise ValueError("Checkpoint directory does not exist!")
 
   pipeline_config_file = os.path.join(FLAGS.checkpoint_dir,
                                       'pipeline.config')
@@ -53,7 +53,7 @@ def main(_):
 
   result_folder_name = 'eval_{}_{}_{}'.format(
     FLAGS.split_name + '-split',
-    os.path.basename(pipeline_config.dataset_path),
+    os.path.basename(pipeline_config.dataset.dataset_path),
     datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
 
   if FLAGS.result_dir:
@@ -68,13 +68,22 @@ def main(_):
   util_ops.init_logger(result_folder)
   logging.info("Command line arguments: {}".format(sys.argv))
 
-  input_fn = setup_utils.get_input_fn(
-    pipeline_config=pipeline_config, directory=result_folder,
-    existing_tfrecords_directory=FLAGS.checkpoint_dir,
-    split_name=FLAGS.split_name)
+  num_gpu = pipeline_config.train_config.num_gpu
+  real_gpu_nb = len(util_ops.get_devices())
+  if num_gpu and num_gpu > real_gpu_nb:
+    raise ValueError("Too many GPUs specified!")
+  else:
+    num_gpu = real_gpu_nb
+
+  input_fn, dataset_info = setup_utils.get_input_fn(
+    pipeline_config=pipeline_config, directory=FLAGS.checkpoint_dir,
+    existing_tfrecords=True,
+    split_name=FLAGS.split_name, num_gpu=num_gpu, is_training=False)
 
   estimator = estimator_builder.build_estimator(
-    pipeline_config=pipeline_config, result_dir=FLAGS.result_dir,
+    pipeline_config=pipeline_config, result_dir=result_folder,
+    dataset_info=dataset_info,
+    dataset_split_name=FLAGS.split_name,
     warm_start_path=FLAGS.checkpoint_dir, train_distribution=None,
     eval_distribution=None, warm_start_ckpt_name=FLAGS.checkpoint_name)
 
@@ -102,7 +111,7 @@ def main(_):
     latest_checkpoint = os.path.join(
       FLAGS.checkpoint_dir, tf.train.latest_checkpoint(FLAGS.checkpoint_dir))
 
-    estimator.eval(input_fn=input_fn, checkpoint_path=latest_checkpoint)
+    estimator.evaluate(input_fn=input_fn, checkpoint_path=latest_checkpoint)
 
 
 if __name__ == '__main__':

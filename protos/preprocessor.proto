@@ -10,7 +10,6 @@ message PreprocessingStep {
     RandomHue random_hue = 4;
     RandomSaturation random_saturation = 5;
     RandomBrightness random_brightness = 6;
-    RandomRotation90 random_rotation90 = 7;
     RandomWarp random_warp = 8;
   }
 }
@@ -24,10 +23,6 @@ message RandomVerticalFlip {
 }
 
 message RandomWarp {
-}
-
-// Randomly rotates the image and detections 50% of the time.
-message RandomRotation90 {
 }
 
 message RandomContrast {

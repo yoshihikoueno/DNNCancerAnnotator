@@ -4,9 +4,9 @@ import subprocess
 import xml.etree.ElementTree
 import logging
 import sys
-import pickle
 
 import numpy as np
+import tensorflow as tf
 
 def get_devices():
   res = []
@@ -53,12 +53,15 @@ def init_logger(folder=None, resume=None):
     fmt='%(asctime)s [%(levelname)s] : %(message)s',
     datefmt='%m/%d/%Y %H:%M:%S')
 
-  logging.root.setLevel(logging.DEBUG)
+  logging.getLogger().setLevel(logging.DEBUG)
 
   sh = logging.StreamHandler(sys.stdout)
   sh.setLevel(logging.DEBUG)
   sh.setFormatter(formatter)
-  logging.root.addHandler(sh)
+  logging.getLogger().addHandler(sh)
+
+  tf.logging.set_verbosity(tf.logging.DEBUG)
+  logging.getLogger('tensorflow').handlers = []
 
   if folder:
     if resume:
@@ -67,7 +70,7 @@ def init_logger(folder=None, resume=None):
       fh = logging.FileHandler(folder + '/log', mode='w')
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(formatter)
-    logging.root.addHandler(fh)
+    logging.getLogger().addHandler(fh)
 
   if resume and folder:
     logging.info("-------------------------")

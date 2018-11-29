@@ -12,8 +12,6 @@ from utils import util_ops
 from utils import setup_utils
 from builders import estimator_builder
 
-tf.logging.set_verbosity(tf.logging.INFO)
-
 flags = tf.app.flags
 flags.DEFINE_string('pipeline_config_file', '',
                     'Path to the pipeline config file. If resume is true,'
@@ -45,9 +43,7 @@ def main(_):
 
   pipeline_config = setup_utils.load_config(pipeline_config_file)
 
-  if FLAGS.warm_start:
-    existing_tfrecords_directory = FLAGS.result_dir
-  else:
+  if not FLAGS.warm_start:
     if FLAGS.prefix:
       FLAGS.prefix += '_'
     # Create the new result folder.
@@ -58,16 +54,10 @@ def main(_):
     os.mkdir(FLAGS.result_dir)
     copy(pipeline_config_file, os.path.join(FLAGS.result_dir,
                                             'pipeline.config'))
-    existing_tfrecords_directory = None
 
   util_ops.init_logger(FLAGS.result_dir, FLAGS.warm_start)
 
   logging.info("Command line arguments: {}".format(sys.argv))
-
-  input_fn = setup_utils.get_input_fn(
-    pipeline_config=pipeline_config, directory=FLAGS.result_dir,
-    existing_tfrecords_directory=existing_tfrecords_directory,
-    split_name=standard_fields.SplitNames.train)
 
   num_gpu = pipeline_config.train_config.num_gpu
   real_gpu_nb = len(util_ops.get_devices())
@@ -78,9 +68,17 @@ def main(_):
 
   distribution = tf.contrib.distribute.MirroredStrategy(num_gpus=num_gpu)
 
+  input_fn, dataset_info = setup_utils.get_input_fn(
+    pipeline_config=pipeline_config, directory=FLAGS.result_dir,
+    existing_tfrecords=FLAGS.warm_start,
+    split_name=standard_fields.SplitNames.train, num_gpu=num_gpu,
+    is_training=True)
+
   estimator = estimator_builder.build_estimator(
     pipeline_config=pipeline_config, result_dir=FLAGS.result_dir,
-    warm_start_path=existing_tfrecords_directory,
+    dataset_info=dataset_info,
+    dataset_split_name=standard_fields.SplitNames.train,
+    warm_start_path=FLAGS.result_dir if FLAGS.warm_start else None,
     train_distribution=distribution,
     eval_distribution=None, warm_start_ckpt_name=None)
 

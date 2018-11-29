@@ -15,16 +15,9 @@ message TrainConfig {
   // After how many seconds to save the current model
   optional int32 save_checkpoints_secs = 4;
 
-  // Checkpoint to restore variables from. Typically used to load feature
-  // extractor variables trained outside of object detection.
-  optional string fine_tune_checkpoint = 6 [default=""];
-
   // Number of steps to train the DetectionModel for. If 0, will train the model
   // indefinitely.
   optional uint32 num_steps = 7 [default=0];
-
-  // Number of reader instances to create.
-  optional int32 num_readers = 8 [default=32];
 
   // Whether to shuffle the dataset
   optional bool shuffle = 12 [default=true];
@@ -35,9 +28,6 @@ message TrainConfig {
   optional uint32 num_gpu = 14;
 
   optional Optimizer optimizer = 15;
-
-  // Clips if > 0
-  optional int32 gradient_clipping_by_norm = 16;
 
   // Save summaries every this many steps.
   optional int32 save_summary_steps = 17;

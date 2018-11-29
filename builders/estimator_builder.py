@@ -1,20 +1,22 @@
-import functools
 import os
 
 import numpy as np
 import tensorflow as tf
 
-from models import unet
+from builders import model_builder
 
 
-def build_estimator(pipeline_config, result_dir, warm_start_path,
+def build_estimator(pipeline_config, result_dir, dataset_info,
+                    dataset_split_name, warm_start_path,
                     train_distribution, eval_distribution,
                     warm_start_ckpt_name=None):
   np.random.seed(pipeline_config.seed)
   tf.set_random_seed(pipeline_config.seed)
 
-  model_fn = functools.partial(unet.estimator_fn,
-                               pipeline_config=pipeline_config)
+  model_fn = model_builder.get_model_fn(pipeline_config=pipeline_config,
+                                        result_folder=result_dir,
+                                        dataset_info=dataset_info,
+                                        dataset_split_name=dataset_split_name)
 
   run_config = tf.estimator.RunConfig(
     model_dir=result_dir, tf_random_seed=pipeline_config.seed,
