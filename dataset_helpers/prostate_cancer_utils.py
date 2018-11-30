@@ -45,8 +45,11 @@ def _preprocess_image(image_decoded, target_dims, is_annotation_mask):
   with tf.control_dependencies([quadratic_assert_op, size_assert_op]):
     # Resize to common size
     # Since the prostate area is around 1/3 of the image size, we want to make
-    # Sure that our crop also captures this area
-    common_size = [max(512, target_dims[0] * 3), max(512, target_dims[1] * 3)]
+    # Sure that our crop also captures this area. However, we need to be
+    # careful as unet crops off the outer parts of the image, therefore factor
+    # of 2
+    common_size = [max(512, int(target_dims[0] * 2)),
+                   max(512, int(target_dims[1] * 2))]
     image_resized = tf.squeeze(tf.clip_by_value(tf.image.resize_bicubic(
       tf.expand_dims(image_decoded, axis=0),
       tf.constant(common_size)), 0, 255), axis=0)
@@ -57,7 +60,7 @@ def _preprocess_image(image_decoded, target_dims, is_annotation_mask):
 
     if is_annotation_mask:
       # Make sure the values are only 0 or 1
-      image_resized = tf.cast(tf.greater(image_resized, 0), tf.float32)
+      image_resized = tf.cast(tf.greater(image_resized, 0.2), tf.float32)
       # Get bounding box around masked region, in order to check if our crop
       # will cut it off
       mask_min = tf.reduce_min(tf.where(tf.equal(image_resized, 1.0)),
@@ -493,12 +496,12 @@ def build_tf_dataset_from_files(dataset_config, input_image_dims, seed):
 
 # patient_ids are only needed for train mode
 def build_tf_dataset_from_tfrecords(tfrecords_file, target_dims,
-                                    patient_ids, is_train):
+                                    patient_ids, is_training):
   dataset = tf.data.TFRecordDataset(tfrecords_file)
 
   dataset = dataset.map(_deserialize_example, num_parallel_calls=20)
 
-  if is_train:
+  if is_training:
     dataset = _build_train_dataset(dataset, patient_ids)
 
   decode_fn = functools.partial(_decode_example, target_dims=target_dims)

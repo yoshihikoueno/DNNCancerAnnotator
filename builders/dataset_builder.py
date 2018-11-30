@@ -1,13 +1,14 @@
 import os
 import pickle
-from shutil import copy
+
+import tensorflow as tf
 
 from dataset_helpers import prostate_cancer_utils as pc
 from utils import standard_fields
 
 
 def _load_existing_tfrecords(directory, split_name, target_dims, dataset_name,
-                             dataset_info):
+                             dataset_info, is_training):
   tfrecords_file = os.path.join(directory, split_name + '.tfrecords')
 
   ids = dataset_info[standard_fields.PickledDatasetInfo.patient_ids][
@@ -15,8 +16,7 @@ def _load_existing_tfrecords(directory, split_name, target_dims, dataset_name,
 
   if dataset_name == 'prostate_cancer':
     return pc.build_tf_dataset_from_tfrecords(
-      tfrecords_file, target_dims, ids,
-      split_name == standard_fields.SplitNames.train)
+      tfrecords_file, target_dims, ids, is_training=is_training)
   else:
     assert(False)
 
@@ -64,12 +64,14 @@ def build_dataset(dataset_config, directory,
 
   dataset = _load_existing_tfrecords(
       directory, split_name, target_dims, dataset_name,
-      dataset_info)
+      dataset_info, is_training=is_training)
 
-  if shuffle:
+  if shuffle and is_training:
+    dataset = dataset.apply(tf.data.experimental.shuffle_and_repeat(
+      shuffle_buffer_size, None))
+  elif shuffle:
     dataset = dataset.shuffle(shuffle_buffer_size)
-
-  if is_training:
+  elif is_training:
     dataset = dataset.repeat(None)
 
   dataset = dataset.batch(batch_size)

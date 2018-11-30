@@ -19,10 +19,17 @@ def get_input_fn(pipeline_config, directory, existing_tfrecords,
                  pipeline_config.model.input_image_size_y,
                  pipeline_config.model.input_image_channels]
 
-  if split_name == standard_fields.SplitNames.train:
+  if is_training:
     batch_size = pipeline_config.train_config.batch_size
+    shuffle = pipeline_config.train_config.shuffle
+    shuffle_buffer_size = pipeline_config.train_config.shuffle_buffer_size
   else:
     batch_size = pipeline_config.eval_config.batch_size
+    shuffle = pipeline_config.eval_config.shuffle
+    shuffle_buffer_size = pipeline_config.eval_config.shuffle_buffer_size
+
+  if num_gpu > 0:
+    batch_size *= num_gpu
 
   meta_info = dataset_builder.prepare_dataset(
     pipeline_config.dataset, directory=directory,
@@ -33,9 +40,9 @@ def get_input_fn(pipeline_config, directory, existing_tfrecords,
     return dataset_builder.build_dataset(
       pipeline_config.dataset, directory=directory,
       split_name=split_name, target_dims=target_dims,
-      seed=pipeline_config.seed, batch_size=batch_size * num_gpu,
-      shuffle=pipeline_config.train_config.shuffle,
-      shuffle_buffer_size=pipeline_config.train_config.shuffle_buffer_size,
+      seed=pipeline_config.seed, batch_size=batch_size,
+      shuffle=shuffle,
+      shuffle_buffer_size=shuffle_buffer_size,
       is_training=is_training, dataset_info=meta_info)
 
   return input_fn, meta_info

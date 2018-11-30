@@ -8,6 +8,8 @@ from models import unet
 from utils import standard_fields
 from utils import preprocessor
 from utils import session_hooks
+from utils import metrics
+from utils import image_utils
 from builders import optimizer_builder
 
 
@@ -28,6 +30,10 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
       images=image_batch, gt_masks=annotation_mask_batch)
 
   network_output = net.build_network(image_batch)
+
+  annotation_mask_batch = tf.clip_by_value(image_utils.central_crop(
+      annotation_mask_batch,
+      desired_size=network_output.get_shape().as_list()[1:3]), 0, 1)
 
   losses_dict = net.loss(network_output, annotation_mask_batch)
 
@@ -76,10 +82,18 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
       train_op = optimizer.apply_gradients(
         grads_and_vars, global_step=tf.train.get_global_step())
 
+  # Metrics
+  metric_dict = metrics.get_metrics(
+    network_output, annotation_mask_batch,
+    thresholds=np.array(pipeline_config.eval_config.metric_thresholds,
+                        dtype=np.float32))
+
   logging.info("Total number of trainable parameters: {}".format(np.sum([
     np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])))
 
   if mode == tf.estimator.ModeKeys.TRAIN:
+    for k, v in metric_dict.items():
+      tf.summary.scalar(k, v[1])
     return tf.estimator.EstimatorSpec(mode,
                                       loss=total_loss, train_op=train_op,
                                       scaffold=scaffold)
@@ -89,10 +103,15 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
       num_visualizations=pipeline_config.eval_config.num_images_to_visualize,
       num_total_examples=dataset_info[
         standard_fields.PickledDatasetInfo.split_to_size][dataset_split_name],
-      feature_dict=features,
+      file_name=features[standard_fields.InputDataFields.image_file],
+      image_decoded=image_batch,
+      annotation_decoded=features[
+        standard_fields.InputDataFields.annotation_decoded],
+      annotation_mask=annotation_mask_batch,
       predicted_masks=network_output)
-    return tf.estimator.EstimatorSpec(mode, loss=total_loss,
-                                      evaluation_hooks=[hook])
+    return tf.estimator.EstimatorSpec(
+      mode, loss=total_loss, evaluation_hooks=[hook],
+      eval_metric_ops=metric_dict)
   else:
     assert(False)
 

@@ -9,7 +9,8 @@ from utils import image_utils
 
 class VisualizationHook(tf.train.SessionRunHook):
   def __init__(self, result_folder, num_visualizations, num_total_examples,
-               feature_dict, predicted_masks):
+               file_name, image_decoded, annotation_decoded, annotation_mask,
+               predicted_masks):
     if num_visualizations is None or num_visualizations == -1:
       self.num_visualizations = num_total_examples
     else:
@@ -24,39 +25,40 @@ class VisualizationHook(tf.train.SessionRunHook):
     # visualized images
     self.visualization_file_names = []
     self.result_folder = result_folder
-    self.feature_dict = feature_dict
-    background, foreground = tf.split(tf.sigmoid(predicted_masks), 2, axis=3)
+    self.file_name = file_name
+
+    background, foreground = tf.split(tf.nn.softmax(predicted_masks), 2,
+                                      axis=3)
 
     target_size = background.get_shape().as_list()[1:3]
 
-    image_decoded = image_utils.central_crop(
-      feature_dict[standard_fields.InputDataFields.image_decoded], target_size)
+    image_decoded = image_utils.central_crop(image_decoded, target_size)
 
-    gt_masks = image_utils.central_crop(
-      feature_dict[standard_fields.InputDataFields.annotation_decoded],
-      target_size)
+    annotation_decoded = image_utils.central_crop(
+      annotation_decoded, target_size)
 
-    background = tf.image.grayscale_to_rgb(background) * 255
-    foreground = tf.image.grayscale_to_rgb(foreground) * 255
+    background = tf.image.grayscale_to_rgb(background * 255)
+    foreground = tf.image.grayscale_to_rgb(foreground * 255)
     image_decoded = tf.image.grayscale_to_rgb(image_decoded)
+    annotation_mask = tf.image.grayscale_to_rgb(annotation_mask * 255)
 
-    self.combined_image = tf.concat([image_decoded, gt_masks, background,
-                                     foreground], axis=2)
+    self.combined_image = tf.concat([
+      image_decoded, annotation_decoded, annotation_mask, background,
+      foreground], axis=2)
 
   def before_run(self, run_context):
     return tf.train.SessionRunArgs(fetches=[
-      self.feature_dict, self.combined_image, tf.train.get_global_step()])
+      self.file_name, self.combined_image, tf.train.get_global_step()])
 
   def after_run(self, run_context, run_values):
-    feature_dict_res = run_values.results[0]
+    file_name_res = run_values.results[0]
     combined_image_res = run_values.results[1]
     global_step = run_values.results[2]
 
     summary_writer = tf.summary.FileWriterCache.get(self.result_folder)
 
     for batch_index in range(len(combined_image_res)):
-      file_name = feature_dict_res[
-            standard_fields.InputDataFields.image_file][batch_index]
+      file_name = file_name_res[batch_index]
 
       if self.first_epoch_index < self.num_total_examples:
         if self.first_epoch_index in self.visualization_indices:
@@ -64,9 +66,11 @@ class VisualizationHook(tf.train.SessionRunHook):
           self.first_epoch_index += 1
         else:
           self.first_epoch_index += 1
+          logging.info('Skipping visualization for {}'.format(file_name))
           continue
       else:
         if file_name not in self.visualization_file_names:
+          logging.info('Skipping visualization for {}'.format(file_name))
           continue
 
       summary = tf.Summary(value=[
@@ -77,5 +81,15 @@ class VisualizationHook(tf.train.SessionRunHook):
                 combined_image_res[batch_index])))])
       summary_writer.add_summary(summary, global_step)
 
-      logging.info('Detection visualizations written to summary with tag %s.',
-                   file_name)
+      logging.info('Visualization for {}'.format(file_name))
+
+
+class PatientMetricHook:
+  def __init__(self):
+    pass
+
+  def before_run(self, run_context):
+    pass
+
+  def after_run(self, run_context, run_values):
+    pass

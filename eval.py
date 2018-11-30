@@ -68,12 +68,15 @@ def main(_):
   util_ops.init_logger(result_folder)
   logging.info("Command line arguments: {}".format(sys.argv))
 
-  num_gpu = pipeline_config.train_config.num_gpu
-  real_gpu_nb = len(util_ops.get_devices())
-  if num_gpu and num_gpu > real_gpu_nb:
-    raise ValueError("Too many GPUs specified!")
+  if FLAGS.use_gpu:
+    num_gpu = pipeline_config.train_config.num_gpu
+    real_gpu_nb = len(util_ops.get_devices())
+    if num_gpu and num_gpu > real_gpu_nb:
+      raise ValueError("Too many GPUs specified!")
+    else:
+      num_gpu = real_gpu_nb
   else:
-    num_gpu = real_gpu_nb
+    num_gpu = 0
 
   input_fn, dataset_info = setup_utils.get_input_fn(
     pipeline_config=pipeline_config, directory=FLAGS.checkpoint_dir,
@@ -96,20 +99,20 @@ def main(_):
   elif FLAGS.repeated:
     last_checkpoint = ''
     while True:
-      latest_checkpoint = os.path.join(
-        FLAGS.checkpoint_dir, tf.train.latest_checkpoint(FLAGS.checkpoint_dir))
-      if last_checkpoint == latest_checkpoint:
+      latest_checkpoint = tf.train.latest_checkpoint(FLAGS.checkpoint_dir)
+
+      if not latest_checkpoint or last_checkpoint == latest_checkpoint:
         logging.info('No new checkpoint. Checking back in {} seconds.'.format(
           pipeline_config.eval_config.eval_interval_secs))
         time.sleep(pipeline_config.eval_config.eval_interval_secs)
         continue
 
-      estimator.eval(input_fn=input_fn, checkpoint_path=latest_checkpoint)
+      logging.info('Evaluating {}'.format(latest_checkpoint))
+      estimator.evaluate(input_fn=input_fn, checkpoint_path=latest_checkpoint)
 
       last_checkpoint = latest_checkpoint
   else:
-    latest_checkpoint = os.path.join(
-      FLAGS.checkpoint_dir, tf.train.latest_checkpoint(FLAGS.checkpoint_dir))
+    latest_checkpoint = tf.train.latest_checkpoint(FLAGS.checkpoint_dir)
 
     estimator.evaluate(input_fn=input_fn, checkpoint_path=latest_checkpoint)
 

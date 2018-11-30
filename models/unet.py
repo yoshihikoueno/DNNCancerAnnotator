@@ -1,13 +1,8 @@
-import logging
-
 import numpy as np
 import tensorflow as tf
 
-from utils import standard_fields
 from utils import layer_utils as lu
-from utils import session_hooks
 from utils import image_utils
-from builders import optimizer_builder
 
 
 class UNet(object):
@@ -157,17 +152,15 @@ class UNet(object):
     # GT mask should have batch and channel dimensions
     assert(len(groundtruth_mask.get_shape().as_list()) == 4)
 
-    cropped_groundtruth_mask = tf.clip_by_value(image_utils.central_crop(
-      groundtruth_mask,
-      desired_size=network_output.get_shape().as_list()[1:3]), 0, 1)
-
-    assert(cropped_groundtruth_mask.get_shape().as_list()[:3]
+    assert(groundtruth_mask.get_shape().as_list()[:3]
            == network_output.get_shape().as_list()[:3])
     # Mask should be single channel
-    assert(cropped_groundtruth_mask.get_shape().as_list()[3] == 1)
+    assert(groundtruth_mask.get_shape().as_list()[3] == 1)
 
     mask_loss = tf.losses.sparse_softmax_cross_entropy(
-      labels=tf.cast(tf.reshape(cropped_groundtruth_mask, [-1]), tf.int32),
+      labels=tf.cast(tf.reshape(groundtruth_mask, [-1]), tf.int32),
       logits=tf.reshape(network_output, [-1, self.num_classes + 1]))
+
+    tf.losses.add_loss(mask_loss)
 
     return {'mask_loss': mask_loss}
