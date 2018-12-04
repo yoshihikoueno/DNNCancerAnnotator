@@ -24,7 +24,6 @@ flags.DEFINE_string('checkpoint_name', '', 'Optional name of a specific '
                                         'checkpoint')
 flags.DEFINE_string('result_dir', '', 'Optional directory to write the '
                                       'results to.')
-flags.DEFINE_bool('use_gpu', False, 'Whether to use GPU or CPU')
 flags.DEFINE_bool('repeated', False, 'Whether to evaluate successive '
                                      'checkpoints')
 flags.DEFINE_string('split_name', '', 'train, val, or test')
@@ -35,9 +34,6 @@ FLAGS = flags.FLAGS
 
 def main(_):
   assert(not (FLAGS.repeated and FLAGS.checkpoint_name))
-  if not FLAGS.use_gpu:
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"] = ''
 
   assert(FLAGS.split_name in standard_fields.SplitNames.available_names)
   if FLAGS.pdb:
@@ -50,6 +46,10 @@ def main(_):
   pipeline_config_file = os.path.join(FLAGS.checkpoint_dir,
                                       'pipeline.config')
   pipeline_config = setup_utils.load_config(pipeline_config_file)
+
+  if pipeline_config.eval_config.num_gpu == 0:
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = ''
 
   result_folder_name = 'eval_{}_{}_{}'.format(
     FLAGS.split_name + '-split',
@@ -68,15 +68,15 @@ def main(_):
   util_ops.init_logger(result_folder)
   logging.info("Command line arguments: {}".format(sys.argv))
 
-  if FLAGS.use_gpu:
-    num_gpu = pipeline_config.train_config.num_gpu
-    real_gpu_nb = len(util_ops.get_devices())
-    if num_gpu and num_gpu > real_gpu_nb:
+  num_gpu = pipeline_config.eval_config.num_gpu
+  if num_gpu == -1:
+    num_gpu = None
+  real_gpu_nb = len(util_ops.get_devices())
+  if num_gpu is not None:
+    if num_gpu > real_gpu_nb:
       raise ValueError("Too many GPUs specified!")
-    else:
-      num_gpu = real_gpu_nb
   else:
-    num_gpu = 0
+    num_gpu = real_gpu_nb
 
   input_fn, dataset_info = setup_utils.get_input_fn(
     pipeline_config=pipeline_config, directory=FLAGS.checkpoint_dir,

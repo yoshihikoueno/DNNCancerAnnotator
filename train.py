@@ -43,6 +43,10 @@ def main(_):
 
   pipeline_config = setup_utils.load_config(pipeline_config_file)
 
+  if pipeline_config.train_config.num_gpu == 0:
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = ''
+
   if not FLAGS.warm_start:
     if FLAGS.prefix:
       FLAGS.prefix += '_'
@@ -60,9 +64,12 @@ def main(_):
   logging.info("Command line arguments: {}".format(sys.argv))
 
   num_gpu = pipeline_config.train_config.num_gpu
+  if num_gpu == -1:
+    num_gpu = None
   real_gpu_nb = len(util_ops.get_devices())
-  if num_gpu and num_gpu > real_gpu_nb:
-    raise ValueError("Too many GPUs specified!")
+  if num_gpu is not None:
+    if num_gpu > real_gpu_nb:
+      raise ValueError("Too many GPUs specified!")
   else:
     num_gpu = real_gpu_nb
 

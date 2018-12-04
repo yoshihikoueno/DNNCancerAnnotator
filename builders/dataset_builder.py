@@ -16,7 +16,7 @@ def _load_existing_tfrecords(directory, split_name, target_dims, dataset_name,
 
   if dataset_name == 'prostate_cancer':
     return pc.build_tf_dataset_from_tfrecords(
-      tfrecords_file, target_dims, ids, is_training=is_training)
+      tfrecords_file, target_dims, patient_ids=ids, is_training=is_training)
   else:
     assert(False)
 

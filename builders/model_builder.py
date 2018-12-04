@@ -77,10 +77,14 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
 
     grads_and_vars = optimizer.compute_gradients(total_loss)
 
-    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-    with tf.control_dependencies(update_ops):
-      train_op = optimizer.apply_gradients(
+    gradient_updates = optimizer.apply_gradients(
         grads_and_vars, global_step=tf.train.get_global_step())
+
+    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    update_ops.append(gradient_updates)
+    update_op = tf.group(*update_ops, name='update_barrier')
+    with tf.control_dependencies([update_op]):
+      train_op = tf.identity(total_loss)
 
   # Metrics
   metric_dict = metrics.get_metrics(

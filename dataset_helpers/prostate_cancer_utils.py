@@ -29,18 +29,19 @@ def _extract_annotation(decoded_annotation):
 
   assert(len(bool_mask.get_shape().as_list()) == 2)
 
-  return tf.expand_dims(tf.cast(bool_mask, dtype=tf.float32), 2)
+  return tf.expand_dims(tf.cast(bool_mask, dtype=tf.int32), 2)
 
 
 def _preprocess_image(image_decoded, target_dims, is_annotation_mask):
   # Image should be quadratic
   image_shape = tf.shape(image_decoded)
   quadratic_assert_op = tf.Assert(tf.equal(image_shape[0], image_shape[1]),
-                                  [image_shape])
+                                  [tf.constant('Image should be quadratic.')])
   # Since we want to resize to a common size, we do it to the largest naturally
   # occuring, which should be 512x512
   size_assert_op = tf.Assert(tf.reduce_all(tf.less_equal(
-    image_shape[:2], tf.constant([512, 512]))), [image_shape])
+    image_shape[:2], tf.constant([512, 512]))), [
+      tf.constant('Largest natural image size should be <= 512')])
 
   with tf.control_dependencies([quadratic_assert_op, size_assert_op]):
     # Resize to common size
@@ -50,7 +51,7 @@ def _preprocess_image(image_decoded, target_dims, is_annotation_mask):
     # of 2
     common_size = [max(512, int(target_dims[0] * 2)),
                    max(512, int(target_dims[1] * 2))]
-    image_resized = tf.squeeze(tf.clip_by_value(tf.image.resize_bicubic(
+    image_resized = tf.squeeze(tf.clip_by_value(tf.image.resize_area(
       tf.expand_dims(image_decoded, axis=0),
       tf.constant(common_size)), 0, 255), axis=0)
 
@@ -59,23 +60,22 @@ def _preprocess_image(image_decoded, target_dims, is_annotation_mask):
     offset_width = int(np.ceil((common_size[1] - target_dims[1]) / 2.0))
 
     if is_annotation_mask:
-      # Make sure the values are only 0 or 1
+      # Make sure values are 0 or 1
       image_resized = tf.cast(tf.greater(image_resized, 0.2), tf.float32)
       # Get bounding box around masked region, in order to check if our crop
       # will cut it off
-      mask_min = tf.reduce_min(tf.where(tf.equal(image_resized, 1.0)),
+      mask_min = tf.reduce_min(tf.where(tf.equal(image_resized, 1)),
                                axis=0)[:2]
-      mask_max = tf.reduce_max(tf.where(tf.equal(image_resized, 1.0)),
+      mask_max = tf.reduce_max(tf.where(tf.equal(image_resized, 1)),
                                axis=0)[:2]
 
       mask_min_crop_assert = tf.Assert(
         tf.reduce_all(tf.greater(mask_min, [offset_height, offset_width])),
-        data=[mask_min, [offset_height, offset_width]])
+        data=[mask_min, [tf.constant('Groundtruth mask is cropped.')]])
       mask_max_crop_assert = tf.Assert(
         tf.reduce_all(tf.less(mask_max, [offset_height + target_dims[0],
                                            offset_width + target_dims[1]])),
-        data=[mask_max, [offset_height + target_dims[0],
-                         offset_width + target_dims[1]]])
+        data=[mask_max, [tf.constant('Groundtruth mask is cropped.')]])
       with tf.control_dependencies([mask_min_crop_assert,
                                     mask_max_crop_assert]):
         image_cropped = tf.image.crop_to_bounding_box(
@@ -91,22 +91,23 @@ def _preprocess_image(image_decoded, target_dims, is_annotation_mask):
 
 def _decode_example(example_dict, target_dims):
   image_string = example_dict[standard_fields.TfExampleFields.image_encoded]
-  image_decoded = tf.to_float(tf.image.decode_png(
-    image_string, channels=target_dims[2], dtype=tf.uint8))
+  image_decoded = tf.to_float(tf.image.decode_jpeg(
+    image_string, channels=target_dims[2]))
 
   label = example_dict[standard_fields.TfExampleFields.label]
 
   annotation_string = example_dict[
       standard_fields.TfExampleFields.annotation_encoded]
-  annotation_decoded = tf.to_float(tf.image.decode_png(
-      annotation_string, channels=3, dtype=tf.uint8))
+  annotation_decoded = tf.to_float(tf.image.decode_jpeg(
+      annotation_string, channels=3))
 
   annotation_mask = _extract_annotation(annotation_decoded)
   annotation_mask_preprocessed = _preprocess_image(
-    annotation_mask, target_dims, True)
+    annotation_mask, target_dims, is_annotation_mask=True)
   annotation_preprocessed = _preprocess_image(
-    annotation_decoded, target_dims, False)
-  image_preprocessed = _preprocess_image(image_decoded, target_dims, False)
+    annotation_decoded, target_dims, is_annotation_mask=False)
+  image_preprocessed = _preprocess_image(image_decoded, target_dims,
+                                         is_annotation_mask=False)
 
   features = {
     standard_fields.InputDataFields.patient_id:

@@ -24,8 +24,8 @@ message TrainConfig {
 
   optional bool add_regularization_loss = 13 [default=true];
 
-  // The number of GPU's to use. If not defined, use all available.
-  optional uint32 num_gpu = 14;
+  // The number of GPU's to use. If not defined or -1, use all available.
+  optional int32 num_gpu = 14;
 
   optional Optimizer optimizer = 15;
 

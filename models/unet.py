@@ -41,9 +41,13 @@ class UNet(object):
     if use_relu:
       # Variance Scaling is best for relu activations
       res['activation'] = 'relu'
-      res['kernel_initializer'] = tf.keras.initializers.VarianceScaling
+      res['kernel_initializer'] = tf.keras.initializers.ScalingVariance(
+        scale=2.0)
     else:
-      res['kernel_initializer'] = tf.keras.initializers.glorot_uniform
+      #res['kernel_initializer'] = tf.keras.initializers.glorot_uniform()
+      res['activation'] = None
+      res['kernel_initializer'] = tf.keras.initializers.VarianceScaling(
+        scale=2.0)
 
     return res
 
@@ -160,7 +164,5 @@ class UNet(object):
     mask_loss = tf.losses.sparse_softmax_cross_entropy(
       labels=tf.cast(tf.reshape(groundtruth_mask, [-1]), tf.int32),
       logits=tf.reshape(network_output, [-1, self.num_classes + 1]))
-
-    tf.losses.add_loss(mask_loss)
 
     return {'mask_loss': mask_loss}

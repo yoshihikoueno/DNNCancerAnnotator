@@ -2,7 +2,6 @@ from google.protobuf import text_format
 
 from protos import pipeline_pb2
 from builders import dataset_builder
-from utils import standard_fields
 
 
 def load_config(pipeline_config_path):

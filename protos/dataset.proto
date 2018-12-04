@@ -8,8 +8,6 @@ message Dataset {
   optional string dataset_path = 1;
   optional string label_map_path = 2;
 
-  optional bool subtract_channel_means = 3;
-
   // 0: 0 - 255
   // 1: 0 - 1
   // 2: -1 - 1
