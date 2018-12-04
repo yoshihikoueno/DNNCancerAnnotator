@@ -41,7 +41,7 @@ class UNet(object):
     if use_relu:
       # Variance Scaling is best for relu activations
       res['activation'] = 'relu'
-      res['kernel_initializer'] = tf.keras.initializers.ScalingVariance(
+      res['kernel_initializer'] = tf.keras.initializers.VarianceScaling(
         scale=2.0)
     else:
       #res['kernel_initializer'] = tf.keras.initializers.glorot_uniform()
