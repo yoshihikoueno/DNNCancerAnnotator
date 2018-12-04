@@ -260,30 +260,36 @@ def _sort_files(dataset_folder, balance_classes, balance_remove_smallest,
 
   train_patient_ids = list(train_data_dict.keys())
   train_data = []
+  train_files = []
   train_size = 0
   for _, entries in train_data_dict.items():
     train_size += len(entries)
     for entry in entries:
+      train_files.append(entry[0])
       train_data.append(entry)
 
   val_data_dict = {**healthy_val, **cancer_val}
 
   val_patient_ids = list(val_data_dict.keys())
   val_data = []
+  val_files = []
   val_size = 0
   for _, entries in val_data_dict.items():
     val_size += len(entries)
     for entry in entries:
+      val_files.append(entry[0])
       val_data.append(entry)
 
   test_data_dict = {**healthy_test, **cancer_test}
 
   test_patient_ids = list(test_data_dict.keys())
   test_data = []
+  test_files = []
   test_size = 0
   for _, entries in test_data_dict.items():
     test_size += len(entries)
     for entry in entries:
+      test_files.append(entry[0])
       test_data.append(entry)
 
   dataset_size = train_size + val_size + test_size
@@ -300,7 +306,11 @@ def _sort_files(dataset_folder, balance_classes, balance_remove_smallest,
           standard_fields.PickledDatasetInfo.patient_ids:
           {standard_fields.SplitNames.train: train_patient_ids,
            standard_fields.SplitNames.val: val_patient_ids,
-           standard_fields.SplitNames.test: test_patient_ids}}
+           standard_fields.SplitNames.test: test_patient_ids},
+          standard_fields.PickledDatasetInfo.file_names:
+          {standard_fields.SplitNames.train: train_files,
+           standard_fields.SplitNames.val: val_files,
+           standard_fields.SplitNames.test: test_files}}
 
 
 def _build_patient_dataset(full_dataset, target_patient_id):
@@ -372,10 +382,10 @@ def _load_from_files(dataset_config, input_image_dims, seed):
     standard_fields.PickledDatasetInfo.split_to_size: split_to_size,
     standard_fields.PickledDatasetInfo.seed: seed,
     standard_fields.PickledDatasetInfo.dataset_size: dataset_size,
-    standard_fields.PickledDatasetInfo.patient_ids: {
-      standard_fields.SplitNames.train: train_patient_ids,
-      standard_fields.SplitNames.val: val_patient_ids,
-      standard_fields.SplitNames.test: test_patient_ids}}
+    standard_fields.PickledDatasetInfo.patient_ids:
+    dataset_files_dict[standard_fields.PickledDatasetInfo.patient_ids],
+    standard_fields.PickledDatasetInfo.file_names:
+    dataset_files_dict[standard_fields.PickledDatasetInfo.file_names]}
 
   train_dataset = tf.data.Dataset.from_tensor_slices(
       tuple([list(t) for t in zip(

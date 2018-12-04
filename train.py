@@ -64,7 +64,7 @@ def main(_):
   logging.info("Command line arguments: {}".format(sys.argv))
 
   num_gpu = pipeline_config.train_config.num_gpu
-  if num_gpu == -1:
+  if num_gpu <= -1:
     num_gpu = None
   real_gpu_nb = len(util_ops.get_devices())
   if num_gpu is not None:
@@ -87,7 +87,7 @@ def main(_):
     dataset_split_name=standard_fields.SplitNames.train,
     warm_start_path=FLAGS.result_dir if FLAGS.warm_start else None,
     train_distribution=distribution,
-    eval_distribution=None, warm_start_ckpt_name=None)
+    eval_distribution=None, num_gpu=num_gpu, warm_start_ckpt_name=None)
 
   estimator.train(input_fn=input_fn,
                   max_steps=pipeline_config.train_config.num_steps)

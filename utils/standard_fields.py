@@ -28,6 +28,7 @@ class PickledDatasetInfo:
   seed = 'seed'
   dataset_size = 'dataset_size'
   patient_ids = 'patient_ids'
+  file_names = 'file_names'
 
 
 class SplitNames:

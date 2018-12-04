@@ -69,7 +69,7 @@ def main(_):
   logging.info("Command line arguments: {}".format(sys.argv))
 
   num_gpu = pipeline_config.eval_config.num_gpu
-  if num_gpu == -1:
+  if num_gpu <= -1:
     num_gpu = None
   real_gpu_nb = len(util_ops.get_devices())
   if num_gpu is not None:
@@ -88,7 +88,8 @@ def main(_):
     dataset_info=dataset_info,
     dataset_split_name=FLAGS.split_name,
     warm_start_path=FLAGS.checkpoint_dir, train_distribution=None,
-    eval_distribution=None, warm_start_ckpt_name=FLAGS.checkpoint_name)
+    eval_distribution=None, num_gpu=num_gpu,
+    warm_start_ckpt_name=FLAGS.checkpoint_name)
 
   if FLAGS.checkpoint_name:
     latest_checkpoint = os.path.join(FLAGS.checkpoint_dir,

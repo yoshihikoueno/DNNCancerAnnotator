@@ -14,7 +14,8 @@ from builders import optimizer_builder
 
 
 def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
-                      dataset_split_name, model_constructor, mode):
+                      dataset_split_name, model_constructor, mode, num_gpu,
+                      visualization_file_names):
   net = model_constructor(pipeline_config, is_training=mode
                           == tf.estimator.ModeKeys.TRAIN)
 
@@ -102,11 +103,16 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
                                       loss=total_loss, train_op=train_op,
                                       scaffold=scaffold)
   elif mode == tf.estimator.ModeKeys.EVAL:
+    batch_size = pipeline_config.eval_config.batch_size
+    if num_gpu > 0:
+      batch_size *= num_gpu
+
     hook = session_hooks.VisualizationHook(
       result_folder=result_folder,
       num_visualizations=pipeline_config.eval_config.num_images_to_visualize,
       num_total_examples=dataset_info[
         standard_fields.PickledDatasetInfo.split_to_size][dataset_split_name],
+      batch_size=batch_size,
       file_name=features[standard_fields.InputDataFields.image_file],
       image_decoded=image_batch,
       annotation_decoded=features[
@@ -121,15 +127,30 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
 
 
 def get_model_fn(pipeline_config, result_folder, dataset_info,
-                 dataset_split_name):
-  model_name = pipeline_config.model.WhichOneof('model_type')
+                 dataset_split_name, num_gpu):
+  visualization_file_names = dataset_info[
+    standard_fields.PickledDatasetInfo.file_names][dataset_split_name]
+  num_visualizations = pipeline_config.eval_config.num_images_to_visualize
+  if num_visualizations is None or num_visualizations == -1:
+    num_visualizations = len(visualization_file_names)
+  else:
+    num_visualizations = min(num_visualizations,
+                             len(visualization_file_names))
 
+  # Choose at random num_visualizations file names to visualize
+  visualization_file_names = np.array(visualization_file_names)[
+    np.random.choice(np.arange(len(visualization_file_names)),
+                     num_visualizations)]
+
+  model_name = pipeline_config.model.WhichOneof('model_type')
   if model_name == 'unet':
     return functools.partial(_general_model_fn,
                              pipeline_config=pipeline_config,
                              result_folder=result_folder,
                              dataset_info=dataset_info,
                              dataset_split_name=dataset_split_name,
-                             model_constructor=unet.UNet)
+                             model_constructor=unet.UNet,
+                             num_gpu=num_gpu,
+                             visualization_file_names=visualization_file_names)
   else:
     assert(False)

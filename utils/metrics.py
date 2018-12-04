@@ -18,6 +18,19 @@ def get_metrics(prediction_batch, groundtruth_batch, thresholds):
 
   auc = tf.metrics.auc(groundtruth_batch, prediction_batch)
 
+  components = tf.contrib.image.connected_components(tf.squeeze(
+    groundtruth_batch, axis=3))
+  unique_ids, unique_indices = tf.unique(components)
+
+  # Remove zero id
+  unique_ids = tf.gather_nd(unique_ids, tf.where(tf.not_equal(unique_ids, 0)))
+
+  equal_fn = functools.partial(tf.equal, x=components)
+  individual_masks = tf.map_fn(equal_fn, elems=unique_ids,
+                               parallel_iterations=4)
+
+
+
   metric_dict = {'Metrics/auc': auc}
   for i, t in enumerate(thresholds):
     metric_dict['Metrics/precision_at_{}'.format(
