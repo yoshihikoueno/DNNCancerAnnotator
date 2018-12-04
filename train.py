@@ -78,7 +78,7 @@ def main(_):
   input_fn, dataset_info = setup_utils.get_input_fn(
     pipeline_config=pipeline_config, directory=FLAGS.result_dir,
     existing_tfrecords=FLAGS.warm_start,
-    split_name=standard_fields.SplitNames.train, num_gpu=num_gpu,
+    split_name=standard_fields.SplitNames.train,
     is_training=True)
 
   estimator = estimator_builder.build_estimator(

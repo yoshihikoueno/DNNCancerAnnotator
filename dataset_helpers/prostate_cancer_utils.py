@@ -325,8 +325,8 @@ def _build_train_dataset(patient_data, patient_ids):
 
   return patient_id_dataset.interleave(
     lambda patient_id: _build_patient_dataset(
-      patient_data, patient_id).shuffle(256).repeat(None), cycle_length=1,
-    block_length=1, num_parallel_calls=None)
+      patient_data, patient_id).shuffle(256).repeat(None), cycle_length=20,
+    block_length=1, num_parallel_calls=20)
 
 
 def _load_from_files(dataset_config, input_image_dims, seed):

@@ -66,13 +66,14 @@ def build_dataset(dataset_config, directory,
       directory, split_name, target_dims, dataset_name,
       dataset_info, is_training=is_training)
 
-  if shuffle and is_training:
-    dataset = dataset.apply(tf.data.experimental.shuffle_and_repeat(
-      shuffle_buffer_size, None))
-  elif shuffle:
+  #if shuffle and is_training:
+  #  dataset = dataset.apply(tf.data.experimental.shuffle_and_repeat(
+   #   shuffle_buffer_size, None))
+  if shuffle:
     dataset = dataset.shuffle(shuffle_buffer_size)
-  elif is_training:
+  if is_training:
     dataset = dataset.repeat(None)
+
 
   dataset = dataset.batch(batch_size)
 

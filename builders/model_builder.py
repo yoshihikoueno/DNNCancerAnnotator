@@ -88,10 +88,11 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
       train_op = tf.identity(total_loss)
 
   # Metrics
-  metric_dict = metrics.get_metrics(
-    network_output, annotation_mask_batch,
-    thresholds=np.array(pipeline_config.eval_config.metric_thresholds,
-                        dtype=np.float32))
+  #metric_dict = metrics.get_metrics(
+  #  network_output, annotation_mask_batch,
+  #  thresholds=np.array(pipeline_config.eval_config.metric_thresholds,
+  #                      dtype=np.float32))
+  metric_dict = dict()
 
   logging.info("Total number of trainable parameters: {}".format(np.sum([
     np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])))
@@ -109,10 +110,7 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
 
     hook = session_hooks.VisualizationHook(
       result_folder=result_folder,
-      num_visualizations=pipeline_config.eval_config.num_images_to_visualize,
-      num_total_examples=dataset_info[
-        standard_fields.PickledDatasetInfo.split_to_size][dataset_split_name],
-      batch_size=batch_size,
+      visualization_file_names=visualization_file_names,
       file_name=features[standard_fields.InputDataFields.image_file],
       image_decoded=image_batch,
       annotation_decoded=features[

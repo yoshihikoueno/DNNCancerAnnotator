@@ -13,7 +13,7 @@ def load_config(pipeline_config_path):
 
 
 def get_input_fn(pipeline_config, directory, existing_tfrecords,
-                 split_name, num_gpu, is_training):
+                 split_name, is_training):
   target_dims = [pipeline_config.model.input_image_size_x,
                  pipeline_config.model.input_image_size_y,
                  pipeline_config.model.input_image_channels]
@@ -26,9 +26,6 @@ def get_input_fn(pipeline_config, directory, existing_tfrecords,
     batch_size = pipeline_config.eval_config.batch_size
     shuffle = pipeline_config.eval_config.shuffle
     shuffle_buffer_size = pipeline_config.eval_config.shuffle_buffer_size
-
-  if num_gpu > 0:
-    batch_size *= num_gpu
 
   meta_info = dataset_builder.prepare_dataset(
     pipeline_config.dataset, directory=directory,

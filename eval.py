@@ -81,7 +81,7 @@ def main(_):
   input_fn, dataset_info = setup_utils.get_input_fn(
     pipeline_config=pipeline_config, directory=FLAGS.checkpoint_dir,
     existing_tfrecords=True,
-    split_name=FLAGS.split_name, num_gpu=num_gpu, is_training=False)
+    split_name=FLAGS.split_name, is_training=False)
 
   estimator = estimator_builder.build_estimator(
     pipeline_config=pipeline_config, result_dir=result_folder,
