@@ -87,23 +87,20 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
     with tf.control_dependencies([update_op]):
       train_op = tf.identity(total_loss)
 
-  # Metrics
-  #metric_dict = metrics.get_metrics(
-  #  network_output, annotation_mask_batch,
-  #  thresholds=np.array(pipeline_config.eval_config.metric_thresholds,
-  #                      dtype=np.float32))
-  metric_dict = dict()
-
   logging.info("Total number of trainable parameters: {}".format(np.sum([
     np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])))
 
   if mode == tf.estimator.ModeKeys.TRAIN:
-    for k, v in metric_dict.items():
-      tf.summary.scalar(k, v[1])
     return tf.estimator.EstimatorSpec(mode,
                                       loss=total_loss, train_op=train_op,
                                       scaffold=scaffold)
   elif mode == tf.estimator.ModeKeys.EVAL:
+    # Metrics
+    metric_dict = metrics.get_metrics(
+      network_output, annotation_mask_batch,
+      tp_thresholds=np.array(pipeline_config.metrics_tp_thresholds,
+                          dtype=np.float32))
+
     batch_size = pipeline_config.eval_config.batch_size
     if num_gpu > 0:
       batch_size *= num_gpu

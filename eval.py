@@ -95,7 +95,7 @@ def main(_):
     latest_checkpoint = os.path.join(FLAGS.checkpoint_dir,
                                      FLAGS.checkpoint_name)
 
-    estimator.eval(input_fn=input_fn, checkpoint_path=latest_checkpoint)
+    estimator.evaluate(input_fn=input_fn, checkpoint_path=latest_checkpoint)
 
   elif FLAGS.repeated:
     last_checkpoint = ''

@@ -1,41 +1,111 @@
+import functools
+
 import numpy as np
 import tensorflow as tf
 
 
-def get_metrics(prediction_batch, groundtruth_batch, thresholds):
+def _split_groundtruth_masks(groundtruth):
+  assert(len(groundtruth.get_shape()) == 2)
+
+  # Label each cancer area with individual index
+  components = tf.contrib.image.connected_components(groundtruth)
+
+  unique_ids, unique_indices = tf.unique(tf.reshape(components, [-1]))
+
+  # Remove zero id, since it describes background
+  unique_ids = tf.gather_nd(unique_ids, tf.where(tf.not_equal(unique_ids, 0)))
+
+  # Create mask for each cancer area
+  equal_fn = functools.partial(tf.equal, y=components)
+  individual_masks = tf.map_fn(equal_fn, elems=unique_ids, dtype=tf.bool)
+
+  return individual_masks
+
+
+def _compute_region_recall_for_threshold(threshold, prediction,
+                                         groundtruth_masks):
+  assert(len(prediction.get_shape()) == 3)
+  assert(len(groundtruth_masks.get_shape()) == 4)
+
+  prediction = tf.greater(prediction, threshold)
+
+  def _get_overlap(groundtruth, prediction):
+    overlap_sum = tf.reduce_sum(
+      tf.to_float(tf.logical_and(groundtruth, prediction)), axis=[1, 2])
+    return tf.div(overlap_sum, tf.reduce_sum(tf.to_float(groundtruth),
+                                             axis=[1, 2]))
+
+  overlap_fn = functools.partial(_get_overlap, prediction=prediction)
+
+  overlap = tf.map_fn(overlap_fn, elems=groundtruth_masks, dtype=tf.float32)
+
+  detections = tf.greater_equal(overlap, tf.constant(0.3))
+
+  num_tp = tf.reduce_sum(tf.cast(detections, tf.int32))
+  num_fn = tf.subtract(tf.size(detections), num_tp)
+
+  tps_count = tf.get_variable('region_true_positives_{}'.format(
+    int(threshold * 100)), shape=[], dtype=tf.float32,
+                              collections=[tf.GraphKeys.LOCAL_VARIABLES])
+  fns_count = tf.get_variable('region_false_negatives_{}'.format(
+    int(threshold * 100)), shape=[], dtype=tf.float32,
+                              collections=[tf.GraphKeys.LOCAL_VARIABLES])
+
+  tps_update_op = tf.assign_add(tps_count, tf.to_float(num_tp))
+  fns_update_op = tf.assign_add(fns_count, tf.to_float(num_fn))
+
+  def compute_recall(true_p, false_n):
+    return tf.where(tf.greater(true_p + false_n, 0),
+                    tf.div(true_p, true_p + false_n), 0)
+
+  recall_update_op = compute_recall(tps_update_op, fns_update_op)
+  recall = compute_recall(tps_count, fns_count)
+
+  return recall, recall_update_op
+
+
+# Prediction and  groundtruth both NxHxW
+def _compute_region_recall(prediction, groundtruth, tp_thresholds):
+  assert(len(prediction.get_shape()) == 3)
+  assert(len(groundtruth.get_shape()) == 3)
+
+  individual_masks = tf.map_fn(_split_groundtruth_masks, elems=groundtruth,
+                               dtype=tf.bool)
+
+  fn = functools.partial(
+    _compute_region_recall_for_threshold, prediction=prediction,
+    groundtruth_masks=individual_masks)
+
+  return list(map(fn, tp_thresholds))
+
+
+def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds):
   assert(len(prediction_batch.get_shape()) == 4)
   assert(len(groundtruth_batch.get_shape()) == 4)
 
   # Get values between 0 and 1
   prediction_batch = tf.nn.softmax(prediction_batch)[:, :, :, 1]
+  groundtruth_batch = tf.squeeze(groundtruth_batch, axis=3)
 
   precision = tf.metrics.precision_at_thresholds(
     labels=groundtruth_batch, predictions=prediction_batch,
-    thresholds=thresholds)
+    thresholds=tp_thresholds)
   recall = tf.metrics.recall_at_thresholds(
     labels=groundtruth_batch, predictions=prediction_batch,
-    thresholds=thresholds)
+    thresholds=tp_thresholds)
 
   auc = tf.metrics.auc(groundtruth_batch, prediction_batch)
 
-  components = tf.contrib.image.connected_components(tf.squeeze(
-    groundtruth_batch, axis=3))
-  unique_ids, unique_indices = tf.unique(components)
+  region_recall = _compute_region_recall(
+    prediction_batch, groundtruth_batch, tp_thresholds)
 
-  # Remove zero id
-  unique_ids = tf.gather_nd(unique_ids, tf.where(tf.not_equal(unique_ids, 0)))
-
-  equal_fn = functools.partial(tf.equal, x=components)
-  individual_masks = tf.map_fn(equal_fn, elems=unique_ids,
-                               parallel_iterations=4)
-
-
-
-  metric_dict = {'Metrics/auc': auc}
-  for i, t in enumerate(thresholds):
-    metric_dict['Metrics/precision_at_{}'.format(
+  metric_dict = {'metrics/auc': auc}
+  for i, t in enumerate(tp_thresholds):
+    metric_dict['metrics/precision_at_{}'.format(
       int(np.round(t * 100)))] = (precision[0][i], precision[1][i])
-    metric_dict['Metrics/recall_at_{}'.format(
+    metric_dict['metrics/recall_at_{}'.format(
       int(np.round(t * 100)))] = (recall[0][i], recall[1][i])
+    metric_dict['metrics/region_recall_at_{}'.format(
+      int(np.round(t * 100)))] = (region_recall[i][0], region_recall[i][1])
 
   return metric_dict

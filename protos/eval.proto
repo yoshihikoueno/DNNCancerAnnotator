@@ -12,8 +12,6 @@ message EvalConfig {
   // Maximum number of images to visualize in tensorboard; -1 for no limit
   optional int32 num_images_to_visualize = 4;
 
-  repeated float metric_thresholds = 5 [packed=true];
-
   optional bool shuffle = 6;
 
   optional int32 shuffle_buffer_size = 7;
