@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 
 
-def _split_groundtruth_masks(groundtruth):
+def _split_groundtruth_mask(groundtruth):
   assert(len(groundtruth.get_shape()) == 2)
 
   # Label each cancer area with individual index
@@ -16,33 +16,34 @@ def _split_groundtruth_masks(groundtruth):
   unique_ids = tf.gather_nd(unique_ids, tf.where(tf.not_equal(unique_ids, 0)))
 
   # Create mask for each cancer area
-  equal_fn = functools.partial(tf.equal, y=components)
-  individual_masks = tf.map_fn(equal_fn, elems=unique_ids, dtype=tf.bool)
+  individual_masks = tf.map_fn(
+    lambda unique_id: tf.equal(unique_id, components), elems=unique_ids,
+    dtype=tf.bool)
 
   return individual_masks
 
 
 def _compute_region_recall_for_threshold(threshold, prediction,
                                          groundtruth_masks):
-  assert(len(prediction.get_shape()) == 3)
-  assert(len(groundtruth_masks.get_shape()) == 4)
+  assert(len(prediction.get_shape()) == 2)
+  assert(len(groundtruth_masks.get_shape()) == 3)
 
   prediction = tf.greater(prediction, threshold)
 
   def _get_overlap(groundtruth, prediction):
     overlap_sum = tf.reduce_sum(
-      tf.to_float(tf.logical_and(groundtruth, prediction)), axis=[1, 2])
-    return tf.div(overlap_sum, tf.reduce_sum(tf.to_float(groundtruth),
-                                             axis=[1, 2]))
+      tf.to_float(tf.logical_and(groundtruth, prediction)))
+    return tf.div(overlap_sum, tf.reduce_sum(tf.to_float(groundtruth)))
 
-  overlap_fn = functools.partial(_get_overlap, prediction=prediction)
+  overlaps = tf.map_fn(lambda groundtruth: _get_overlap(
+    groundtruth=groundtruth, prediction=prediction), elems=groundtruth_masks,
+                      dtype=tf.float32)
 
-  overlap = tf.map_fn(overlap_fn, elems=groundtruth_masks, dtype=tf.float32)
+  detections = tf.greater_equal(overlaps, tf.constant(0.3))
 
-  detections = tf.greater_equal(overlap, tf.constant(0.3))
-
-  num_tp = tf.reduce_sum(tf.cast(detections, tf.int32))
-  num_fn = tf.subtract(tf.size(detections), num_tp)
+  num_tp = tf.reduce_sum(tf.cast(detections, tf.int32), axis=0,
+                         name='num_tp_op')
+  num_fn = tf.subtract(tf.size(detections), num_tp, name='num_fn_op')
 
   tps_count = tf.get_variable('region_true_positives_{}'.format(
     int(threshold * 100)), shape=[], dtype=tf.float32,
@@ -54,23 +55,25 @@ def _compute_region_recall_for_threshold(threshold, prediction,
   tps_update_op = tf.assign_add(tps_count, tf.to_float(num_tp))
   fns_update_op = tf.assign_add(fns_count, tf.to_float(num_fn))
 
-  def compute_recall(true_p, false_n):
+  def compute_recall(true_p, false_n, name):
     return tf.where(tf.greater(true_p + false_n, 0),
-                    tf.div(true_p, true_p + false_n), 0)
+                    tf.div(true_p, true_p + false_n), 0, name=name)
 
-  recall_update_op = compute_recall(tps_update_op, fns_update_op)
-  recall = compute_recall(tps_count, fns_count)
+  recall_update_op = compute_recall(tps_update_op, fns_update_op,
+                                    name='recall_update_op')
+  recall = compute_recall(tps_count, fns_count,
+                          name='recall_op')
 
-  return recall, recall_update_op
+  return recall, recall_update_op, num_tp, num_fn
 
 
 # Prediction and  groundtruth both NxHxW
-def _compute_region_recall(prediction, groundtruth, tp_thresholds):
-  assert(len(prediction.get_shape()) == 3)
-  assert(len(groundtruth.get_shape()) == 3)
+def _compute_region_recall(prediction_groundtruth_stack, tp_thresholds):
+  prediction, groundtruth = tf.unstack(prediction_groundtruth_stack, axis=0)
+  assert(len(prediction.get_shape()) == 2)
+  assert(len(groundtruth.get_shape()) == 2)
 
-  individual_masks = tf.map_fn(_split_groundtruth_masks, elems=groundtruth,
-                               dtype=tf.bool)
+  individual_masks = _split_groundtruth_mask(groundtruth)
 
   fn = functools.partial(
     _compute_region_recall_for_threshold, prediction=prediction,
@@ -96,16 +99,28 @@ def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds):
 
   auc = tf.metrics.auc(groundtruth_batch, prediction_batch)
 
-  region_recall = _compute_region_recall(
-    prediction_batch, groundtruth_batch, tp_thresholds)
+  region_recall_fn = functools.partial(_compute_region_recall,
+                                       tp_thresholds=tp_thresholds)
+  region_recall = tf.map_fn(
+    lambda prediction_groundtruth_stack: region_recall_fn(
+      prediction_groundtruth_stack), elems=tf.stack(
+        [prediction_batch, groundtruth_batch], axis=1),
+    dtype=[(tf.float32, tf.float32, tf.int32, tf.int32)] * len(tp_thresholds))
 
   metric_dict = {'metrics/auc': auc}
+  # We want to collect the statistics for the regions so that we can calculate
+  # patient centered metrics later
+  region_statistics_dict = {}
   for i, t in enumerate(tp_thresholds):
-    metric_dict['metrics/precision_at_{}'.format(
-      int(np.round(t * 100)))] = (precision[0][i], precision[1][i])
-    metric_dict['metrics/recall_at_{}'.format(
-      int(np.round(t * 100)))] = (recall[0][i], recall[1][i])
-    metric_dict['metrics/region_recall_at_{}'.format(
-      int(np.round(t * 100)))] = (region_recall[i][0], region_recall[i][1])
+    t = int(np.round(t * 100))
+    metric_dict['metrics/precision_at_{}'.format(t)] = (
+      precision[0][i], precision[1][i])
+    metric_dict['metrics/recall_at_{}'.format(t)] = (
+      recall[0][i], recall[1][i])
+    metric_dict['metrics/region_recall_at_{}'.format(t)] = (
+      region_recall[i][0], region_recall[i][1])
 
-  return metric_dict
+    region_statistics_dict[t] = (
+      region_recall[i][2], region_recall[i][3])
+
+  return metric_dict, region_statistics_dict

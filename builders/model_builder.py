@@ -96,16 +96,16 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
                                       scaffold=scaffold)
   elif mode == tf.estimator.ModeKeys.EVAL:
     # Metrics
-    metric_dict = metrics.get_metrics(
+    metric_dict, region_statistics_dict = metrics.get_metrics(
       network_output, annotation_mask_batch,
       tp_thresholds=np.array(pipeline_config.metrics_tp_thresholds,
-                          dtype=np.float32))
+                             dtype=np.float32))
 
     batch_size = pipeline_config.eval_config.batch_size
     if num_gpu > 0:
       batch_size *= num_gpu
 
-    hook = session_hooks.VisualizationHook(
+    vis_hook = session_hooks.VisualizationHook(
       result_folder=result_folder,
       visualization_file_names=visualization_file_names,
       file_name=features[standard_fields.InputDataFields.image_file],
@@ -114,8 +114,13 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
         standard_fields.InputDataFields.annotation_decoded],
       annotation_mask=annotation_mask_batch,
       predicted_masks=network_output)
+    patient_metric_hook = session_hooks.PatientMetricHook(
+      region_statistics_dict=region_statistics_dict,
+      patient_id=features[standard_fields.InputDataFields.patient_id],
+      result_folder=result_folder)
+
     return tf.estimator.EstimatorSpec(
-      mode, loss=total_loss, evaluation_hooks=[hook],
+      mode, loss=total_loss, evaluation_hooks=[vis_hook, patient_metric_hook],
       eval_metric_ops=metric_dict)
   else:
     assert(False)
@@ -123,8 +128,10 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
 
 def get_model_fn(pipeline_config, result_folder, dataset_info,
                  dataset_split_name, num_gpu):
+
   visualization_file_names = dataset_info[
     standard_fields.PickledDatasetInfo.file_names][dataset_split_name]
+
   num_visualizations = pipeline_config.eval_config.num_images_to_visualize
   if num_visualizations is None or num_visualizations == -1:
     num_visualizations = len(visualization_file_names)
@@ -132,10 +139,9 @@ def get_model_fn(pipeline_config, result_folder, dataset_info,
     num_visualizations = min(num_visualizations,
                              len(visualization_file_names))
 
-  # Choose at random num_visualizations file names to visualize
-  visualization_file_names = np.array(visualization_file_names)[
-    np.random.choice(np.arange(len(visualization_file_names)),
-                     num_visualizations)]
+  np.random.shuffle(visualization_file_names)
+
+  visualization_file_names = visualization_file_names[:num_visualizations]
 
   model_name = pipeline_config.model.WhichOneof('model_type')
   if model_name == 'unet':

@@ -5,6 +5,7 @@ import pdb
 from datetime import datetime
 from shutil import copy
 
+import numpy as np
 import tensorflow as tf
 
 from utils import standard_fields
@@ -42,6 +43,9 @@ def main(_):
     pipeline_config_file = FLAGS.pipeline_config_file
 
   pipeline_config = setup_utils.load_config(pipeline_config_file)
+
+  np.random.seed(pipeline_config.seed)
+  tf.set_random_seed(pipeline_config.seed)
 
   if pipeline_config.train_config.num_gpu == 0:
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"

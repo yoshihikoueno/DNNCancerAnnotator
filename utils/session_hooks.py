@@ -46,7 +46,7 @@ class VisualizationHook(tf.train.SessionRunHook):
     summary_writer = tf.summary.FileWriterCache.get(self.result_folder)
 
     for batch_index in range(len(combined_image_res)):
-      file_name = file_name_res[batch_index]
+      file_name = file_name_res[batch_index].decode('utf-8')
 
       if file_name in self.visualization_file_names:
         summary = tf.Summary(value=[
@@ -63,12 +63,66 @@ class VisualizationHook(tf.train.SessionRunHook):
         continue
 
 
-class PatientMetricHook:
-  def __init__(self):
-    pass
+class PatientMetricHook(tf.train.SessionRunHook):
+  def __init__(self, region_statistics_dict, patient_id, result_folder):
+    self.region_statistics_dict = region_statistics_dict
+    self.patient_id = patient_id
+    self.result_folder = result_folder
+
+    self.patient_statistics = dict()
 
   def before_run(self, run_context):
-    pass
+    return tf.train.SessionRunArgs(fetches=[self.region_statistics_dict,
+                                            self.patient_id])
 
   def after_run(self, run_context, run_values):
-    pass
+    region_statistics_dict_res = run_values.results[0]
+    patient_id_res = run_values.results[1]
+
+    for threshold, tp_fn_batch in region_statistics_dict_res.items():
+      # Since tp_fn still contains a batch dimension, we need to have a loop
+      for i, tp_fn in enumerate(list(zip(*tp_fn_batch))):
+        tp = tp_fn[0]
+        fn = tp_fn[1]
+        print('TP: {}; FN: {}; TP_FN: {}'.format(tp, fn, tp_fn))
+        # If the current image does not contain any groundtruth, i.e.
+        # if both tp and fn are 0, then we dont want to include it in our
+        # Recall calculation later
+        if tp == 0 and fn == 0:
+          continue
+
+        if patient_id_res[i] not in self.patient_statistics:
+          self.patient_statistics[patient_id_res[i]] = dict()
+
+        if threshold not in self.patient_statistics[patient_id_res[i]]:
+          self.patient_statistics[patient_id_res[i]][threshold] = dict()
+          self.patient_statistics[patient_id_res[i]][threshold]['tp'] = 0
+          self.patient_statistics[patient_id_res[i]][threshold]['fn'] = 0
+
+        self.patient_statistics[patient_id_res[i]][threshold]['tp'] += tp
+        self.patient_statistics[patient_id_res[i]][threshold]['fn'] += fn
+
+  def end(self, session):
+    patient_recalls = dict()
+    for _, statistics in self.patient_statistics.items():
+      for threshold, tp_fn_dict in statistics.items():
+        tp = tp_fn_dict['tp']
+        fn = tp_fn_dict['fn']
+
+        assert(tp + fn > 0)
+
+        if threshold not in patient_recalls:
+          patient_recalls[threshold] = []
+
+        patient_recalls[threshold].append(tp / float((tp + fn)))
+
+    summary_writer = tf.summary.FileWriterCache.get(self.result_folder)
+    for threshold, recalls in patient_recalls.items():
+      recall = np.mean(recalls)
+
+      summary = tf.Summary()
+      summary.value.add(tag='patient_adjusted_recall_at_{}'.format(threshold),
+                        simple_value=recall)
+      summary_writer.add_summary(summary)
+
+      logging.info("Summary for patient adjusted recall@{}".format(threshold))

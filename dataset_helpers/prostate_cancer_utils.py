@@ -191,6 +191,8 @@ def _sort_files(dataset_folder, balance_classes, balance_remove_smallest,
           patient_id, int(filename.split('.')[0])])
         healthy_nb += 1
 
+  logging.info("Healthy Images: {}".format(healthy_nb))
+
   # Cancer Cases
   cancer_images = dict()
   cancer_nb = 0
@@ -210,7 +212,7 @@ def _sort_files(dataset_folder, balance_classes, balance_remove_smallest,
                                      os.path.split(dirpath)[1],
                                      os.path.splitext(filename)[0]) + '.png'
       if not os.path.exists(annotation_file):
-        print("{} has no annotation file {}.".format(
+        logging.error("{} has no annotation file {}.".format(
           os.path.join(dirpath, filename), annotation_file))
         assert os.path.exists(annotation_file)
       cancer_images[patient_id].append([os.path.join(dirpath, filename),
@@ -218,10 +220,12 @@ def _sort_files(dataset_folder, balance_classes, balance_remove_smallest,
                                         int(filename.split('.')[0])])
       cancer_nb += 1
 
+  logging.info("Cancer Images: {}".format(cancer_nb))
+
   if balance_classes:
     assert(not only_cancer)
-    print("Healthy:Cancer patients {}:{}".format(healthy_patient_nb,
-                                                 cancer_patient_nb))
+    logging.info("Healthy:Cancer patients {}:{}".format(healthy_patient_nb,
+                                                        cancer_patient_nb))
     # Balance class distribution
     while (healthy_patient_nb != cancer_patient_nb):
       if healthy_patient_nb > cancer_patient_nb:
@@ -268,6 +272,8 @@ def _sort_files(dataset_folder, balance_classes, balance_remove_smallest,
       train_files.append(entry[0])
       train_data.append(entry)
 
+  assert(len(train_files) == train_size)
+
   val_data_dict = {**healthy_val, **cancer_val}
 
   val_patient_ids = list(val_data_dict.keys())
@@ -279,6 +285,8 @@ def _sort_files(dataset_folder, balance_classes, balance_remove_smallest,
     for entry in entries:
       val_files.append(entry[0])
       val_data.append(entry)
+
+  assert(len(val_files) == val_size)
 
   test_data_dict = {**healthy_test, **cancer_test}
 
@@ -292,7 +300,11 @@ def _sort_files(dataset_folder, balance_classes, balance_remove_smallest,
       test_files.append(entry[0])
       test_data.append(entry)
 
+  assert(len(test_files) == test_size)
+
   dataset_size = train_size + val_size + test_size
+
+  assert(dataset_size == cancer_nb + healthy_nb)
 
   logging.info("Total dataset size: {}".format(dataset_size))
 
@@ -360,16 +372,6 @@ def _load_from_files(dataset_config, input_image_dims, seed):
 
   dataset_size = dataset_files_dict[
     standard_fields.PickledDatasetInfo.dataset_size]
-
-  train_patient_ids = dataset_files_dict[
-    standard_fields.PickledDatasetInfo.patient_ids][
-      standard_fields.SplitNames.train]
-  val_patient_ids = dataset_files_dict[
-    standard_fields.PickledDatasetInfo.patient_ids][
-      standard_fields.SplitNames.val]
-  test_patient_ids = dataset_files_dict[
-    standard_fields.PickledDatasetInfo.patient_ids][
-      standard_fields.SplitNames.test]
 
   split_to_size = {standard_fields.SplitNames.train:
                    dataset_files_dict[standard_fields.SplitNames.train][1],
