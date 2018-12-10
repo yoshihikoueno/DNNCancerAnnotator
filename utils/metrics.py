@@ -3,6 +3,8 @@ import functools
 import numpy as np
 import tensorflow as tf
 
+from utils import util_ops
+
 
 def _split_groundtruth_mask(groundtruth):
   assert(len(groundtruth.get_shape()) == 2)
@@ -18,7 +20,7 @@ def _split_groundtruth_mask(groundtruth):
   # Create mask for each cancer area
   individual_masks = tf.map_fn(
     lambda unique_id: tf.equal(unique_id, components), elems=unique_ids,
-    dtype=tf.bool)
+    dtype=tf.bool, parallel_iterations=4)
 
   return individual_masks
 
@@ -37,7 +39,7 @@ def _compute_region_recall_for_threshold(threshold, prediction,
 
   overlaps = tf.map_fn(lambda groundtruth: _get_overlap(
     groundtruth=groundtruth, prediction=prediction), elems=groundtruth_masks,
-                      dtype=tf.float32)
+                       dtype=tf.float32, parallel_iterations=4)
 
   detections = tf.greater_equal(overlaps, tf.constant(0.3))
 
@@ -82,7 +84,8 @@ def _compute_region_recall(prediction_groundtruth_stack, tp_thresholds):
   return list(map(fn, tp_thresholds))
 
 
-def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds):
+def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds,
+                batch_size):
   assert(len(prediction_batch.get_shape()) == 4)
   assert(len(groundtruth_batch.get_shape()) == 4)
 
@@ -105,7 +108,8 @@ def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds):
     lambda prediction_groundtruth_stack: region_recall_fn(
       prediction_groundtruth_stack), elems=tf.stack(
         [prediction_batch, groundtruth_batch], axis=1),
-    dtype=[(tf.float32, tf.float32, tf.int32, tf.int32)] * len(tp_thresholds))
+    dtype=[(tf.float32, tf.float32, tf.int32, tf.int32)] * len(tp_thresholds),
+    parallel_iterations=min(batch_size, util_ops.get_cpu_count()))
 
   metric_dict = {'metrics/auc': auc}
   # We want to collect the statistics for the regions so that we can calculate

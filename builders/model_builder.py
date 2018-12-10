@@ -28,7 +28,8 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
     # Preprocess / Augment images
     image_batch, annotation_mask_batch = preprocessor.apply(
       pipeline_config.train_config.data_augmentation_options,
-      images=image_batch, gt_masks=annotation_mask_batch)
+      images=image_batch, gt_masks=annotation_mask_batch,
+      batch_size=pipeline_config.train_config.batch_size)
 
   network_output = net.build_network(image_batch)
 
@@ -99,7 +100,8 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
     metric_dict, region_statistics_dict = metrics.get_metrics(
       network_output, annotation_mask_batch,
       tp_thresholds=np.array(pipeline_config.metrics_tp_thresholds,
-                             dtype=np.float32))
+                             dtype=np.float32),
+      batch_size=pipeline_config.eval_config.batch_size)
 
     batch_size = pipeline_config.eval_config.batch_size
     if num_gpu > 0:

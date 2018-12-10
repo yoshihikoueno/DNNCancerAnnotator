@@ -4,9 +4,15 @@ import subprocess
 import xml.etree.ElementTree
 import logging
 import sys
+import multiprocessing
 
 import numpy as np
 import tensorflow as tf
+
+
+def get_cpu_count():
+  return multiprocessing.cpu_count()
+
 
 def get_devices():
   res = []

@@ -2,8 +2,11 @@ import functools
 
 import tensorflow as tf
 
+from utils import util_ops
 
-def apply(data_augmentation_options, images, gt_masks=None):
+
+# Batch size for single GPU
+def apply(data_augmentation_options, images, gt_masks, batch_size):
   if len(images.get_shape()) != 4:
     raise ValueError("Invalid image dimensions!")
   if gt_masks is not None and len(gt_masks.get_shape()) != 4:
@@ -11,6 +14,7 @@ def apply(data_augmentation_options, images, gt_masks=None):
 
   applied_augmentations = set()
 
+  num_parallel_iterations = min(batch_size, util_ops.get_cpu_count())
   for step in data_augmentation_options:
     augmentation_type = step.WhichOneof('preprocessing_step')
     if augmentation_type is None:
@@ -39,18 +43,18 @@ def apply(data_augmentation_options, images, gt_masks=None):
       images = tf.map_fn(
         functools.partial(tf.image.random_hue,
                           max_hue=step.random_hue.max_delta), elems=images,
-        parallel_iterations=20)
+        parallel_iterations=num_parallel_iterations)
     elif augmentation_type == 'random_saturation':
       images = tf.map_fn(
         functools.partial(tf.image.random_saturation,
                           lower=step.random_saturation.lower,
                           upper=step.random_saturation.upper), elems=images,
-        parallel_iterations=20)
+        parallel_iterations=num_parallel_iterations)
     elif augmentation_type == 'random_brightness':
       images = tf.map_fn(
         functools.partial(tf.image.random_brightness,
                           max_hue=step.random_brightness.max_delta),
-        elems=images, parallel_iterations=20)
+        elems=images, parallel_iterations=num_parallel_iterations)
 
     elif augmentation_type == 'random_warp':
       images, gt_masks = _random_warp(

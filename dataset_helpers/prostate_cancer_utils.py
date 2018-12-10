@@ -7,6 +7,7 @@ import pickle
 import numpy as np
 import tensorflow as tf
 
+from utils import util_ops
 from utils import standard_fields
 from dataset_helpers import helpers as dh
 
@@ -335,10 +336,12 @@ def _build_patient_dataset(full_dataset, target_patient_id):
 def _build_train_dataset(patient_data, patient_ids):
   patient_id_dataset = tf.data.Dataset.from_tensor_slices(patient_ids)
 
+  cpu_count = util_ops.get_cpu_count()
+
   return patient_id_dataset.interleave(
     lambda patient_id: _build_patient_dataset(
-      patient_data, patient_id).shuffle(256).repeat(None), cycle_length=20,
-    block_length=1, num_parallel_calls=20)
+      patient_data, patient_id).shuffle(256).repeat(None),
+    cycle_length=cpu_count, block_length=1, num_parallel_calls=cpu_count)
 
 
 def _load_from_files(dataset_config, input_image_dims, seed):
@@ -399,9 +402,13 @@ def _load_from_files(dataset_config, input_image_dims, seed):
       tuple([list(t) for t in zip(
         *dataset_files_dict[standard_fields.SplitNames.test][0])]))
 
-  train_dataset = train_dataset.map(_parse_from_file, num_parallel_calls=20)
-  val_dataset = val_dataset.map(_parse_from_file, num_parallel_calls=20)
-  test_dataset = test_dataset.map(_parse_from_file, num_parallel_calls=20)
+  cpu_count = util_ops.get_cpu_count()
+  train_dataset = train_dataset.map(_parse_from_file,
+                                    num_parallel_calls=cpu_count)
+  val_dataset = val_dataset.map(_parse_from_file,
+                                num_parallel_calls=cpu_count)
+  test_dataset = test_dataset.map(_parse_from_file,
+                                  num_parallel_calls=cpu_count)
 
   return train_dataset, val_dataset, test_dataset, pickle_data
 
@@ -495,9 +502,10 @@ def build_tf_dataset_from_files(dataset_config, input_image_dims, seed):
 
   _decode_fn = functools.partial(_decode_example, target_dims=input_image_dims)
 
-  train_dataset = train_dataset.map(_decode_fn, num_parallel_calls=20)
-  val_dataset = val_dataset.map(_decode_fn, num_parallel_calls=20)
-  test_dataset = test_dataset.map(_decode_fn, num_parallel_calls=20)
+  cpu_count = util_ops.get_cpu_count()
+  train_dataset = train_dataset.map(_decode_fn, num_parallel_calls=cpu_count)
+  val_dataset = val_dataset.map(_decode_fn, num_parallel_calls=cpu_count)
+  test_dataset = test_dataset.map(_decode_fn, num_parallel_calls=cpu_count)
 
   train_dataset = _build_train_dataset(
     train_dataset, pickle_data[
@@ -512,12 +520,13 @@ def build_tf_dataset_from_tfrecords(tfrecords_file, target_dims,
                                     patient_ids, is_training):
   dataset = tf.data.TFRecordDataset(tfrecords_file)
 
-  dataset = dataset.map(_deserialize_example, num_parallel_calls=20)
+  dataset = dataset.map(_deserialize_example,
+                        num_parallel_calls=util_ops.get_cpu_count())
 
   if is_training:
     dataset = _build_train_dataset(dataset, patient_ids)
 
   decode_fn = functools.partial(_decode_example, target_dims=target_dims)
-  dataset = dataset.map(decode_fn, num_parallel_calls=20)
+  dataset = dataset.map(decode_fn, num_parallel_calls=util_ops.get_cpu_count())
 
   return dataset
