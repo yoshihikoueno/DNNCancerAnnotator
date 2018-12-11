@@ -47,24 +47,36 @@ def _compute_region_recall_for_threshold(threshold, prediction,
                          name='num_tp_op')
   num_fn = tf.subtract(tf.size(detections), num_tp, name='num_fn_op')
 
-  tps_count = tf.get_variable('region_true_positives_{}'.format(
-    int(threshold * 100)), shape=[], dtype=tf.float32,
-                              collections=[tf.GraphKeys.LOCAL_VARIABLES])
-  fns_count = tf.get_variable('region_false_negatives_{}'.format(
-    int(threshold * 100)), shape=[], dtype=tf.float32,
-                              collections=[tf.GraphKeys.LOCAL_VARIABLES])
+  tps_count_op = tf.get_variable(
+    'region_true_positives_{}'.format(
+      int(threshold * 100)), dtype=tf.float32,
+    collections=[tf.GraphKeys.LOCAL_VARIABLES],
+    initializer=lambda: tf.constant(0, dtype=tf.float32),
+    trainable=False)
+  fns_count_op = tf.get_variable(
+    'region_false_negatives_{}'.format(
+      int(threshold * 100)), dtype=tf.float32,
+    collections=[tf.GraphKeys.LOCAL_VARIABLES],
+    initializer=lambda: tf.constant(0, dtype=tf.float32),
+    trainable=False)
 
-  tps_update_op = tf.assign_add(tps_count, tf.to_float(num_tp))
-  fns_update_op = tf.assign_add(fns_count, tf.to_float(num_fn))
+  # This identity is necessary, since the assign_add below works on a reference
+  # and we want to keep the returned variable independent of the update
+  tps_count_var = tf.identity(tps_count_op)
+  fns_count_var = tf.identity(fns_count_op)
+
+  tps_update_op = tf.assign_add(tps_count_op, tf.to_float(num_tp))
+  fns_update_op = tf.assign_add(fns_count_op, tf.to_float(num_fn))
 
   def compute_recall(true_p, false_n, name):
     return tf.where(tf.greater(true_p + false_n, 0),
                     tf.div(true_p, true_p + false_n), 0, name=name)
 
+  recall = compute_recall(tps_count_var, fns_count_var,
+                          name='recall_op')
+
   recall_update_op = compute_recall(tps_update_op, fns_update_op,
                                     name='recall_update_op')
-  recall = compute_recall(tps_count, fns_count,
-                          name='recall_op')
 
   return recall, recall_update_op, num_tp, num_fn
 
@@ -112,6 +124,7 @@ def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds,
     parallel_iterations=min(batch_size, util_ops.get_cpu_count()))
 
   metric_dict = {'metrics/auc': auc}
+
   # We want to collect the statistics for the regions so that we can calculate
   # patient centered metrics later
   region_statistics_dict = {}
@@ -121,8 +134,14 @@ def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds,
       precision[0][i], precision[1][i])
     metric_dict['metrics/recall_at_{}'.format(t)] = (
       recall[0][i], recall[1][i])
+
+    # Doesn't matter which variable we take, as they all reference the same
+    region_recall_var = region_recall[i][0][0]
+    with tf.control_dependencies([region_recall[i][1]]):
+      region_recall_update_op = tf.identity(region_recall_var)
+
     metric_dict['metrics/region_recall_at_{}'.format(t)] = (
-      region_recall[i][0], region_recall[i][1])
+      region_recall_var, region_recall_update_op)
 
     region_statistics_dict[t] = (
       region_recall[i][2], region_recall[i][3])

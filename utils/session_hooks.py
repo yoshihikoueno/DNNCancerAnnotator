@@ -84,7 +84,8 @@ class PatientMetricHook(tf.train.SessionRunHook):
       for i, tp_fn in enumerate(list(zip(*tp_fn_batch))):
         tp = tp_fn[0]
         fn = tp_fn[1]
-        print('TP: {}; FN: {}; TP_FN: {}'.format(tp, fn, tp_fn))
+        print('TP Threshold={}: TP: {}; FN: {}'.format(
+          threshold, tp, fn))
         # If the current image does not contain any groundtruth, i.e.
         # if both tp and fn are 0, then we dont want to include it in our
         # Recall calculation later

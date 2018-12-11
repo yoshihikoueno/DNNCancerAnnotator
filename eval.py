@@ -29,6 +29,9 @@ flags.DEFINE_bool('repeated', False, 'Whether to evaluate successive '
                                      'checkpoints')
 flags.DEFINE_string('split_name', '', 'train, val, or test')
 flags.DEFINE_bool('pdb', False, 'Whether to use pdb debugging functionality.')
+flags.DEFINE_integer('num_steps', 0,
+                     'For debugging purposes, a possible limit to '
+                     'the number of steps. 0 means no limit')
 
 FLAGS = flags.FLAGS
 
@@ -95,11 +98,17 @@ def main(_):
     eval_distribution=None, num_gpu=num_gpu,
     warm_start_ckpt_name=FLAGS.checkpoint_name)
 
+  if FLAGS.num_steps > 0:
+    num_steps = FLAGS.num_steps
+  else:
+    num_steps = None
+
   if FLAGS.checkpoint_name:
     latest_checkpoint = os.path.join(FLAGS.checkpoint_dir,
                                      FLAGS.checkpoint_name)
 
-    estimator.evaluate(input_fn=input_fn, checkpoint_path=latest_checkpoint)
+    estimator.evaluate(input_fn=input_fn, checkpoint_path=latest_checkpoint,
+                       steps=num_steps)
 
   elif FLAGS.repeated:
     last_checkpoint = ''
@@ -113,13 +122,15 @@ def main(_):
         continue
 
       logging.info('Evaluating {}'.format(latest_checkpoint))
-      estimator.evaluate(input_fn=input_fn, checkpoint_path=latest_checkpoint)
+      estimator.evaluate(input_fn=input_fn, checkpoint_path=latest_checkpoint,
+                         steps=num_steps)
 
       last_checkpoint = latest_checkpoint
   else:
     latest_checkpoint = tf.train.latest_checkpoint(FLAGS.checkpoint_dir)
 
-    estimator.evaluate(input_fn=input_fn, checkpoint_path=latest_checkpoint)
+    estimator.evaluate(input_fn=input_fn, checkpoint_path=latest_checkpoint,
+                       steps=num_steps)
 
 
 if __name__ == '__main__':
