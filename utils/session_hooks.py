@@ -11,40 +11,28 @@ from utils import util_ops
 class VisualizationHook(tf.train.SessionRunHook):
   def __init__(self, result_folder, visualization_file_names,
                file_name, image_decoded, annotation_decoded, annotation_mask,
-               predicted_masks):
-    assert(len(predicted_masks.get_shape()) == 4)
+               predicted_mask):
+    assert(len(predicted_mask.get_shape()) == 3)
     self.visualization_file_names = visualization_file_names
     self.result_folder = result_folder
     self.file_name = file_name
 
-    num_prediction_masks = predicted_masks.get_shape().as_list()[3]
-
-    assert(num_prediction_masks is not None)
-
-    if (num_prediction_masks == 1):
-      predicted_masks = tf.nn.sigmoid(predicted_masks)
-    else:
-      predicted_masks = tf.nn.softmax(predicted_masks)
-
-    split_prediction_masks = tf.unstack(predicted_masks, num_prediction_masks,
-                                        axis=3)
-
-    target_size = predicted_masks.get_shape().as_list()[1:3]
+    target_size = predicted_mask.get_shape().as_list()[1:3]
 
     image_decoded = image_utils.central_crop(image_decoded, target_size)
 
     annotation_decoded = image_utils.central_crop(
       annotation_decoded, target_size)
 
-    split_prediction_masks = tf.map_fn(
-      tf.image.grayscale_to_rgb, elems=split_prediction_masks,
-      parallel_iterations=min(util_ops.get_cpu_count(), num_prediction_masks))
+    predicted_mask = tf.image.grayscale_to_rgb(tf.expand_dims(predicted_mask,
+                                                              axis=3))
     image_decoded = tf.image.grayscale_to_rgb(image_decoded)
-    annotation_mask = tf.image.grayscale_to_rgb(annotation_mask * 255)
+    annotation_mask = tf.image.grayscale_to_rgb(tf.to_float(annotation_mask)
+                                                * 255)
 
     self.combined_image = tf.concat([
-      image_decoded, annotation_decoded, annotation_mask]
-                                    + split_prediction_masks, axis=2)
+      image_decoded, annotation_decoded, annotation_mask, predicted_mask],
+                                    axis=2)
 
   def before_run(self, run_context):
     return tf.train.SessionRunArgs(fetches=[

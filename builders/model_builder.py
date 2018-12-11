@@ -119,9 +119,15 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
                                       loss=total_loss, train_op=train_op,
                                       scaffold=scaffold)
   elif mode == tf.estimator.ModeKeys.EVAL:
-    # Metrics
+    if pipeline_config.train_config.loss.name == 'sigmoid':
+      scaled_network_output = tf.nn.sigmoid(network_output)[:, :, :, 0]
+    elif pipeline_config.train_config.loss.name == 'softmax':
+      assert(network_output.get_shape().as_list()[-1] == 2)
+      scaled_network_output = tf.nn.softmax(network_output)[:, :, :, 1]
+
+      # Metrics
     metric_dict, region_statistics_dict = metric_utils.get_metrics(
-      network_output, annotation_mask_batch,
+      scaled_network_output, annotation_mask_batch,
       tp_thresholds=np.array(pipeline_config.metrics_tp_thresholds,
                              dtype=np.float32),
       parallel_iterations=min(pipeline_config.eval_config.batch_size,
@@ -135,7 +141,7 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
       annotation_decoded=features[
         standard_fields.InputDataFields.annotation_decoded],
       annotation_mask=annotation_mask_batch,
-      predicted_masks=network_output)
+      predicted_mask=scaled_network_output)
     patient_metric_hook = session_hooks.PatientMetricHook(
       region_statistics_dict=region_statistics_dict,
       patient_id=features[standard_fields.InputDataFields.patient_id],

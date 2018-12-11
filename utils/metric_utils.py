@@ -8,11 +8,9 @@ from metrics import metrics
 
 def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds,
                 parallel_iterations):
-  assert(len(prediction_batch.get_shape()) == 4)
+  assert(len(prediction_batch.get_shape()) == 3)
   assert(len(groundtruth_batch.get_shape()) == 4)
 
-  # Get values between 0 and 1
-  prediction_batch = tf.nn.softmax(prediction_batch)[:, :, :, 1]
   groundtruth_batch = tf.squeeze(groundtruth_batch, axis=3)
 
   precision = tf.metrics.precision_at_thresholds(
