@@ -25,7 +25,7 @@ class VisualizationHook(tf.train.SessionRunHook):
       annotation_decoded, target_size)
 
     predicted_mask = tf.image.grayscale_to_rgb(tf.expand_dims(predicted_mask,
-                                                              axis=3))
+                                                              axis=3) * 255)
     image_decoded = tf.image.grayscale_to_rgb(image_decoded)
     annotation_mask = tf.image.grayscale_to_rgb(tf.to_float(annotation_mask)
                                                 * 255)
