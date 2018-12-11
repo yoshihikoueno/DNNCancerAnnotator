@@ -23,6 +23,9 @@ flags.DEFINE_string('checkpoint_dir', '', 'The checkpoint directory to load '
                                           'directory')
 flags.DEFINE_string('checkpoint_name', '', 'Optional name of a specific '
                                         'checkpoint')
+flags.DEFINE_bool('all_checkpoints', False,
+                  'Optional flag to evaluate all existing checkpoints in '
+                  'checkpoint_dir from the beginning on.')
 flags.DEFINE_string('result_dir', '', 'Optional directory to write the '
                                       'results to.')
 flags.DEFINE_bool('repeated', False, 'Whether to evaluate successive '
@@ -38,6 +41,7 @@ FLAGS = flags.FLAGS
 
 def main(_):
   assert(not (FLAGS.repeated and FLAGS.checkpoint_name))
+  assert(not (FLAGS.checkpoint_name != '' and FLAGS.all_checkpoints))
 
   assert(FLAGS.split_name in standard_fields.SplitNames.available_names)
   if FLAGS.pdb:
@@ -102,6 +106,9 @@ def main(_):
     num_steps = FLAGS.num_steps
   else:
     num_steps = None
+
+  if FLAGS.all_checkpoints:
+    all_checkpoints = tf.train.get_checkpoint_state(FLAGS.checkpoint_dir)
 
   if FLAGS.checkpoint_name:
     latest_checkpoint = os.path.join(FLAGS.checkpoint_dir,

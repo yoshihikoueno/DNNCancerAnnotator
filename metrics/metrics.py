@@ -41,19 +41,21 @@ def _calculate_overlap(groundtruth_prediction_tuple):
     return tf.div(overlap_sum, tf.reduce_sum(tf.to_float(groundtruth)))
 
   return tf.map_fn(lambda groundtruth: _get_overlap(groundtruth, prediction),
-                   elems=groundtruth_masks, dtype=tf.float32)
+                   elems=groundtruth_masks, dtype=tf.float32,
+                   parallel_iterations=4)
 
 
 # labels = [NxMxHxW]
 # predictions = [NxHxW], bool
-def region_recall(labels, predictions):
+def region_recall(labels, predictions, parallel_iterations):
   assert(len(labels.get_shape()) == 4)
   assert(len(predictions.get_shape()) == 3)
   assert(predictions.dtype == tf.bool)
 
   # [NxM] overlaps
   overlaps = tf.map_fn(_calculate_overlap, elems=(labels, predictions),
-                       dtype=tf.float32)
+                       dtype=tf.float32,
+                       parallel_iterations=parallel_iterations)
   assert(len(overlaps.get_shape()) == 2)
 
   tps = tf.greater_equal(overlaps, tf.constant(0.3))
@@ -98,7 +100,8 @@ def region_recall(labels, predictions):
 
 # labels = [NxHxW]
 # predictions = [NxHxW]
-def region_recall_at_thresholds(labels, predictions, thresholds):
+def region_recall_at_thresholds(labels, predictions, thresholds,
+                                parallel_iterations):
   assert(len(labels.get_shape()) == 3)
   assert(len(predictions.get_shape()) == 3)
   assert(predictions.dtype == tf.float32)
@@ -106,14 +109,16 @@ def region_recall_at_thresholds(labels, predictions, thresholds):
   # [NxMxHxW]
   # M = Number of masks
   # N = batch size
-  groundtruth_masks = tf.map_fn(_split_groundtruth_mask, elems=labels,
-                                dtype=tf.bool)
+  groundtruth_masks = tf.map_fn(
+    _split_groundtruth_mask, elems=labels, dtype=tf.bool,
+    parallel_iterations=parallel_iterations)
 
   result = []
   for threshold in thresholds:
-    with tf.variable_scope('TP_threshold_{}'.format(
-        int(np.round(threshold * 100)))):
+    with tf.variable_scope('TP_threshold_{}'.format(int(np.round(threshold
+                                                                 * 100)))):
       result.append(region_recall(groundtruth_masks,
-                                  tf.greater_equal(predictions, threshold)))
+                                  tf.greater_equal(predictions, threshold),
+                                  parallel_iterations))
 
   return result

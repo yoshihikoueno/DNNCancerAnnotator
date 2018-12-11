@@ -6,7 +6,7 @@ from utils import image_utils
 
 
 class UNet(object):
-  def __init__(self, pipeline_config, is_training):
+  def __init__(self, pipeline_config, is_training, add_background_class):
     assert(pipeline_config.model.input_image_channels == 1)
     self.input_image_dims = (pipeline_config.model.input_image_size_x,
                              pipeline_config.model.input_image_size_y,
@@ -16,6 +16,8 @@ class UNet(object):
     self.is_training = is_training
     self.config = pipeline_config
     self.num_classes = 1
+    if add_background_class:
+      self.num_classes += 1
 
   def preprocess(self, inputs):
     if inputs.dtype is not tf.float32:
@@ -144,25 +146,10 @@ class UNet(object):
     conv_params = self._get_conv_params(use_relu=False)
 
     # TODO: Should we have batch norm here?
-    final = lu.conv_2d(inputs=us4, filters=self.num_classes + 1, kernel_size=1,
+    final = lu.conv_2d(inputs=us4, filters=self.num_classes, kernel_size=1,
                        strides=1, padding='valid',
                        is_training=self.is_training, conv_params=conv_params)
 
     print(final)
 
     return final
-
-  def loss(self, network_output, groundtruth_mask):
-    # GT mask should have batch and channel dimensions
-    assert(len(groundtruth_mask.get_shape().as_list()) == 4)
-
-    assert(groundtruth_mask.get_shape().as_list()[:3]
-           == network_output.get_shape().as_list()[:3])
-    # Mask should be single channel
-    assert(groundtruth_mask.get_shape().as_list()[3] == 1)
-
-    mask_loss = tf.losses.sparse_softmax_cross_entropy(
-      labels=tf.cast(tf.reshape(groundtruth_mask, [-1]), tf.int32),
-      logits=tf.reshape(network_output, [-1, self.num_classes + 1]))
-
-    return {'mask_loss': mask_loss}

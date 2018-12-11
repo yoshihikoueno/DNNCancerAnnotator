@@ -19,13 +19,16 @@ def build_estimator(pipeline_config, result_dir, dataset_info,
                                         dataset_split_name=dataset_split_name,
                                         num_gpu=num_gpu)
 
+  # keep_checkpoint_max is set to this number because when setting it as no
+  # limit i.e. 0 or None, the checkpoint file will not contain all checkpoint
+  # names.
   run_config = tf.estimator.RunConfig(
     model_dir=result_dir, tf_random_seed=pipeline_config.seed,
     save_summary_steps=pipeline_config.train_config.save_summary_steps,
     save_checkpoints_secs=pipeline_config.train_config.save_checkpoints_secs,
     session_config=tf.ConfigProto(allow_soft_placement=True,
                                   log_device_placement=False),
-    keep_checkpoint_max=None, log_step_count_steps=10,
+    keep_checkpoint_max=9999999, log_step_count_steps=10,
     train_distribute=train_distribution, eval_distribute=eval_distribution)
 
   if warm_start_path:

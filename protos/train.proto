@@ -4,6 +4,7 @@ package netng.protos;
 
 import "protos/preprocessor.proto";
 import "protos/optimizer.proto";
+import "protos/loss.proto";
 
 message TrainConfig {
   // Input queue batch size.
@@ -36,5 +37,5 @@ message TrainConfig {
 
   optional int32 shuffle_buffer_size = 19;
 
-  
+  optional Loss loss = 20;
 }

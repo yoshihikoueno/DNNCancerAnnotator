@@ -1,0 +1,8 @@
+syntax = "proto2";
+
+package netng.protos;
+
+message Loss {
+  optional string name = 1;
+  optional float pos_weight = 2;
+}

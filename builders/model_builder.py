@@ -10,14 +10,35 @@ from utils import preprocessor
 from utils import session_hooks
 from utils import metric_utils
 from utils import image_utils
+from utils import util_ops
 from builders import optimizer_builder
+
+
+def _loss(labels, logits, loss_name, pos_weight):
+  assert(pos_weight >= 0)
+  # Each entry in labels must be an index in [0, num_classes)
+  assert(len(labels.get_shape()) == 1)
+
+  if loss_name == 'sigmoid':
+    assert(logits.get_shape().as_list()[1] == 1)
+    return tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(
+      tf.to_float(labels), tf.squeeze(logits, axis=1), pos_weight))
+  elif loss_name == 'softmax':
+    # Logits should be of shape [batch_size, num_classes]
+    assert(len(logits.get_shape()) == 2)
+    assert(pos_weight == 1 and 'Loss weight != 1 not implemented for softmax.')
+    return tf.losses.sparse_softmax_cross_entropy(labels, logits)
+  else:
+    assert(False and 'Loss name "{}" not recognized.'.format(loss_name))
 
 
 def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
                       dataset_split_name, model_constructor, mode, num_gpu,
                       visualization_file_names):
+  add_background_class = pipeline_config.train_config.loss.name == 'softmax'
   net = model_constructor(pipeline_config, is_training=mode
-                          == tf.estimator.ModeKeys.TRAIN)
+                          == tf.estimator.ModeKeys.TRAIN,
+                          add_background_class=add_background_class)
 
   image_batch = features[standard_fields.InputDataFields.image_decoded]
 
@@ -33,16 +54,18 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
 
   network_output = net.build_network(image_batch)
 
-  annotation_mask_batch = tf.clip_by_value(image_utils.central_crop(
-      annotation_mask_batch,
-      desired_size=network_output.get_shape().as_list()[1:3]), 0, 1)
+  annotation_mask_batch = tf.cast(tf.clip_by_value(image_utils.central_crop(
+    annotation_mask_batch, desired_size=network_output.get_shape().as_list()[
+      1:3]), 0, 1), dtype=tf.int64)
 
-  losses_dict = net.loss(network_output, annotation_mask_batch)
-
-  loss = tf.add_n(list(losses_dict.values()), name='ModelLoss')
+  loss = _loss(tf.reshape(annotation_mask_batch, [-1]),
+                 tf.reshape(network_output, [-1, net.num_classes]),
+                 loss_name=pipeline_config.train_config.loss.name,
+                 pos_weight=pipeline_config.train_config.loss.pos_weight)
+  loss = tf.identity(loss, name='ModelLoss')
   tf.summary.scalar(loss.op.name, loss, family='Loss')
-  total_loss = tf.identity(loss, name='Total_Loss')
 
+  total_loss = tf.identity(loss, name='TotalLoss')
   if mode == tf.estimator.ModeKeys.TRAIN:
     if pipeline_config.train_config.add_regularization_loss:
       regularization_losses = tf.get_collection(
@@ -59,7 +82,7 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
   total_loss = tf.check_numerics(total_loss, 'LossTensor is inf or nan.')
 
   scaffold = None
-  train_op = tf.identity(total_loss)
+  train_op = tf.identity(total_loss, name='train_op')
   if mode == tf.estimator.ModeKeys.TRAIN:
     if pipeline_config.train_config.optimizer.use_moving_average:
       # EMA's are currently not supported with tf's DistributionStrategy.
@@ -101,11 +124,8 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
       network_output, annotation_mask_batch,
       tp_thresholds=np.array(pipeline_config.metrics_tp_thresholds,
                              dtype=np.float32),
-      batch_size=pipeline_config.eval_config.batch_size)
-
-    batch_size = pipeline_config.eval_config.batch_size
-    if num_gpu > 0:
-      batch_size *= num_gpu
+      parallel_iterations=min(pipeline_config.eval_config.batch_size,
+                              util_ops.get_cpu_count()))
 
     vis_hook = session_hooks.VisualizationHook(
       result_folder=result_folder,
