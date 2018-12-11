@@ -8,7 +8,7 @@ from models import unet
 from utils import standard_fields
 from utils import preprocessor
 from utils import session_hooks
-from utils import metrics
+from utils import metric_utils
 from utils import image_utils
 from builders import optimizer_builder
 
@@ -97,7 +97,7 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
                                       scaffold=scaffold)
   elif mode == tf.estimator.ModeKeys.EVAL:
     # Metrics
-    metric_dict, region_statistics_dict = metrics.get_metrics(
+    metric_dict, region_statistics_dict = metric_utils.get_metrics(
       network_output, annotation_mask_batch,
       tp_thresholds=np.array(pipeline_config.metrics_tp_thresholds,
                              dtype=np.float32),

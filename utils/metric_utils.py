@@ -4,6 +4,7 @@ import numpy as np
 import tensorflow as tf
 
 from utils import util_ops
+from metrics import metrics
 
 
 def _split_groundtruth_mask(groundtruth):
@@ -65,8 +66,10 @@ def _compute_region_recall_for_threshold(threshold, prediction,
   tps_count_var = tf.identity(tps_count_op)
   fns_count_var = tf.identity(fns_count_op)
 
-  tps_update_op = tf.assign_add(tps_count_op, tf.to_float(num_tp))
-  fns_update_op = tf.assign_add(fns_count_op, tf.to_float(num_fn))
+  tps_update_op = tf.assign_add(tps_count_op, tf.to_float(num_tp),
+                                use_locking=True)
+  fns_update_op = tf.assign_add(fns_count_op, tf.to_float(num_fn),
+                                use_locking=True)
 
   def compute_recall(true_p, false_n, name):
     return tf.where(tf.greater(true_p + false_n, 0),
@@ -114,14 +117,17 @@ def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds,
 
   auc = tf.metrics.auc(groundtruth_batch, prediction_batch)
 
-  region_recall_fn = functools.partial(_compute_region_recall,
-                                       tp_thresholds=tp_thresholds)
-  region_recall = tf.map_fn(
-    lambda prediction_groundtruth_stack: region_recall_fn(
-      prediction_groundtruth_stack), elems=tf.stack(
-        [prediction_batch, groundtruth_batch], axis=1),
-    dtype=[(tf.float32, tf.float32, tf.int32, tf.int32)] * len(tp_thresholds),
-    parallel_iterations=min(batch_size, util_ops.get_cpu_count()))
+ # region_recall_fn = functools.partial(_compute_region_recall,
+  #                                     tp_thresholds=tp_thresholds)
+  #region_recall = tf.map_fn(
+  #  lambda prediction_groundtruth_stack: region_recall_fn(
+  #    prediction_groundtruth_stack), elems=tf.stack(
+  #      [prediction_batch, groundtruth_batch], axis=1),
+  #  dtype=[(tf.float32, tf.float32, tf.int32, tf.int32)] * len(tp_thresholds),
+  #  parallel_iterations=min(batch_size, util_ops.get_cpu_count()))
+
+  region_recall = metrics.region_recall_at_thresholds(
+    groundtruth_batch, prediction_batch, tp_thresholds)
 
   metric_dict = {'metrics/auc': auc}
 
@@ -135,13 +141,8 @@ def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds,
     metric_dict['metrics/recall_at_{}'.format(t)] = (
       recall[0][i], recall[1][i])
 
-    # Doesn't matter which variable we take, as they all reference the same
-    region_recall_var = region_recall[i][0][0]
-    with tf.control_dependencies([region_recall[i][1]]):
-      region_recall_update_op = tf.identity(region_recall_var)
-
     metric_dict['metrics/region_recall_at_{}'.format(t)] = (
-      region_recall_var, region_recall_update_op)
+      region_recall[i][0], region_recall[i][1])
 
     region_statistics_dict[t] = (
       region_recall[i][2], region_recall[i][3])
