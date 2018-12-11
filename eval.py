@@ -39,6 +39,12 @@ flags.DEFINE_integer('num_steps', 0,
 FLAGS = flags.FLAGS
 
 
+def _eval_checkpoint(checkpoint_path, estimator, input_fn, num_steps):
+  logging.info('Evaluating {}'.format(checkpoint_path))
+  return estimator.evaluate(input_fn=input_fn, checkpoint_path=checkpoint_path,
+                            steps=num_steps)
+
+
 def main(_):
   assert(not (FLAGS.repeated and FLAGS.checkpoint_name))
   assert(not (FLAGS.checkpoint_name != '' and FLAGS.all_checkpoints))
@@ -107,37 +113,35 @@ def main(_):
   else:
     num_steps = None
 
+  latest_checkpoint = ''
   if FLAGS.all_checkpoints:
-    all_checkpoints = tf.train.get_checkpoint_state(FLAGS.checkpoint_dir)
+    all_checkpoints = tf.train.get_checkpoint_state(
+      FLAGS.checkpoint_dir).all_model_checkpoint_paths
+    for checkpoint in all_checkpoints:
+      _eval_checkpoint(checkpoint, estimator, input_fn, num_steps)
+      latest_checkpoint = checkpoint
 
   if FLAGS.checkpoint_name:
-    latest_checkpoint = os.path.join(FLAGS.checkpoint_dir,
-                                     FLAGS.checkpoint_name)
-
-    estimator.evaluate(input_fn=input_fn, checkpoint_path=latest_checkpoint,
-                       steps=num_steps)
-
+    _eval_checkpoint(
+      os.path.join(FLAGS.checkpoint_dir,
+                   FLAGS.checkpoint_name), estimator, input_fn, num_steps)
   elif FLAGS.repeated:
-    last_checkpoint = ''
     while True:
-      latest_checkpoint = tf.train.latest_checkpoint(FLAGS.checkpoint_dir)
+      next_checkpoint = tf.train.latest_checkpoint(FLAGS.checkpoint_dir)
 
-      if not latest_checkpoint or last_checkpoint == latest_checkpoint:
+      if not next_checkpoint or next_checkpoint == latest_checkpoint:
         logging.info('No new checkpoint. Checking back in {} seconds.'.format(
           pipeline_config.eval_config.eval_interval_secs))
         time.sleep(pipeline_config.eval_config.eval_interval_secs)
         continue
 
-      logging.info('Evaluating {}'.format(latest_checkpoint))
-      estimator.evaluate(input_fn=input_fn, checkpoint_path=latest_checkpoint,
-                         steps=num_steps)
+      _eval_checkpoint(next_checkpoint, estimator, input_fn, num_steps)
 
-      last_checkpoint = latest_checkpoint
-  else:
+      latest_checkpoint = next_checkpoint
+  elif not FLAGS.all_checkpoints:
     latest_checkpoint = tf.train.latest_checkpoint(FLAGS.checkpoint_dir)
 
-    estimator.evaluate(input_fn=input_fn, checkpoint_path=latest_checkpoint,
-                       steps=num_steps)
+    _eval_checkpoint(latest_checkpoint, estimator, input_fn, num_steps)
 
 
 if __name__ == '__main__':
