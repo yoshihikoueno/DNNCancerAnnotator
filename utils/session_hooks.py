@@ -1,11 +1,10 @@
 import logging
+import os
 
 import tensorflow as tf
 import numpy as np
 
-from utils import standard_fields
 from utils import image_utils
-from utils import util_ops
 
 
 class VisualizationHook(tf.train.SessionRunHook):
@@ -43,7 +42,9 @@ class VisualizationHook(tf.train.SessionRunHook):
     combined_image_res = run_values.results[1]
     global_step = run_values.results[2]
 
-    summary_writer = tf.summary.FileWriterCache.get(self.result_folder)
+    # Estimator writes summaries to the eval subfolder
+    summary_writer = tf.summary.FileWriterCache.get(
+      os.path.join(self.result_folder, 'eval'))
 
     for batch_index in range(len(combined_image_res)):
       file_name = file_name_res[batch_index].decode('utf-8')
@@ -117,7 +118,8 @@ class PatientMetricHook(tf.train.SessionRunHook):
 
         patient_recalls[threshold].append(tp / float((tp + fn)))
 
-    summary_writer = tf.summary.FileWriterCache.get(self.result_folder)
+    summary_writer = tf.summary.FileWriterCache.get(
+      os.path.join(self.result_folder, 'eval'))
     global_step = tf.train.get_global_step().eval(session=session)
     for threshold, recalls in patient_recalls.items():
       recall = np.mean(recalls)
