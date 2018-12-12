@@ -25,6 +25,8 @@ flags.DEFINE_bool('warm_start', False, 'Whether to resume training from a '
                                    'previous checkpoint. If true, there'
                                    'will be no new result folder created')
 flags.DEFINE_bool('pdb', False, 'Whether to use pdb debugging functionality.')
+flags.DEFINE_integer('num_gpu', -1, 'Number of GPUs to use. '
+                     '-1 to use all available')
 
 FLAGS = flags.FLAGS
 
@@ -33,6 +35,10 @@ def main(_):
   if FLAGS.pdb:
     debugger = pdb.Pdb(stdout=sys.__stdout__)
     debugger.set_trace()
+
+  if FLAGS.num_gpu == 0:
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = ''
 
   if not os.path.isdir(FLAGS.result_dir):
     raise ValueError("Result directory does not exist!")
@@ -46,10 +52,6 @@ def main(_):
 
   np.random.seed(pipeline_config.seed)
   tf.set_random_seed(pipeline_config.seed)
-
-  if pipeline_config.train_config.num_gpu == 0:
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"] = ''
 
   if not FLAGS.warm_start:
     if FLAGS.prefix:
@@ -67,7 +69,7 @@ def main(_):
 
   logging.info("Command line arguments: {}".format(sys.argv))
 
-  num_gpu = pipeline_config.train_config.num_gpu
+  num_gpu = FLAGS.num_gpu
   if num_gpu <= -1:
     num_gpu = None
   real_gpu_nb = len(util_ops.get_devices())

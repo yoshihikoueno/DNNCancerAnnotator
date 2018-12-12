@@ -35,6 +35,7 @@ flags.DEFINE_bool('pdb', False, 'Whether to use pdb debugging functionality.')
 flags.DEFINE_integer('num_steps', 0,
                      'For debugging purposes, a possible limit to '
                      'the number of steps. 0 means no limit')
+flags.DEFINE_integer('num_gpu', 0, 'Number of GPUs to use.')
 
 FLAGS = flags.FLAGS
 
@@ -48,11 +49,14 @@ def _eval_checkpoint(checkpoint_path, estimator, input_fn, num_steps):
 def main(_):
   assert(not (FLAGS.repeated and FLAGS.checkpoint_name))
   assert(not (FLAGS.checkpoint_name != '' and FLAGS.all_checkpoints))
-
   assert(FLAGS.split_name in standard_fields.SplitNames.available_names)
   if FLAGS.pdb:
     debugger = pdb.Pdb(stdout=sys.__stdout__)
     debugger.set_trace()
+
+  if FLAGS.num_gpu == 0:
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = ''
 
   if not os.path.isdir(FLAGS.checkpoint_dir):
     raise ValueError("Checkpoint directory does not exist!")
@@ -63,10 +67,6 @@ def main(_):
 
   np.random.seed(pipeline_config.seed)
   tf.set_random_seed(pipeline_config.seed)
-
-  if pipeline_config.eval_config.num_gpu == 0:
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"] = ''
 
   result_folder_name = 'eval_{}_{}_{}'.format(
     FLAGS.split_name + '-split',
@@ -85,7 +85,7 @@ def main(_):
   util_ops.init_logger(result_folder)
   logging.info("Command line arguments: {}".format(sys.argv))
 
-  num_gpu = pipeline_config.eval_config.num_gpu
+  num_gpu = FLAGS.num_gpu
   if num_gpu <= -1:
     num_gpu = None
   real_gpu_nb = len(util_ops.get_devices())

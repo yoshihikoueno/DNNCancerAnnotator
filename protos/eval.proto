@@ -15,7 +15,4 @@ message EvalConfig {
   optional bool shuffle = 6;
 
   optional int32 shuffle_buffer_size = 7;
-
-  // -1 == All available GPU
-  optional int32 num_gpu = 8;
 }
