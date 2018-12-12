@@ -118,12 +118,13 @@ class PatientMetricHook(tf.train.SessionRunHook):
         patient_recalls[threshold].append(tp / float((tp + fn)))
 
     summary_writer = tf.summary.FileWriterCache.get(self.result_folder)
+    global_step = tf.train.get_global_step().eval(session=session)
     for threshold, recalls in patient_recalls.items():
       recall = np.mean(recalls)
 
       summary = tf.Summary()
       summary.value.add(tag='patient_adjusted_recall_at_{}'.format(threshold),
                         simple_value=recall)
-      summary_writer.add_summary(summary)
+      summary_writer.add_summary(summary, global_step=global_step)
 
       logging.info("Summary for patient adjusted recall@{}".format(threshold))
