@@ -95,6 +95,11 @@ def main(_):
   else:
     num_gpu = real_gpu_nb
 
+  if num_gpu > 1:
+    distribution = tf.contrib.distribute.MirroredStrategy(num_gpus=num_gpu)
+  else:
+    distribution = None
+
   input_fn, dataset_info = setup_utils.get_input_fn(
     pipeline_config=pipeline_config, directory=FLAGS.checkpoint_dir,
     existing_tfrecords=True,
@@ -105,7 +110,7 @@ def main(_):
     dataset_info=dataset_info,
     dataset_split_name=FLAGS.split_name,
     warm_start_path=FLAGS.checkpoint_dir, train_distribution=None,
-    eval_distribution=None, num_gpu=num_gpu,
+    eval_distribution=distribution, num_gpu=num_gpu,
     warm_start_ckpt_name=FLAGS.checkpoint_name)
 
   if FLAGS.num_steps > 0:

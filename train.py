@@ -79,7 +79,10 @@ def main(_):
   else:
     num_gpu = real_gpu_nb
 
-  distribution = tf.contrib.distribute.MirroredStrategy(num_gpus=num_gpu)
+  if num_gpu > 1:
+    distribution = tf.contrib.distribute.MirroredStrategy(num_gpus=num_gpu)
+  else:
+    distribution = None
 
   input_fn, dataset_info = setup_utils.get_input_fn(
     pipeline_config=pipeline_config, directory=FLAGS.result_dir,
