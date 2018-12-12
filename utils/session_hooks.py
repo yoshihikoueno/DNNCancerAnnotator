@@ -19,19 +19,19 @@ class VisualizationHook(tf.train.SessionRunHook):
     target_size = predicted_mask.get_shape().as_list()[1:3]
 
     image_decoded = image_utils.central_crop(image_decoded, target_size)
+    image_decoded = tf.image.grayscale_to_rgb(image_decoded)
+    predicted_mask = tf.stack([predicted_mask * 255, tf.zeros_like(predicted_mask),
+                              tf.zeros_like(predicted_mask)], axis=3)
 
     annotation_decoded = image_utils.central_crop(
       annotation_decoded, target_size)
 
-    predicted_mask = tf.image.grayscale_to_rgb(tf.expand_dims(predicted_mask,
-                                                              axis=3) * 255)
-    image_decoded = tf.image.grayscale_to_rgb(image_decoded)
-    annotation_mask = tf.image.grayscale_to_rgb(tf.to_float(annotation_mask)
-                                                * 255)
+    predicted_mask_overlay = tf.clip_by_value(
+      image_decoded * 0.5 + predicted_mask, 0, 255)
 
     self.combined_image = tf.concat([
-      image_decoded, annotation_decoded, annotation_mask, predicted_mask],
-                                    axis=2)
+      image_decoded, annotation_decoded, predicted_mask_overlay,
+      predicted_mask], axis=2)
 
   def before_run(self, run_context):
     return tf.train.SessionRunArgs(fetches=[
