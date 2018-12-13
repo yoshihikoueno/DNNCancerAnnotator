@@ -15,7 +15,6 @@ from builders import optimizer_builder
 
 
 def _loss(labels, logits, loss_name, pos_weight):
-  assert(pos_weight >= 0)
   # Each entry in labels must be an index in [0, num_classes)
   assert(len(labels.get_shape()) == 1)
 
@@ -26,7 +25,7 @@ def _loss(labels, logits, loss_name, pos_weight):
   elif loss_name == 'softmax':
     # Logits should be of shape [batch_size, num_classes]
     assert(len(logits.get_shape()) == 2)
-    assert(pos_weight == 1 and 'Loss weight != 1 not implemented for softmax.')
+    assert(pos_weight is None and 'Loss weight not implemented for softmax.')
     return tf.losses.sparse_softmax_cross_entropy(labels, logits)
   else:
     assert(False and 'Loss name "{}" not recognized.'.format(loss_name))
@@ -57,11 +56,19 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
   annotation_mask_batch = tf.cast(tf.clip_by_value(image_utils.central_crop(
     annotation_mask_batch, desired_size=network_output.get_shape().as_list()[
       1:3]), 0, 1), dtype=tf.int64)
+  assert(len(annotation_mask_batch.get_shape()) == 4)
+
+  patient_ratio = dataset_info[
+    standard_fields.PickledDatasetInfo.patient_ratio]
+  cancer_pixels = tf.reduce_sum(tf.to_float(annotation_mask_batch))
+  healthy_pixels = tf.to_float(tf.size(annotation_mask_batch)) - cancer_pixels
+
+  batch_pixel_ratio = tf.div(healthy_pixels, cancer_pixels + 1.0)
 
   loss = _loss(tf.reshape(annotation_mask_batch, [-1]),
                  tf.reshape(network_output, [-1, net.num_classes]),
                  loss_name=pipeline_config.train_config.loss.name,
-                 pos_weight=pipeline_config.train_config.loss.pos_weight)
+                 pos_weight=batch_pixel_ratio * patient_ratio)
   loss = tf.identity(loss, name='ModelLoss')
   tf.summary.scalar(loss.op.name, loss, family='Loss')
 
@@ -115,6 +122,10 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
     np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])))
 
   if mode == tf.estimator.ModeKeys.TRAIN:
+    # Training Hooks are not working with MirroredStrategy. Fixed in 1.13
+    #print_hook = session_hooks.PrintHook(
+    #  file_name=features[standard_fields.InputDataFields.image_file],
+    #  batch_pixel_ratio=batch_pixel_ratio)
     return tf.estimator.EstimatorSpec(mode,
                                       loss=total_loss, train_op=train_op,
                                       scaffold=scaffold)

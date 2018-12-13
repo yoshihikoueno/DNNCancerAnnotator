@@ -130,3 +130,17 @@ class PatientMetricHook(tf.train.SessionRunHook):
       summary_writer.add_summary(summary, global_step=global_step)
 
       logging.info("Summary for patient adjusted recall@{}".format(threshold))
+
+
+class PrintHook(tf.train.SessionRunHook):
+  def __init__(self, **kwargs):
+    self.kwargs = kwargs
+
+  def before_run(self, run_context):
+    return tf.train.SessionRunArgs(fetches=self.kwargs)
+
+  def after_run(self, run_context, run_values):
+    kwargs_res = run_values.results
+
+    for key, value in kwargs_res.items():
+      logging.info("{}: {}".format(key, value))
