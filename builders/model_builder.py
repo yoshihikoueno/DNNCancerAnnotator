@@ -14,6 +14,17 @@ from utils import util_ops
 from builders import optimizer_builder
 
 
+def _extract_patient_id(file_name):
+  tokens = file_name.split('/')
+  assert(tokens[-3] == 'healthy_cases' or tokens[-3] == 'cancer_cases')
+  is_healthy = tokens[-3] == 'healthy_cases'
+
+  patient_id_prefix = 'h' if is_healthy else 'c'
+  patient_id = patient_id_prefix + tokens[-2]
+
+  return patient_id
+
+
 def _loss(labels, logits, loss_name, pos_weight):
   # Each entry in labels must be an index in [0, num_classes)
   assert(len(labels.get_shape()) == 1)
@@ -168,19 +179,29 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
 def get_model_fn(pipeline_config, result_folder, dataset_info,
                  dataset_split_name, num_gpu):
 
-  visualization_file_names = dataset_info[
+  file_names = dataset_info[
     standard_fields.PickledDatasetInfo.file_names][dataset_split_name]
+  np.random.shuffle(file_names)
+
+  patient_ids = dataset_info[
+    standard_fields.PickledDatasetInfo.patient_ids][dataset_split_name]
+
+  # Select one image per patient
+  selected_files = dict()
+  for file_name in file_names:
+    patient_id = _extract_patient_id(file_name)
+    assert(patient_id in patient_ids)
+    if patient_id not in selected_files:
+      selected_files[patient_id] = file_name
 
   num_visualizations = pipeline_config.eval_config.num_images_to_visualize
   if num_visualizations is None or num_visualizations == -1:
-    num_visualizations = len(visualization_file_names)
+    num_visualizations = len(selected_files)
   else:
     num_visualizations = min(num_visualizations,
-                             len(visualization_file_names))
+                             len(selected_files))
 
-  np.random.shuffle(visualization_file_names)
-
-  visualization_file_names = visualization_file_names[:num_visualizations]
+  visualization_file_names = list(selected_files.values())[:num_visualizations]
 
   model_name = pipeline_config.model.WhichOneof('model_type')
   if model_name == 'unet':
