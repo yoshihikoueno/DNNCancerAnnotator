@@ -40,8 +40,15 @@ def prepare_dataset(dataset_config, directory, existing_tfrecords,
 
     # Tfrecords files and meta file are created in result dir
     if dataset_name == 'prostate_cancer':
-      pc.build_tfrecords_from_files(dataset_config, target_dims,
-                                    seed, directory)
+      dataset_type = dataset_config.WhichOneof('dataset_type')
+      balance_remove_rule = dataset_config.balance_remove_rule.WhichOneOf(
+        'balance_remove_rule')
+      pc.build_tfrecords_from_files(
+        dataset_path=dataset_config.dataset_path, dataset_type=dataset_type,
+        balance_classes=dataset_config.balance_classes,
+        balance_remove_rule=balance_remove_rule,
+        only_cancer_images=dataset_config.prostate_cancer.only_cancer,
+        input_image_dims=target_dims, seed=seed, output_dir=directory)
     else:
       assert(False)
 

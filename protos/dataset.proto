@@ -6,7 +6,6 @@ import "protos/prostate_cancer_dataset.proto";
 
 message Dataset {
   optional string dataset_path = 1;
-  optional string label_map_path = 2;
 
   // 0: 0 - 255
   // 1: 0 - 1

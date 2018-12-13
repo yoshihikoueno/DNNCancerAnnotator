@@ -353,22 +353,17 @@ def _build_train_dataset(patient_data, patient_ids):
     num_parallel_calls=cpu_count)
 
 
-def _load_from_files(dataset_config, input_image_dims, seed):
-  dataset_type = dataset_config.WhichOneof('dataset_type')
+def _load_from_files(dataset_path, dataset_type, balance_classes,
+                     balance_remove_rule, only_cancer_images,
+                     input_image_dims, seed):
+
   assert(dataset_type == 'prostate_cancer')
-
-  dataset_folder = dataset_config.dataset_path
-  label_map_path = dataset_config.label_map_path
-
-  assert(os.path.exists(dataset_folder))
-  assert(os.path.exists(label_map_path))
+  assert(os.path.exists(dataset_path))
 
   balance_remove_smallest = False
   balance_remove_random = False
 
-  if (dataset_config.balance_classes):
-    balance_remove_rule = dataset_config.balance_remove_rule.WhichOneOf(
-      'balance_remove_rule')
+  if (balance_classes):
     if (balance_remove_rule == 'smallest_patient_set'):
       balance_remove_smallest = True
     else:
@@ -376,11 +371,11 @@ def _load_from_files(dataset_config, input_image_dims, seed):
       balance_remove_random = True
 
   dataset_files_dict = _sort_files(
-    dataset_folder=dataset_folder,
-    balance_classes=dataset_config.balance_classes,
+    dataset_folder=dataset_path,
+    balance_classes=balance_classes,
     balance_remove_smallest=balance_remove_smallest,
     balance_remove_random=balance_remove_random,
-    only_cancer=dataset_config.prostate_cancer.only_cancer_images)
+    only_cancer=only_cancer_images)
 
   dataset_size = dataset_files_dict[
     standard_fields.PickledDatasetInfo.dataset_size]
@@ -479,10 +474,17 @@ def create_tfrecords(sess, dataset, writer):
       break
 
 
-def build_tfrecords_from_files(dataset_config, input_image_dims, seed,
-                               output_dir):
+def build_tfrecords_from_files(
+    dataset_path, dataset_type, balance_classes, balance_remove_rule,
+    only_cancer_images, input_image_dims, seed, output_dir):
   train_dataset, val_dataset, test_dataset, pickle_data = \
-    _load_from_files(dataset_config, input_image_dims, seed)
+    _load_from_files(
+      dataset_path=dataset_path, dataset_type=dataset_type,
+      balance_classes=balance_classes,
+      balance_remove_rule=balance_remove_rule,
+      only_cancer_images=only_cancer_images,
+      input_image_dims=input_image_dims,
+      seed=seed)
 
   with tf.Session() as sess:
     train_writer = tf.python_io.TFRecordWriter(
@@ -507,9 +509,15 @@ def build_tfrecords_from_files(dataset_config, input_image_dims, seed,
   f.close()
 
 
-def build_tf_dataset_from_files(dataset_config, input_image_dims, seed):
+def build_tf_dataset_from_files(dataset_path, dataset_type, balance_classes,
+                                balance_remove_rule, only_cancer_images,
+                                input_image_dims, seed):
   train_dataset, val_dataset, test_dataset, pickle_data = \
-    _load_from_files(dataset_config, input_image_dims, seed)
+    _load_from_files(dataset_path, dataset_type=dataset_type,
+                     balance_classes=balance_classes,
+                     balance_remove_rule=balance_remove_rule,
+                     only_cancer_images=only_cancer_images,
+                     input_image_dims=input_image_dims, seed=seed)
 
   _decode_fn = functools.partial(_decode_example, target_dims=input_image_dims)
 

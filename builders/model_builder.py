@@ -81,7 +81,7 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
 
     loss_weight = batch_pixel_ratio * patient_ratio
   else:
-    loss_weight = tf.constant(1)
+    loss_weight = tf.constant(1.0)
 
   loss = _loss(tf.reshape(annotation_mask_batch, [-1]),
                tf.reshape(network_output, [-1, net.num_classes]),
