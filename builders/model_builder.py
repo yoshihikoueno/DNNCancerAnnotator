@@ -69,17 +69,24 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
       1:3]), 0, 1), dtype=tf.int64)
   assert(len(annotation_mask_batch.get_shape()) == 4)
 
-  patient_ratio = dataset_info[
-    standard_fields.PickledDatasetInfo.patient_ratio]
-  cancer_pixels = tf.reduce_sum(tf.to_float(annotation_mask_batch))
-  healthy_pixels = tf.to_float(tf.size(annotation_mask_batch)) - cancer_pixels
+  if (mode == tf.estimator.ModeKeys.TRAIN
+      and pipeline_config.train_config.loss.use_weighted):
+    patient_ratio = dataset_info[
+      standard_fields.PickledDatasetInfo.patient_ratio]
+    cancer_pixels = tf.reduce_sum(tf.to_float(annotation_mask_batch))
+    healthy_pixels = tf.to_float(tf.size(
+      annotation_mask_batch)) - cancer_pixels
 
-  batch_pixel_ratio = tf.div(healthy_pixels, cancer_pixels + 1.0)
+    batch_pixel_ratio = tf.div(healthy_pixels, cancer_pixels + 1.0)
+
+    loss_weight = batch_pixel_ratio * patient_ratio
+  else:
+    loss_weight = tf.constant(1)
 
   loss = _loss(tf.reshape(annotation_mask_batch, [-1]),
-                 tf.reshape(network_output, [-1, net.num_classes]),
-                 loss_name=pipeline_config.train_config.loss.name,
-                 pos_weight=batch_pixel_ratio * patient_ratio)
+               tf.reshape(network_output, [-1, net.num_classes]),
+               loss_name=pipeline_config.train_config.loss.name,
+               pos_weight=loss_weight)
   loss = tf.identity(loss, name='ModelLoss')
   tf.summary.scalar(loss.op.name, loss, family='Loss')
 
