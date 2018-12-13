@@ -251,6 +251,13 @@ def _sort_files(dataset_folder, balance_classes, balance_remove_smallest,
   logging.info("Final Healthy:Cancer patients {}:{}".format(healthy_patient_nb,
                                                             cancer_patient_nb))
 
+  # Since we only train with one patient slice per epoch, we do not need to
+  # Consider the actual number of images
+  if healthy_patient_nb != 0:
+    patient_ratio = healthy_patient_nb / float(cancer_patient_nb)
+  else:
+    patient_ratio = 1
+
   healthy_train, healthy_val, healthy_test = _make_dataset_splits(
     healthy_images)
   cancer_train, cancer_val, cancer_test = _make_dataset_splits(
@@ -323,7 +330,8 @@ def _sort_files(dataset_folder, balance_classes, balance_remove_smallest,
           standard_fields.PickledDatasetInfo.file_names:
           {standard_fields.SplitNames.train: train_files,
            standard_fields.SplitNames.val: val_files,
-           standard_fields.SplitNames.test: test_files}}
+           standard_fields.SplitNames.test: test_files},
+          standard_fields.PickledDatasetInfo.patient_ratio: patient_ratio}
 
 
 def _build_patient_dataset(full_dataset, target_patient_id):
@@ -341,7 +349,8 @@ def _build_train_dataset(patient_data, patient_ids):
   return patient_id_dataset.interleave(
     lambda patient_id: _build_patient_dataset(
       patient_data, patient_id).shuffle(256).repeat(None),
-    cycle_length=cpu_count, block_length=1, num_parallel_calls=cpu_count)
+    cycle_length=len(patient_ids), block_length=1,
+    num_parallel_calls=cpu_count)
 
 
 def _load_from_files(dataset_config, input_image_dims, seed):
@@ -390,7 +399,9 @@ def _load_from_files(dataset_config, input_image_dims, seed):
     standard_fields.PickledDatasetInfo.patient_ids:
     dataset_files_dict[standard_fields.PickledDatasetInfo.patient_ids],
     standard_fields.PickledDatasetInfo.file_names:
-    dataset_files_dict[standard_fields.PickledDatasetInfo.file_names]}
+    dataset_files_dict[standard_fields.PickledDatasetInfo.file_names],
+    standard_fields.PickledDatasetInfo.patient_ratio:
+    dataset_files_dict[standard_fields.PickledDatasetInfo.patient_ratio]}
 
   train_dataset = tf.data.Dataset.from_tensor_slices(
       tuple([list(t) for t in zip(
