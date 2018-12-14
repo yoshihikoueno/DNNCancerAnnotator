@@ -41,13 +41,16 @@ def prepare_dataset(dataset_config, directory, existing_tfrecords,
     # Tfrecords files and meta file are created in result dir
     if dataset_name == 'prostate_cancer':
       dataset_type = dataset_config.WhichOneof('dataset_type')
-      balance_remove_rule = dataset_config.balance_remove_rule.WhichOneOf(
-        'balance_remove_rule')
+      balance_remove_smallest = (dataset_config.prostate_cancer.
+                                 balance_remove_smallest_patient_set)
+      balance_remove_random = (dataset_config.prostate_cancer.
+                               balance_remove_random_patient_set)
       pc.build_tfrecords_from_files(
         dataset_path=dataset_config.dataset_path, dataset_type=dataset_type,
         balance_classes=dataset_config.balance_classes,
-        balance_remove_rule=balance_remove_rule,
-        only_cancer_images=dataset_config.prostate_cancer.only_cancer,
+        balance_remove_smallest=balance_remove_smallest,
+        balance_remove_random=balance_remove_random,
+        only_cancer_images=dataset_config.prostate_cancer.only_cancer_images,
         input_image_dims=target_dims, seed=seed, output_dir=directory)
     else:
       assert(False)
@@ -62,12 +65,10 @@ def prepare_dataset(dataset_config, directory, existing_tfrecords,
     return meta_data
 
 
-def build_dataset(dataset_config, directory,
+def build_dataset(dataset_name, directory,
                   split_name, target_dims, seed, batch_size, shuffle,
                   shuffle_buffer_size, is_training, dataset_info):
   assert split_name in standard_fields.SplitNames.available_names
-
-  dataset_name = dataset_config.WhichOneof('dataset_type')
 
   dataset = _load_existing_tfrecords(
       directory, split_name, target_dims, dataset_name,

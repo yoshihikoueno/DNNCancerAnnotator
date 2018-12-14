@@ -34,7 +34,7 @@ def get_input_fn(pipeline_config, directory, existing_tfrecords,
 
   def input_fn():
     return dataset_builder.build_dataset(
-      pipeline_config.dataset, directory=directory,
+      pipeline_config.dataset.WhichOneof('dataset_type'), directory=directory,
       split_name=split_name, target_dims=target_dims,
       seed=pipeline_config.seed, batch_size=batch_size,
       shuffle=shuffle,

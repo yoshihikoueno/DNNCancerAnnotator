@@ -354,21 +354,12 @@ def _build_train_dataset(patient_data, patient_ids):
 
 
 def _load_from_files(dataset_path, dataset_type, balance_classes,
-                     balance_remove_rule, only_cancer_images,
+                     balance_remove_smallest, balance_remove_random,
+                     only_cancer_images,
                      input_image_dims, seed):
-
   assert(dataset_type == 'prostate_cancer')
   assert(os.path.exists(dataset_path))
-
-  balance_remove_smallest = False
-  balance_remove_random = False
-
-  if (balance_classes):
-    if (balance_remove_rule == 'smallest_patient_set'):
-      balance_remove_smallest = True
-    else:
-      assert(balance_remove_rule == 'random_patient_set')
-      balance_remove_random = True
+  assert(not (balance_remove_smallest and balance_remove_random))
 
   dataset_files_dict = _sort_files(
     dataset_folder=dataset_path,
@@ -475,13 +466,15 @@ def create_tfrecords(sess, dataset, writer):
 
 
 def build_tfrecords_from_files(
-    dataset_path, dataset_type, balance_classes, balance_remove_rule,
+    dataset_path, dataset_type, balance_classes, balance_remove_smallest,
+    balance_remove_random,
     only_cancer_images, input_image_dims, seed, output_dir):
   train_dataset, val_dataset, test_dataset, pickle_data = \
     _load_from_files(
       dataset_path=dataset_path, dataset_type=dataset_type,
       balance_classes=balance_classes,
-      balance_remove_rule=balance_remove_rule,
+      balance_remove_smallest=balance_remove_smallest,
+      balance_remove_random=balance_remove_random,
       only_cancer_images=only_cancer_images,
       input_image_dims=input_image_dims,
       seed=seed)
