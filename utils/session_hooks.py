@@ -20,7 +20,8 @@ class VisualizationHook(tf.train.SessionRunHook):
 
     image_decoded = image_utils.central_crop(image_decoded, target_size)
     image_decoded = tf.image.grayscale_to_rgb(image_decoded)
-    predicted_mask = tf.stack([predicted_mask * 255, tf.zeros_like(predicted_mask),
+    predicted_mask = tf.stack([predicted_mask * 255,
+                               tf.zeros_like(predicted_mask),
                               tf.zeros_like(predicted_mask)], axis=3)
 
     annotation_decoded = image_utils.central_crop(

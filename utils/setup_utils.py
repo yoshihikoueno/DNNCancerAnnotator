@@ -39,6 +39,7 @@ def get_input_fn(pipeline_config, directory, existing_tfrecords,
       seed=pipeline_config.seed, batch_size=batch_size,
       shuffle=shuffle,
       shuffle_buffer_size=shuffle_buffer_size,
-      is_training=is_training, dataset_info=meta_info)
+      is_training=is_training, dataset_info=meta_info,
+      dataset_config=pipeline_config.dataset)
 
   return input_fn, meta_info

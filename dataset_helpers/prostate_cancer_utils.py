@@ -24,13 +24,21 @@ def _get_smallest_patient_data_key(data):
   return res_key
 
 
-def _extract_annotation(decoded_annotation):
+def _extract_annotation(decoded_annotation, dilate_groundtruth,
+                        dilate_kernel_size):
   bool_mask = tf.greater(tf.subtract(decoded_annotation[:, :, 0],
                                      decoded_annotation[:, :, 1]), 200)
 
   assert(len(bool_mask.get_shape().as_list()) == 2)
 
-  return tf.expand_dims(tf.cast(bool_mask, dtype=tf.int32), 2)
+  annotation_mask = tf.expand_dims(tf.cast(bool_mask, dtype=tf.int32), 2)
+  if dilate_groundtruth:
+    annotation_mask = tf.squeeze(tf.keras.layers.MaxPool2D(
+      (dilate_kernel_size, dilate_kernel_size), strides=1, padding='same',
+      data_format='channels_last')(tf.expand_dims(annotation_mask, axis=0)),
+                                 axis=0)
+
+  return annotation_mask
 
 
 def _preprocess_image(image_decoded, target_dims, is_annotation_mask):
@@ -90,7 +98,8 @@ def _preprocess_image(image_decoded, target_dims, is_annotation_mask):
     return image_cropped
 
 
-def _decode_example(example_dict, target_dims):
+def _decode_example(example_dict, target_dims, dilate_groundtruth,
+                    dilate_kernel_size):
   image_string = example_dict[standard_fields.TfExampleFields.image_encoded]
   image_decoded = tf.to_float(tf.image.decode_jpeg(
     image_string, channels=target_dims[2]))
@@ -102,7 +111,8 @@ def _decode_example(example_dict, target_dims):
   annotation_decoded = tf.to_float(tf.image.decode_jpeg(
       annotation_string, channels=3))
 
-  annotation_mask = _extract_annotation(annotation_decoded)
+  annotation_mask = _extract_annotation(annotation_decoded, dilate_groundtruth,
+                                        dilate_kernel_size)
   annotation_mask_preprocessed = _preprocess_image(
     annotation_mask, target_dims, is_annotation_mask=True)
   annotation_preprocessed = _preprocess_image(
@@ -504,7 +514,8 @@ def build_tfrecords_from_files(
 
 def build_tf_dataset_from_files(dataset_path, dataset_type, balance_classes,
                                 balance_remove_rule, only_cancer_images,
-                                input_image_dims, seed):
+                                input_image_dims, seed, dilate_groundtruth,
+                                dilate_kernel_size):
   train_dataset, val_dataset, test_dataset, pickle_data = \
     _load_from_files(dataset_path, dataset_type=dataset_type,
                      balance_classes=balance_classes,
@@ -512,7 +523,9 @@ def build_tf_dataset_from_files(dataset_path, dataset_type, balance_classes,
                      only_cancer_images=only_cancer_images,
                      input_image_dims=input_image_dims, seed=seed)
 
-  _decode_fn = functools.partial(_decode_example, target_dims=input_image_dims)
+  _decode_fn = functools.partial(_decode_example, target_dims=input_image_dims,
+                                 dilate_groundtruth=dilate_groundtruth,
+                                 dilate_kernel_size=dilate_kernel_size)
 
   cpu_count = util_ops.get_cpu_count()
   train_dataset = train_dataset.map(_decode_fn, num_parallel_calls=cpu_count)
@@ -529,7 +542,8 @@ def build_tf_dataset_from_files(dataset_path, dataset_type, balance_classes,
 
 # patient_ids are only needed for train mode
 def build_tf_dataset_from_tfrecords(tfrecords_file, target_dims,
-                                    patient_ids, is_training):
+                                    patient_ids, is_training,
+                                    dilate_groundtruth, dilate_kernel_size):
   dataset = tf.data.TFRecordDataset(tfrecords_file)
 
   dataset = dataset.map(_deserialize_example,
@@ -538,7 +552,9 @@ def build_tf_dataset_from_tfrecords(tfrecords_file, target_dims,
   if is_training:
     dataset = _build_train_dataset(dataset, patient_ids)
 
-  decode_fn = functools.partial(_decode_example, target_dims=target_dims)
+  decode_fn = functools.partial(_decode_example, target_dims=target_dims,
+                                dilate_groundtruth=dilate_groundtruth,
+                                dilate_kernel_size=dilate_kernel_size)
   dataset = dataset.map(decode_fn, num_parallel_calls=util_ops.get_cpu_count())
 
   return dataset

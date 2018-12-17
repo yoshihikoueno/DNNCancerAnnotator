@@ -15,4 +15,9 @@ message EvalConfig {
   optional bool shuffle = 6;
 
   optional int32 shuffle_buffer_size = 7;
+
+  // Whether to dilate the groundtruth just for evaluation
+  optional bool dilate_groundtruth = 8;
+    
+  optional int32 groundtruth_dilation_kernel_size = 9;
 }

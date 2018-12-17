@@ -8,7 +8,7 @@ from utils import standard_fields
 
 
 def _load_existing_tfrecords(directory, split_name, target_dims, dataset_name,
-                             dataset_info, is_training):
+                             dataset_info, is_training, dataset_config):
   tfrecords_file = os.path.join(directory, split_name + '.tfrecords')
 
   ids = dataset_info[standard_fields.PickledDatasetInfo.patient_ids][
@@ -16,7 +16,10 @@ def _load_existing_tfrecords(directory, split_name, target_dims, dataset_name,
 
   if dataset_name == 'prostate_cancer':
     return pc.build_tf_dataset_from_tfrecords(
-      tfrecords_file, target_dims, patient_ids=ids, is_training=is_training)
+      tfrecords_file, target_dims, patient_ids=ids, is_training=is_training,
+      dilate_groundtruth=dataset_config.prostate_cancer.dilate_groundtruth,
+      dilate_kernel_size=dataset_config.
+      prostate_cancer.groundtruth_dilation_kernel_size)
   else:
     assert(False)
 
@@ -67,12 +70,13 @@ def prepare_dataset(dataset_config, directory, existing_tfrecords,
 
 def build_dataset(dataset_name, directory,
                   split_name, target_dims, seed, batch_size, shuffle,
-                  shuffle_buffer_size, is_training, dataset_info):
+                  shuffle_buffer_size, is_training, dataset_info,
+                  dataset_config):
   assert split_name in standard_fields.SplitNames.available_names
 
   dataset = _load_existing_tfrecords(
       directory, split_name, target_dims, dataset_name,
-      dataset_info, is_training=is_training)
+      dataset_info, is_training=is_training, dataset_config=dataset_config)
 
   if shuffle and is_training:
     dataset = dataset.apply(tf.data.experimental.shuffle_and_repeat(

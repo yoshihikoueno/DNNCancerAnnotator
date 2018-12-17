@@ -8,4 +8,7 @@ message ProstateCancerDataset {
   optional bool balance_remove_smallest_patient_set = 6;
   // In order to balance the dataset, remove random patient sets
   optional bool balance_remove_random_patient_set = 7;
+  // Whether to dilate the cancer groundtruth area
+  optional bool dilate_groundtruth = 8;
+  optional int32 groundtruth_dilation_kernel_size = 9;
 }
