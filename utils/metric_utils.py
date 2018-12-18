@@ -22,7 +22,7 @@ def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds,
 
   f1_score = tf.where(tf.greater(1 * precision[0] + recall[0], 0.0),
                       (2 * precision[0] * recall[0]) / (
-                        1 * precision[0] * recall[0]), [0.0]
+                        1 * precision[0] + recall[0]), [0.0]
                       * len(tp_thresholds))
   with tf.control_dependencies([precision[1], recall[1]]):
     f1_score_update_op = tf.identity(f1_score)
@@ -30,7 +30,7 @@ def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds,
   # More weight on recall
   f2_score = tf.where(tf.greater(4 * precision[0] + recall[0], 0.0),
                       (5 * precision[0] * recall[0]) / (
-                        4 * precision[0] * recall[0]), [0.0]
+                        4 * precision[0] + recall[0]), [0.0]
                       * len(tp_thresholds))
   with tf.control_dependencies([precision[1], recall[1]]):
     f2_score_update_op = tf.identity(f2_score)
