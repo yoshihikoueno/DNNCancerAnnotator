@@ -5,8 +5,25 @@ import tensorflow as tf
 from utils import util_ops
 
 
+def preprocess(inputs, val_range):
+  if inputs.dtype is not tf.float32:
+    raise ValueError('`preprocess` expects a tf.float32 tensor')
+  if len(inputs.get_shape()) != 4:
+    raise ValueError("Expected tensor of rank 4.")
+
+  assert(val_range in (0, 1, 2))
+
+  if val_range == 1:
+    inputs /= 255
+  elif val_range == 2:
+    inputs = (inputs / 255) * 2 - 1
+
+  return inputs
+
+
 # Batch size for single GPU
-def apply(data_augmentation_options, images, gt_masks, batch_size):
+def apply_data_augmentation(data_augmentation_options, images, gt_masks,
+                            batch_size):
   if len(images.get_shape()) != 4:
     raise ValueError("Invalid image dimensions!")
   if gt_masks is not None and len(gt_masks.get_shape()) != 4:

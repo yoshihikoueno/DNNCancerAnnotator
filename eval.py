@@ -127,6 +127,8 @@ def main(_):
   latest_checkpoint = ''
   if FLAGS.all_checkpoints:
     evaluated_checkpoints = []
+    # We need a loop, as new checkpoints might be generated while we are still
+    # evaluating
     while True:
       all_checkpoints = tf.train.get_checkpoint_state(
         FLAGS.checkpoint_dir).all_model_checkpoint_paths

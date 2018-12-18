@@ -30,27 +30,22 @@ def get_devices():
 
   gpus = e.findall('gpu')
 
-  all_gpu_mem = 0
-  gpu_mems = []
-  for gpu in gpus:
+  res = []
+  for i, gpu in enumerate(gpus):
     total_mem_text = gpu.find('fb_memory_usage').find('total').text
     free_mem_text = gpu.find('fb_memory_usage').find('free').text
     assert total_mem_text[-3:] == 'MiB' and free_mem_text[-3:] == 'MiB'
-    #total_mem = int(total_mem_text[:-4])
+    total_mem = int(total_mem_text[:-4])
     free_mem = int(free_mem_text[:-4])
     #assert float(free_mem) / total_mem >= 0.85
 
-    all_gpu_mem += free_mem
-    gpu_mems.append(free_mem)
-
-  res = []
-  i = 0
-  for gpu_mem in gpu_mems:
-    pct = gpu_mem / all_gpu_mem
-    res.append(('/device:GPU:{}'.format(i), pct))
-    i += 1
+    res.append((i, float(free_mem) / total_mem))
 
   return res
+
+
+def get_available_gpus(num_requested):
+  devices = get_devices()
 
 
 def init_logger(folder=None, resume=None):

@@ -3,5 +3,4 @@ syntax = "proto2";
 package netng.protos;
 
 message UNet {
-  
 }

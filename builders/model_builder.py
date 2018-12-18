@@ -43,12 +43,13 @@ def _loss(labels, logits, loss_name, pos_weight):
 
 
 def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
-                      dataset_split_name, model_constructor, mode, num_gpu,
+                      dataset_split_name, feature_extractor, mode, num_gpu,
                       visualization_file_names):
+  num_classes = pipeline_config.dataset.num_classes
   add_background_class = pipeline_config.train_config.loss.name == 'softmax'
-  net = model_constructor(pipeline_config, is_training=mode
-                          == tf.estimator.ModeKeys.TRAIN,
-                          add_background_class=add_background_class)
+  if add_background_class:
+    assert(num_classes == 1)
+    num_classes += 1
 
   image_batch = features[standard_fields.InputDataFields.image_decoded]
 
@@ -56,13 +57,19 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
     standard_fields.InputDataFields.annotation_mask]
 
   if mode == tf.estimator.ModeKeys.TRAIN:
-    # Preprocess / Augment images
-    image_batch, annotation_mask_batch = preprocessor.apply(
+    # Augment images
+    image_batch, annotation_mask_batch = preprocessor.apply_data_augmentation(
       pipeline_config.train_config.data_augmentation_options,
       images=image_batch, gt_masks=annotation_mask_batch,
       batch_size=pipeline_config.train_config.batch_size)
 
-  network_output = net.build_network(image_batch)
+  # General preprocessing
+  image_batch = preprocessor.preprocess(image_batch,
+                                        pipeline_config.dataset.val_range)
+
+  network_output = feature_extractor.build_network(
+    image_batch, is_training=mode == tf.estimator.ModeKeys.TRAIN,
+    num_classes=num_classes)
 
   annotation_mask_batch = tf.cast(tf.clip_by_value(image_utils.central_crop(
     annotation_mask_batch, desired_size=network_output.get_shape().as_list()[
@@ -84,7 +91,7 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
     loss_weight = tf.constant(1.0)
 
   loss = _loss(tf.reshape(annotation_mask_batch, [-1]),
-               tf.reshape(network_output, [-1, net.num_classes]),
+               tf.reshape(network_output, [-1, num_classes]),
                loss_name=pipeline_config.train_config.loss.name,
                pos_weight=loss_weight)
   loss = tf.identity(loss, name='ModelLoss')
@@ -212,12 +219,16 @@ def get_model_fn(pipeline_config, result_folder, dataset_info,
 
   model_name = pipeline_config.model.WhichOneof('model_type')
   if model_name == 'unet':
+    feature_extractor = unet.UNet(
+      weight_decay=pipeline_config.train_config.weight_decay,
+      use_batch_norm=pipeline_config.model.use_batch_norm,
+      conv_padding=pipeline_config.model.conv_padding)
     return functools.partial(_general_model_fn,
                              pipeline_config=pipeline_config,
                              result_folder=result_folder,
                              dataset_info=dataset_info,
                              dataset_split_name=dataset_split_name,
-                             model_constructor=unet.UNet,
+                             feature_extractor=feature_extractor,
                              num_gpu=num_gpu,
                              visualization_file_names=visualization_file_names)
   else:

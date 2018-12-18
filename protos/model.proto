@@ -19,4 +19,7 @@ message Model {
   optional bool use_batch_norm = 6;
   optional float batch_norm_momentum = 7;
   optional float batch_norm_epsilon = 8;
+
+  // same or valid
+  optional string conv_padding = 9;
 }

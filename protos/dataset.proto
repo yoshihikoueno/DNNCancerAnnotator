@@ -17,4 +17,7 @@ message Dataset {
   oneof dataset_type {
     ProstateCancerDataset prostate_cancer = 6;
   }
+
+  // Num classes without background
+  optional int32 num_classes = 7;
 }
