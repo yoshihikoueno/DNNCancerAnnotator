@@ -118,6 +118,5 @@ class UNet(object):
                        strides=1, padding=self.conv_padding,
                        is_training=is_training, conv_params=conv_params)
     print(final)
-    exit(1)
 
     return final
