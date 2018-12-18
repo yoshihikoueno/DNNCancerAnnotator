@@ -5,11 +5,15 @@ from utils import layer_utils as lu
 
 
 class UNet(object):
-  def __init__(self, weight_decay, use_batch_norm, conv_padding):
+  def __init__(self, weight_decay, use_batch_norm, conv_padding,
+               final_filter_size, num_sample_steps):
+    assert(num_sample_steps > 0)
     assert(conv_padding in ['same', 'valid'])
     self.weight_decay = weight_decay
     self.use_batch_norm = use_batch_norm
     self.conv_padding = conv_padding
+    self.final_filter_size = final_filter_size
+    self.num_sample_steps = num_sample_steps
 
   def _downsample_block(self, inputs, nb_filters, is_training):
     conv_params = lu.get_conv_params(use_relu=True,
@@ -78,34 +82,42 @@ class UNet(object):
     return net
 
   def build_network(self, image_batch, is_training, num_classes):
+    filter_size_per_block = []
+    for i in range(self.num_sample_steps):
+      filter_size_per_block.append(
+        int(self.final_filter_size / (2**(self.num_sample_steps - i))))
+
     print(image_batch)
-    ds1, pool1 = self._downsample_block(image_batch, 64,
+
+    ds_references = []
+    ds, pool = self._downsample_block(image_batch, filter_size_per_block[0],
+                                      is_training=is_training)
+    print(pool)
+    ds_references.append(ds)
+    for filter_size in filter_size_per_block[1:]:
+      ds, pool = self._downsample_block(pool, filter_size,
                                         is_training=is_training)
-    print(pool1)
-    ds2, pool2 = self._downsample_block(pool1, 128, is_training=is_training)
-    print(pool2)
-    ds3, pool3 = self._downsample_block(pool2, 256, is_training=is_training)
-    print(pool3)
-    ds4, pool4 = self._downsample_block(pool3, 512, is_training=is_training)
-    print(pool4)
-    ds5, _ = self._downsample_block(pool4, 1024, is_training=is_training)
-    print(ds5)
-    us1 = self._upsample_block(ds5, ds4, 512, is_training=is_training)
-    print(us1)
-    us2 = self._upsample_block(us1, ds3, 256, is_training=is_training)
-    print(us2)
-    us3 = self._upsample_block(us2, ds2, 128, is_training=is_training)
-    print(us3)
-    us4 = self._upsample_block(us3, ds1, 64, is_training=is_training)
-    print(us4)
+      print(pool)
+      ds_references.append(ds)
+
+    us, _ = self._downsample_block(pool, self.final_filter_size,
+                                         is_training=is_training)
+    print(us)
+
+    for i, filter_size in reversed(list(
+        enumerate(filter_size_per_block))):
+      us = self._upsample_block(us, ds_references[i], filter_size,
+                                is_training=is_training)
+      print(us)
 
     conv_params = lu.get_conv_params(use_relu=False,
                                      weight_decay=self.weight_decay)
 
     # TODO: Should we have batch norm here?
-    final = lu.conv_2d(inputs=us4, filters=num_classes, kernel_size=1,
+    final = lu.conv_2d(inputs=us, filters=num_classes, kernel_size=1,
                        strides=1, padding=self.conv_padding,
                        is_training=is_training, conv_params=conv_params)
     print(final)
+    exit(1)
 
     return final

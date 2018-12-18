@@ -3,4 +3,6 @@ syntax = "proto2";
 package netng.protos;
 
 message UNet {
+  optional int32 final_filter_size = 1;
+  optional int32 num_sample_steps = 2;
 }
