@@ -126,11 +126,21 @@ def main(_):
 
   latest_checkpoint = ''
   if FLAGS.all_checkpoints:
-    all_checkpoints = tf.train.get_checkpoint_state(
-      FLAGS.checkpoint_dir).all_model_checkpoint_paths
-    for checkpoint in all_checkpoints:
-      _eval_checkpoint(checkpoint, estimator, input_fn, num_steps)
-      latest_checkpoint = checkpoint
+    evaluated_checkpoints = []
+    while True:
+      all_checkpoints = tf.train.get_checkpoint_state(
+        FLAGS.checkpoint_dir).all_model_checkpoint_paths
+      new_checkpoint_evaluated = False
+      for checkpoint in all_checkpoints:
+        if checkpoint in evaluated_checkpoints:
+          continue
+        else:
+          new_checkpoint_evaluated = True
+        _eval_checkpoint(checkpoint, estimator, input_fn, num_steps)
+        evaluated_checkpoints.append(checkpoint)
+        latest_checkpoint = checkpoint
+      if not new_checkpoint_evaluated:
+        break
 
   if FLAGS.checkpoint_name:
     _eval_checkpoint(
