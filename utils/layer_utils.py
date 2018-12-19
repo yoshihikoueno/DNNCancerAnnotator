@@ -31,7 +31,7 @@ def get_batch_norm_params():
 
 
 def conv_2d(inputs, filters, kernel_size, strides, padding, conv_params,
-            batch_norm_params=None, is_training=False):
+            batch_norm_params, is_training):
   res = tf.keras.layers.Conv2D(
     filters=filters, kernel_size=kernel_size, strides=strides, padding=padding,
     **conv_params)(inputs)
@@ -45,8 +45,8 @@ def conv_2d(inputs, filters, kernel_size, strides, padding, conv_params,
 
 
 def conv_2d_transpose(inputs, filters, kernel_size, strides, padding,
-                      conv_transposed_params, batch_norm_params=None,
-                      is_training=False):
+                      conv_transposed_params, batch_norm_params,
+                      is_training):
   res = tf.keras.layers.Conv2DTranspose(
     filters=filters, kernel_size=kernel_size, strides=strides, padding=padding,
     **conv_transposed_params)(inputs)

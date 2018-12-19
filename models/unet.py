@@ -54,7 +54,7 @@ class UNet(object):
     net = lu.conv_2d_transpose(
       inputs=inputs, filters=nb_filters, kernel_size=2, strides=2,
       padding=self.conv_padding, conv_transposed_params=conv_transposed_params,
-      batch_norm_params=batch_norm_params)
+      batch_norm_params=batch_norm_params, is_training=is_training)
 
     if self.conv_padding == 'valid':
       downsample_size = downsample_reference[0].get_shape().as_list()[0]
@@ -116,7 +116,8 @@ class UNet(object):
     # TODO: Should we have batch norm here?
     final = lu.conv_2d(inputs=us, filters=num_classes, kernel_size=1,
                        strides=1, padding=self.conv_padding,
-                       is_training=is_training, conv_params=conv_params)
+                       is_training=is_training, conv_params=conv_params,
+                       batch_norm_params=None)
     print(final)
 
     return final

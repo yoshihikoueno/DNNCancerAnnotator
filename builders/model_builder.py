@@ -70,11 +70,20 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
   network_output = feature_extractor.build_network(
     image_batch, is_training=mode == tf.estimator.ModeKeys.TRAIN,
     num_classes=num_classes)
+  network_output_shape = network_output.get_shape().as_list()
 
-  annotation_mask_batch = tf.cast(tf.clip_by_value(image_utils.central_crop(
-    annotation_mask_batch, desired_size=network_output.get_shape().as_list()[
-      1:3]), 0, 1), dtype=tf.int64)
+  if (network_output_shape[1:3]
+      != annotation_mask_batch.get_shape().as_list()[1:3]):
+    annotation_mask_batch = image_utils.central_crop(
+      annotation_mask_batch,
+      desired_size=network_output.get_shape().as_list()[1:3])
+
+  annotation_mask_batch = tf.cast(
+    tf.clip_by_value(annotation_mask_batch, 0, 1), dtype=tf.int64)
+
   assert(len(annotation_mask_batch.get_shape()) == 4)
+  assert(annotation_mask_batch.get_shape().as_list()[:3]
+         == network_output.get_shape().as_list()[:3])
 
   if (mode == tf.estimator.ModeKeys.TRAIN
       and pipeline_config.train_config.loss.use_weighted):
