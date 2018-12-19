@@ -24,9 +24,7 @@ class InputDataFields:
 
 class PickledDatasetInfo:
   pickled_file_name = 'tfrecords_pickle'
-  split_to_size = 'split_to_size'
   seed = 'seed'
-  dataset_size = 'dataset_size'
   patient_ids = 'patient_ids'
   file_names = 'file_names'
   patient_ratio = 'patient_ratio'

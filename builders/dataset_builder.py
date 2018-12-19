@@ -9,14 +9,13 @@ from utils import standard_fields
 
 def _load_existing_tfrecords(directory, split_name, target_dims, dataset_name,
                              dataset_info, is_training, dataset_config):
-  tfrecords_file = os.path.join(directory, split_name + '.tfrecords')
-
   ids = dataset_info[standard_fields.PickledDatasetInfo.patient_ids][
     split_name]
 
   if dataset_name == 'prostate_cancer':
     return pc.build_tf_dataset_from_tfrecords(
-      tfrecords_file, target_dims, patient_ids=ids, is_training=is_training,
+      directory, split_name=split_name, target_dims=target_dims,
+      patient_ids=ids, is_training=is_training,
       dilate_groundtruth=dataset_config.prostate_cancer.dilate_groundtruth,
       dilate_kernel_size=dataset_config.
       prostate_cancer.groundtruth_dilation_kernel_size)

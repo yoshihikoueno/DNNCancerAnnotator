@@ -3,6 +3,8 @@ import random
 import functools
 import logging
 import pickle
+import itertools
+import multiprocessing
 
 import numpy as np
 import tensorflow as tf
@@ -139,20 +141,6 @@ def _decode_example(example_dict, target_dims, dilate_groundtruth,
   return features
 
 
-def _parse_from_file(image_file, annotation_file, label, patient_id, slice_id):
-  image_string = tf.read_file(image_file)
-  annotation_string = tf.read_file(annotation_file)
-
-  return {
-    standard_fields.TfExampleFields.patient_id: patient_id,
-    standard_fields.TfExampleFields.slice_id: slice_id,
-    standard_fields.TfExampleFields.image_file: image_file,
-    standard_fields.TfExampleFields.image_encoded: image_string,
-    standard_fields.TfExampleFields.annotation_file: annotation_file,
-    standard_fields.TfExampleFields.annotation_encoded: annotation_string,
-    standard_fields.TfExampleFields.label: label}
-
-
 # Copies part of the data dict consisting of the keys ids into a new dict
 def _make_dataset_split(data, ids):
   return dict((k, data[k]) for k in ids)
@@ -281,42 +269,36 @@ def _sort_files(dataset_folder, balance_classes, balance_remove_smallest,
   train_data_dict = {**healthy_train, **cancer_train}
 
   train_patient_ids = list(train_data_dict.keys())
-  train_data = []
   train_files = []
   train_size = 0
   for _, entries in train_data_dict.items():
     train_size += len(entries)
     for entry in entries:
       train_files.append(entry[0])
-      train_data.append(entry)
 
   assert(len(train_files) == train_size)
 
   val_data_dict = {**healthy_val, **cancer_val}
 
   val_patient_ids = list(val_data_dict.keys())
-  val_data = []
   val_files = []
   val_size = 0
   for _, entries in val_data_dict.items():
     val_size += len(entries)
     for entry in entries:
       val_files.append(entry[0])
-      val_data.append(entry)
 
   assert(len(val_files) == val_size)
 
   test_data_dict = {**healthy_test, **cancer_test}
 
   test_patient_ids = list(test_data_dict.keys())
-  test_data = []
   test_files = []
   test_size = 0
   for _, entries in test_data_dict.items():
     test_size += len(entries)
     for entry in entries:
       test_files.append(entry[0])
-      test_data.append(entry)
 
   assert(len(test_files) == test_size)
 
@@ -329,38 +311,21 @@ def _sort_files(dataset_folder, balance_classes, balance_remove_smallest,
   logging.info("Total Train/Val/Test Data: {}/{}/{}".format(
     train_size, val_size, test_size))
 
-  return {standard_fields.SplitNames.train: [train_data, train_size],
-          standard_fields.SplitNames.val: [val_data, val_size],
-          standard_fields.SplitNames.test: [test_data, test_size],
-          standard_fields.PickledDatasetInfo.dataset_size: dataset_size,
-          standard_fields.PickledDatasetInfo.patient_ids:
-          {standard_fields.SplitNames.train: train_patient_ids,
-           standard_fields.SplitNames.val: val_patient_ids,
-           standard_fields.SplitNames.test: test_patient_ids},
-          standard_fields.PickledDatasetInfo.file_names:
-          {standard_fields.SplitNames.train: train_files,
-           standard_fields.SplitNames.val: val_files,
-           standard_fields.SplitNames.test: test_files},
-          standard_fields.PickledDatasetInfo.patient_ratio: patient_ratio}
+  data_dict = dict()
+  data_dict[standard_fields.SplitNames.train] = train_data_dict
+  data_dict[standard_fields.SplitNames.val] = val_data_dict
+  data_dict[standard_fields.SplitNames.test] = test_data_dict
 
-
-def _build_patient_dataset(full_dataset, target_patient_id):
-  return full_dataset.filter(
-    lambda tensor_dict: tf.equal(
-      tensor_dict[standard_fields.InputDataFields.patient_id],
-      target_patient_id))
-
-
-def _build_train_dataset(patient_data, patient_ids):
-  patient_id_dataset = tf.data.Dataset.from_tensor_slices(patient_ids)
-
-  cpu_count = util_ops.get_cpu_count()
-
-  return patient_id_dataset.interleave(
-    lambda patient_id: _build_patient_dataset(
-      patient_data, patient_id).shuffle(256).repeat(None),
-    cycle_length=len(patient_ids), block_length=1,
-    num_parallel_calls=cpu_count)
+  return data_dict, {
+    standard_fields.PickledDatasetInfo.patient_ids:
+    {standard_fields.SplitNames.train: train_patient_ids,
+     standard_fields.SplitNames.val: val_patient_ids,
+     standard_fields.SplitNames.test: test_patient_ids},
+    standard_fields.PickledDatasetInfo.file_names:
+    {standard_fields.SplitNames.train: train_files,
+     standard_fields.SplitNames.val: val_files,
+     standard_fields.SplitNames.test: test_files},
+    standard_fields.PickledDatasetInfo.patient_ratio: patient_ratio}
 
 
 def _load_from_files(dataset_path, dataset_type, balance_classes,
@@ -371,27 +336,15 @@ def _load_from_files(dataset_path, dataset_type, balance_classes,
   assert(os.path.exists(dataset_path))
   assert(not (balance_remove_smallest and balance_remove_random))
 
-  dataset_files_dict = _sort_files(
+  data_dict, dataset_files_dict = _sort_files(
     dataset_folder=dataset_path,
     balance_classes=balance_classes,
     balance_remove_smallest=balance_remove_smallest,
     balance_remove_random=balance_remove_random,
     only_cancer=only_cancer_images)
 
-  dataset_size = dataset_files_dict[
-    standard_fields.PickledDatasetInfo.dataset_size]
-
-  split_to_size = {standard_fields.SplitNames.train:
-                   dataset_files_dict[standard_fields.SplitNames.train][1],
-                   standard_fields.SplitNames.val:
-                   dataset_files_dict[standard_fields.SplitNames.val][1],
-                   standard_fields.SplitNames.test:
-                   dataset_files_dict[standard_fields.SplitNames.test][1]}
-
   pickle_data = {
-    standard_fields.PickledDatasetInfo.split_to_size: split_to_size,
     standard_fields.PickledDatasetInfo.seed: seed,
-    standard_fields.PickledDatasetInfo.dataset_size: dataset_size,
     standard_fields.PickledDatasetInfo.patient_ids:
     dataset_files_dict[standard_fields.PickledDatasetInfo.patient_ids],
     standard_fields.PickledDatasetInfo.file_names:
@@ -399,49 +352,40 @@ def _load_from_files(dataset_path, dataset_type, balance_classes,
     standard_fields.PickledDatasetInfo.patient_ratio:
     dataset_files_dict[standard_fields.PickledDatasetInfo.patient_ratio]}
 
-  train_dataset = tf.data.Dataset.from_tensor_slices(
-      tuple([list(t) for t in zip(
-        *dataset_files_dict[standard_fields.SplitNames.train][0])]))
-  val_dataset = tf.data.Dataset.from_tensor_slices(
-      tuple([list(t) for t in zip(
-        *dataset_files_dict[standard_fields.SplitNames.val][0])]))
-  test_dataset = tf.data.Dataset.from_tensor_slices(
-      tuple([list(t) for t in zip(
-        *dataset_files_dict[standard_fields.SplitNames.test][0])]))
-
-  cpu_count = util_ops.get_cpu_count()
-  train_dataset = train_dataset.map(_parse_from_file,
-                                    num_parallel_calls=cpu_count)
-  val_dataset = val_dataset.map(_parse_from_file,
-                                num_parallel_calls=cpu_count)
-  test_dataset = test_dataset.map(_parse_from_file,
-                                  num_parallel_calls=cpu_count)
-
-  return train_dataset, val_dataset, test_dataset, pickle_data
+  return data_dict, pickle_data
 
 
 def _serialize_example(example):
+  patient_id = example[0]
+  slice_id = example[1]
+  image_file = example[2]
+  image_encoded = example[3]
+  annotation_file = example[4]
+  annotation_encoded = example[5]
+  label = example[6]
+
   feature = {
     standard_fields.TfExampleFields.patient_id: dh.bytes_feature(
-      example[standard_fields.TfExampleFields.patient_id]),
+      patient_id),
     standard_fields.TfExampleFields.slice_id: dh.int64_feature(
-      example[standard_fields.TfExampleFields.slice_id]),
+      slice_id),
     standard_fields.TfExampleFields.image_file: dh.bytes_feature(
-      example[standard_fields.TfExampleFields.image_file]),
+      image_file),
     standard_fields.TfExampleFields.image_encoded: dh.bytes_feature(
-      example[standard_fields.TfExampleFields.image_encoded]),
+      image_encoded),
     standard_fields.TfExampleFields.annotation_file: dh.bytes_feature(
-      example[standard_fields.TfExampleFields.annotation_file]),
+      annotation_file),
     standard_fields.TfExampleFields.annotation_encoded: dh.bytes_feature(
-      example[standard_fields.TfExampleFields.annotation_encoded]),
+      annotation_encoded),
     standard_fields.TfExampleFields.label: dh.int64_feature(
-      example[standard_fields.TfExampleFields.label])}
+      label)}
   tf_example = tf.train.Example(features=tf.train.Features(feature=feature))
 
   return tf_example.SerializeToString()
 
 
-def _deserialize_example(example):
+def _deserialize_and_decode_example(example, target_dims, dilate_groundtruth,
+                                    dilate_kernel_size):
   features = {
     standard_fields.TfExampleFields.patient_id: tf.FixedLenFeature(
       (), tf.string, default_value=''),
@@ -458,28 +402,33 @@ def _deserialize_example(example):
     standard_fields.TfExampleFields.label: tf.FixedLenFeature(
       (), tf.int64, default_value=0)}
 
-  return tf.parse_single_example(example, features)
+  example_dict = tf.parse_single_example(example, features)
+
+  return _decode_example(example_dict, target_dims=target_dims,
+                         dilate_groundtruth=dilate_groundtruth,
+                         dilate_kernel_size=dilate_kernel_size)
 
 
-def create_tfrecords(sess, dataset, writer):
-  it = dataset.make_one_shot_iterator()
+def _parse_from_file(image_file, annotation_file, label, patient_id,
+                     slice_id):
+  image_string = tf.read_file(image_file)
+  annotation_string = tf.read_file(annotation_file)
 
-  elem = it.get_next()
-
-  while True:
-    try:
-      elem_result = _serialize_example(sess.run(elem))
-
-      writer.write(elem_result)
-    except tf.errors.OutOfRangeError:
-      break
+  return {
+    standard_fields.TfExampleFields.patient_id: patient_id,
+    standard_fields.TfExampleFields.slice_id: slice_id,
+    standard_fields.TfExampleFields.image_file: image_file,
+    standard_fields.TfExampleFields.image_encoded: image_string,
+    standard_fields.TfExampleFields.annotation_file: annotation_file,
+    standard_fields.TfExampleFields.annotation_encoded: annotation_string,
+    standard_fields.TfExampleFields.label: label}
 
 
 def build_tfrecords_from_files(
     dataset_path, dataset_type, balance_classes, balance_remove_smallest,
     balance_remove_random,
     only_cancer_images, input_image_dims, seed, output_dir):
-  train_dataset, val_dataset, test_dataset, pickle_data = \
+  data_dict, pickle_data = \
     _load_from_files(
       dataset_path=dataset_path, dataset_type=dataset_type,
       balance_classes=balance_classes,
@@ -489,72 +438,90 @@ def build_tfrecords_from_files(
       input_image_dims=input_image_dims,
       seed=seed)
 
+  logging.info("Creating patient tfrecords.")
   with tf.Session() as sess:
-    train_writer = tf.python_io.TFRecordWriter(
-      os.path.join(output_dir, standard_fields.SplitNames.train
-                   + '.tfrecords'))
-    create_tfrecords(sess, train_dataset, train_writer)
-    train_writer.close()
+    os.mkdir(os.path.join(output_dir, 'tfrecords'))
+    for split, data in data_dict.items():
+      os.mkdir(os.path.join(output_dir, 'tfrecords', split))
 
-    val_writer = tf.python_io.TFRecordWriter(
-      os.path.join(output_dir, standard_fields.SplitNames.val + '.tfrecords'))
-    create_tfrecords(sess, val_dataset, val_writer)
-    val_writer.close()
+      writer_dict = dict()
+      # Create writers
+      for patient_id in data.keys():
+        writer = tf.python_io.TFRecordWriter(os.path.join(
+          output_dir, 'tfrecords', split, patient_id + '.tfrecords'))
+        writer_dict[patient_id] = writer
 
-    test_writer = tf.python_io.TFRecordWriter(
-      os.path.join(output_dir, standard_fields.SplitNames.test + '.tfrecords'))
-    create_tfrecords(sess, test_dataset, test_writer)
-    test_writer.close()
+      dataset = tf.data.Dataset.from_tensor_slices(
+        tuple([list(t) for t in zip(*list(
+          itertools.chain.from_iterable(data.values())))]))
+      dataset = dataset.map(_parse_from_file,
+                            num_parallel_calls=util_ops.get_cpu_count())
+      dataset = dataset.batch(512)
 
+      it = dataset.make_one_shot_iterator()
+
+      elem_batch = it.get_next()
+
+      pool = multiprocessing.Pool(processes=util_ops.get_cpu_count())
+
+      while True:
+        try:
+          elem_batch_result = sess.run(elem_batch)
+
+          elem_batch_serialized = list(zip(*elem_batch_result.values()))
+          elem_batch_serialized = pool.map(_serialize_example,
+                                           elem_batch_serialized)
+
+          for i, elem_serialized in enumerate(elem_batch_serialized):
+            writer_dict[elem_batch_result[
+              standard_fields.TfExampleFields.patient_id][i].decode(
+                'utf-8')].write(elem_serialized)
+        except tf.errors.OutOfRangeError:
+          break
+
+      for writer in writer_dict.values():
+        writer.close()
+
+      pool.close()
+
+  logging.info("Finished creating patient tfrecords.")
   f = open(os.path.join(
     output_dir, standard_fields.PickledDatasetInfo.pickled_file_name), 'wb')
   pickle.dump(pickle_data, f)
   f.close()
 
 
-def build_tf_dataset_from_files(dataset_path, dataset_type, balance_classes,
-                                balance_remove_rule, only_cancer_images,
-                                input_image_dims, seed, dilate_groundtruth,
-                                dilate_kernel_size):
-  train_dataset, val_dataset, test_dataset, pickle_data = \
-    _load_from_files(dataset_path, dataset_type=dataset_type,
-                     balance_classes=balance_classes,
-                     balance_remove_rule=balance_remove_rule,
-                     only_cancer_images=only_cancer_images,
-                     input_image_dims=input_image_dims, seed=seed)
-
-  _decode_fn = functools.partial(_decode_example, target_dims=input_image_dims,
-                                 dilate_groundtruth=dilate_groundtruth,
-                                 dilate_kernel_size=dilate_kernel_size)
-
-  cpu_count = util_ops.get_cpu_count()
-  train_dataset = train_dataset.map(_decode_fn, num_parallel_calls=cpu_count)
-  val_dataset = val_dataset.map(_decode_fn, num_parallel_calls=cpu_count)
-  test_dataset = test_dataset.map(_decode_fn, num_parallel_calls=cpu_count)
-
-  train_dataset = _build_train_dataset(
-    train_dataset, pickle_data[
-      standard_fields.PickledDatasetInfo.patient_ids][
-        standard_fields.SplitNames.train])
-
-  return train_dataset, val_dataset, test_dataset, pickle_data
-
-
 # patient_ids are only needed for train mode
-def build_tf_dataset_from_tfrecords(tfrecords_file, target_dims,
+def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
                                     patient_ids, is_training,
                                     dilate_groundtruth, dilate_kernel_size):
-  dataset = tf.data.TFRecordDataset(tfrecords_file)
+  tfrecords_folder = os.path.join(directory, 'tfrecords', split_name)
+  assert(os.path.exists(tfrecords_folder))
 
-  dataset = dataset.map(_deserialize_example,
-                        num_parallel_calls=util_ops.get_cpu_count())
+  tfrecords_files = os.listdir(tfrecords_folder)
+  tfrecords_files = [os.path.join(tfrecords_folder, file_name)
+                     for file_name in tfrecords_files]
 
+  dataset = tf.data.Dataset.from_tensor_slices(tfrecords_files)
   if is_training:
-    dataset = _build_train_dataset(dataset, patient_ids)
+    # We want to even out patient distribution across one epoch
+    dataset = dataset.interleave(
+      lambda tfrecords_file: tf.data.TFRecordDataset(tfrecords_file).apply(
+        tf.data.experimental.shuffle_and_repeat(32, None)), block_length=1,
+      cycle_length=len(tfrecords_files),
+      num_parallel_calls=util_ops.get_cpu_count())
+  else:
+    dataset = dataset.interleave(
+      lambda tfrecords_file: tf.data.TFRecordDataset(tfrecords_file).shuffle(
+        32), block_length=1, cycle_length=len(tfrecords_files),
+      num_parallel_calls=util_ops.get_cpu_count())
 
-  decode_fn = functools.partial(_decode_example, target_dims=target_dims,
-                                dilate_groundtruth=dilate_groundtruth,
-                                dilate_kernel_size=dilate_kernel_size)
-  dataset = dataset.map(decode_fn, num_parallel_calls=util_ops.get_cpu_count())
+  deserialize_and_decode_fn = functools.partial(
+    _deserialize_and_decode_example, target_dims=target_dims,
+    dilate_groundtruth=dilate_groundtruth,
+    dilate_kernel_size=dilate_kernel_size)
+
+  dataset = dataset.map(deserialize_and_decode_fn,
+                        num_parallel_calls=util_ops.get_cpu_count())
 
   return dataset
