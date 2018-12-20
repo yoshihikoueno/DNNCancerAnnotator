@@ -70,8 +70,12 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
   network_output = feature_extractor.build_network(
     image_batch, is_training=mode == tf.estimator.ModeKeys.TRAIN,
     num_classes=num_classes)
-  network_output_shape = network_output.get_shape().as_list()
 
+  # Record model variable summaries
+  for var in tf.trainable_variables():
+    tf.summary.histogram('ModelVars/' + var.op.name, var)
+
+  network_output_shape = network_output.get_shape().as_list()
   if (network_output_shape[1:3]
       != annotation_mask_batch.get_shape().as_list()[1:3]):
     annotation_mask_batch = image_utils.central_crop(
