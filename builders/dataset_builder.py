@@ -85,7 +85,12 @@ def build_dataset(dataset_name, directory,
   elif is_training:
     dataset = dataset.repeat(None)
 
-  dataset = dataset.batch(batch_size)
+  if is_training:
+    # Since we have repeat(None),
+    # nothing will be dropped anyway, and now we have a defined batch dim
+    dataset = dataset.batch(batch_size, drop_remainder=True)
+  else:
+    dataset = dataset.batch(batch_size, drop_remainder=False)
 
   # Buffer size of None means autotune
   dataset = dataset.prefetch(None)
