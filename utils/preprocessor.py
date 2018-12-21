@@ -5,7 +5,7 @@ import tensorflow as tf
 from utils import util_ops
 
 
-def preprocess(inputs, val_range):
+def preprocess(inputs, val_range, scale_input):
   if inputs.dtype is not tf.float32:
     raise ValueError('`preprocess` expects a tf.float32 tensor')
   if len(inputs.get_shape()) != 4:
@@ -13,10 +13,16 @@ def preprocess(inputs, val_range):
 
   assert(val_range in (0, 1, 2))
 
-  if val_range == 1:
-    inputs /= 255
-  elif val_range == 2:
-    inputs = (inputs / 255) * 2 - 1
+  if scale_input:
+    inputs = tf.map_fn(tf.image.per_image_standardization, elems=inputs,
+                       parallel_iterations=util_ops.get_cpu_count())
+  else:
+    # We don't care about the val_range if we scale our input, since it would
+    # be the same anyway
+    if val_range == 1:
+      inputs /= 255
+    elif val_range == 2:
+      inputs = (inputs / 255) * 2 - 1
 
   return inputs
 

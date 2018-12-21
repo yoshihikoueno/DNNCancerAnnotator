@@ -20,4 +20,7 @@ message Dataset {
 
   // Num classes without background
   optional int32 num_classes = 7;
+
+  // Should input have zero mean and unit variance?
+  optional bool scale_input = 8;
 }

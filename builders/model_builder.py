@@ -64,11 +64,12 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
       batch_size=pipeline_config.train_config.batch_size)
 
   # General preprocessing
-  image_batch = preprocessor.preprocess(image_batch,
-                                        pipeline_config.dataset.val_range)
+  image_batch_preprocessed = preprocessor.preprocess(
+    image_batch, pipeline_config.dataset.val_range,
+    scale_input=pipeline_config.dataset.scale_input)
 
   network_output = feature_extractor.build_network(
-    image_batch, is_training=mode == tf.estimator.ModeKeys.TRAIN,
+    image_batch_preprocessed, is_training=mode == tf.estimator.ModeKeys.TRAIN,
     num_classes=num_classes)
 
   # Record model variable summaries
@@ -127,7 +128,7 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
   total_loss = tf.check_numerics(total_loss, 'LossTensor is inf or nan.')
 
   scaffold = None
-  train_op = tf.identity(total_loss, name='train_op')
+  update_ops = []
   if mode == tf.estimator.ModeKeys.TRAIN:
     if pipeline_config.train_config.optimizer.use_moving_average:
       # EMA's are currently not supported with tf's DistributionStrategy.
@@ -147,14 +148,13 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
 
     grads_and_vars = optimizer.compute_gradients(total_loss)
 
-    gradient_updates = optimizer.apply_gradients(
-        grads_and_vars, global_step=tf.train.get_global_step())
+    update_ops.append(optimizer.apply_gradients(
+      grads_and_vars, global_step=tf.train.get_global_step()))
 
-    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-    update_ops.append(gradient_updates)
-    update_op = tf.group(*update_ops, name='update_barrier')
-    with tf.control_dependencies([update_op]):
-      train_op = tf.identity(total_loss)
+  update_ops.append(tf.get_collection(tf.GraphKeys.UPDATE_OPS))
+  update_op = tf.group(*update_ops, name='update_barrier')
+  with tf.control_dependencies([update_op]):
+    train_op = tf.identity(total_loss)
 
   logging.info("Total number of trainable parameters: {}".format(np.sum([
     np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])))
@@ -197,7 +197,8 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
       result_folder=result_folder)
 
     return tf.estimator.EstimatorSpec(
-      mode, loss=total_loss, evaluation_hooks=[vis_hook, patient_metric_hook],
+      mode, loss=total_loss, train_op=train_op,
+      evaluation_hooks=[vis_hook, patient_metric_hook],
       eval_metric_ops=metric_dict)
   else:
     assert(False)

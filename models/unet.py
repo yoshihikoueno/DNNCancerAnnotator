@@ -53,8 +53,8 @@ class UNet(object):
 
     net = lu.conv_2d_transpose(
       inputs=inputs, filters=nb_filters, kernel_size=2, strides=2,
-      padding=self.conv_padding, conv_transposed_params=conv_transposed_params,
-      batch_norm_params=batch_norm_params, is_training=is_training)
+      padding=self.conv_padding, conv_params=conv_transposed_params,
+      is_training=is_training, batch_norm_params=batch_norm_params)
 
     if self.conv_padding == 'valid':
       downsample_size = downsample_reference[0].get_shape().as_list()[0]
@@ -89,35 +89,40 @@ class UNet(object):
 
     print(image_batch)
 
-    ds_references = []
-    ds, pool = self._downsample_block(image_batch, filter_size_per_block[0],
-                                      is_training=is_training)
-    print(pool)
-    ds_references.append(ds)
-    for filter_size in filter_size_per_block[1:]:
-      ds, pool = self._downsample_block(pool, filter_size,
-                                        is_training=is_training)
-      print(pool)
-      ds_references.append(ds)
+    with tf.variable_scope('UNet'):
+      ds_references = []
+      with tf.variable_scope('DownSampleBlock_1'):
+        ds, pool = self._downsample_block(image_batch, filter_size_per_block[0],
+                                          is_training=is_training)
+        print(pool)
+        ds_references.append(ds)
 
-    us, _ = self._downsample_block(pool, self.final_filter_size,
-                                         is_training=is_training)
-    print(us)
+      for i, filter_size in enumerate(filter_size_per_block[1:]):
+        with tf.variable_scope('DownSampleBlock_{}'.format(i + 2)):
+          ds, pool = self._downsample_block(pool, filter_size,
+                                            is_training=is_training)
+          print(pool)
+          ds_references.append(ds)
 
-    for i, filter_size in reversed(list(
-        enumerate(filter_size_per_block))):
-      us = self._upsample_block(us, ds_references[i], filter_size,
-                                is_training=is_training)
-      print(us)
+      with tf.variable_scope('FinalEncodingBlock'):
+        us, _ = self._downsample_block(pool, self.final_filter_size,
+                                           is_training=is_training)
+        print(us)
 
-    conv_params = lu.get_conv_params(use_relu=False,
-                                     weight_decay=self.weight_decay)
+      for i, filter_size in reversed(list(
+          enumerate(filter_size_per_block))):
+        with tf.variable_scope('UpSampleBlock_{}'.format(i + 1)):
+          us = self._upsample_block(us, ds_references[i], filter_size,
+                                    is_training=is_training)
+          print(us)
 
-    # TODO: Should we have batch norm here?
-    final = lu.conv_2d(inputs=us, filters=num_classes, kernel_size=1,
-                       strides=1, padding=self.conv_padding,
-                       is_training=is_training, conv_params=conv_params,
-                       batch_norm_params=None)
-    print(final)
+      conv_params = lu.get_conv_params(use_relu=False,
+                                       weight_decay=self.weight_decay)
 
-    return final
+      final = lu.conv_2d(inputs=us, filters=num_classes, kernel_size=1,
+                         strides=1, padding=self.conv_padding,
+                         is_training=is_training, conv_params=conv_params,
+                         batch_norm_params=None, name='OutputLayer')
+      print(final)
+
+      return final
