@@ -70,7 +70,10 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
 
   network_output = feature_extractor.build_network(
     image_batch_preprocessed, is_training=mode == tf.estimator.ModeKeys.TRAIN,
-    num_classes=num_classes)
+    num_classes=num_classes,
+    use_batch_norm=pipeline_config.model.use_batch_norm,
+    bn_momentum=pipeline_config.model.batch_norm_momentum,
+    bn_epsilon=pipeline_config.model.batch_norm_epsilon)
 
   # Record model variable summaries
   for var in tf.trainable_variables():
@@ -151,7 +154,8 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
     update_ops.append(optimizer.apply_gradients(
       grads_and_vars, global_step=tf.train.get_global_step()))
 
-  update_ops.append(tf.get_collection(tf.GraphKeys.UPDATE_OPS))
+  graph_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+  update_ops.append(graph_update_ops)
   update_op = tf.group(*update_ops, name='update_barrier')
   with tf.control_dependencies([update_op]):
     train_op = tf.identity(total_loss)
@@ -235,7 +239,6 @@ def get_model_fn(pipeline_config, result_folder, dataset_info,
   if model_name == 'unet':
     feature_extractor = unet.UNet(
       weight_decay=pipeline_config.train_config.weight_decay,
-      use_batch_norm=pipeline_config.model.use_batch_norm,
       conv_padding=pipeline_config.model.conv_padding,
       final_filter_size=pipeline_config.model.unet.final_filter_size,
       num_sample_steps=pipeline_config.model.unet.num_sample_steps)
