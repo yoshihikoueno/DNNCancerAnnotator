@@ -27,6 +27,7 @@ flags.DEFINE_bool('warm_start', False, 'Whether to resume training from a '
 flags.DEFINE_bool('pdb', False, 'Whether to use pdb debugging functionality.')
 flags.DEFINE_integer('num_gpu', -1, 'Number of GPUs to use. '
                      '-1 to use all available')
+flags.DEFINE_integer('visible_device_index', -1, 'Index of the visible device')
 
 FLAGS = flags.FLAGS
 
@@ -36,9 +37,14 @@ def main(_):
     debugger = pdb.Pdb(stdout=sys.__stdout__)
     debugger.set_trace()
 
+  os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
   if FLAGS.num_gpu == 0:
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ["CUDA_VISIBLE_DEVICES"] = ''
+  else:
+    if FLAGS.visible_device_index != -1:
+      assert(FLAGS.num_gpu == 1)
+      os.environ["CUDA_VISIBLE_DEVICES"] = '{}'.format(
+        FLAGS.visible_device_index)
 
   if not os.path.isdir(FLAGS.result_dir):
     raise ValueError("Result directory does not exist!")

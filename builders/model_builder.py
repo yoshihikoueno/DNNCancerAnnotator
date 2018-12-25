@@ -179,7 +179,7 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
       scaled_network_output = tf.nn.softmax(network_output)[:, :, :, 1]
 
       # Metrics
-    metric_dict, region_statistics_dict = metric_utils.get_metrics(
+    metric_dict, statistics_dict = metric_utils.get_metrics(
       scaled_network_output, annotation_mask_batch,
       tp_thresholds=np.array(pipeline_config.metrics_tp_thresholds,
                              dtype=np.float32),
@@ -196,9 +196,10 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
       annotation_mask=annotation_mask_batch,
       predicted_mask=scaled_network_output)
     patient_metric_hook = session_hooks.PatientMetricHook(
-      region_statistics_dict=region_statistics_dict,
+      statistics_dict=statistics_dict,
       patient_id=features[standard_fields.InputDataFields.patient_id],
-      result_folder=result_folder)
+      result_folder=result_folder,
+      tp_thresholds=pipeline_config.metrics_tp_thresholds)
 
     return tf.estimator.EstimatorSpec(
       mode, loss=total_loss, train_op=train_op,

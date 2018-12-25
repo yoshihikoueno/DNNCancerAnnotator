@@ -44,10 +44,6 @@ def get_devices():
   return res
 
 
-def get_available_gpus(num_requested):
-  devices = get_devices()
-
-
 def init_logger(folder=None, resume=None):
   # Logging Configuration
   formatter = logging.Formatter(

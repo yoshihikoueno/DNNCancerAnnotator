@@ -92,16 +92,19 @@ def apply_data_augmentation(data_augmentation_options, images, gt_masks,
 
 def _random_warp(images, masks):
   if masks is not None:
-    equal_shape_assert = tf.Assert(tf.equal(images.get_shape()[:3],
-                                            masks.get_shape()[:3]))
+    equal_shape_assert = tf.Assert(tf.reduce_all(tf.equal(
+      images.get_shape()[:3], masks.get_shape()[:3])), data=[
+        images.get_shape(), masks.get_shape()])
   else:
-    equal_shape_assert = tf.Assert(True)
+    equal_shape_assert = tf.Assert(True, data=[])
 
   with tf.control_dependencies([equal_shape_assert]):
     warp_pts = tf.div(tf.reduce_min(images.get_shape()[1:3]), 2)
     src_control_pts = tf.stack([
-      tf.random_uniform([1, warp_pts], minval=0, maxval=images.get_shape()[1]),
-      tf.random_uniform([1, warp_pts], minval=0, maxval=images.get_shape()[2])],
+      tf.random_uniform([1, warp_pts], minval=0, maxval=images.get_shape(
+      ).as_list()[1]),
+      tf.random_uniform([1, warp_pts], minval=0, maxval=images.get_shape(
+      ).as_list()[2])],
                                axis=2)
     target_control_pts = tf.add(
       src_control_pts, tf.random_uniform([1, warp_pts, 2], minval=-5,

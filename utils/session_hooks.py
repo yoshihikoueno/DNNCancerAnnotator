@@ -66,71 +66,182 @@ class VisualizationHook(tf.train.SessionRunHook):
 
 
 class PatientMetricHook(tf.train.SessionRunHook):
-  def __init__(self, region_statistics_dict, patient_id, result_folder):
-    self.region_statistics_dict = region_statistics_dict
+  def __init__(self, statistics_dict, patient_id, result_folder,
+               tp_thresholds):
+    self.statistics_dict = statistics_dict
     self.patient_id = patient_id
     self.result_folder = result_folder
+    self.tp_thresholds = tp_thresholds
 
     self.patient_statistics = dict()
 
   def before_run(self, run_context):
-    return tf.train.SessionRunArgs(fetches=[self.region_statistics_dict,
+    return tf.train.SessionRunArgs(fetches=[self.statistics_dict,
                                             self.patient_id])
 
   def after_run(self, run_context, run_values):
-    region_statistics_dict_res = run_values.results[0]
+    statistics_dict_res = run_values.results[0]
     patient_id_res = run_values.results[1]
 
-    for threshold, tp_fn_batch in region_statistics_dict_res.items():
-      # Since tp_fn still contains a batch dimension, we need to have a loop
-      for i, tp_fn in enumerate(list(zip(*tp_fn_batch))):
-        tp = tp_fn[0]
-        fn = tp_fn[1]
-        print('TP Threshold={}: TP: {}; FN: {}'.format(
-          threshold, tp, fn))
-        # If the current image does not contain any groundtruth, i.e.
-        # if both tp and fn are 0, then we dont want to include it in our
-        # Recall calculation later
-        if tp == 0 and fn == 0:
-          continue
+    for threshold, confusion_dict in statistics_dict_res.items():
+      for confusion_key, batch_values in confusion_dict.items():
+        for i, val in enumerate(batch_values):
+          if patient_id_res[i] not in self.patient_statistics:
+            self.patient_statistics[patient_id_res[i]] = dict()
 
-        if patient_id_res[i] not in self.patient_statistics:
-          self.patient_statistics[patient_id_res[i]] = dict()
+          if threshold not in self.patient_statistics[patient_id_res[i]]:
+            self.patient_statistics[patient_id_res[i]][threshold] = dict()
 
-        if threshold not in self.patient_statistics[patient_id_res[i]]:
-          self.patient_statistics[patient_id_res[i]][threshold] = dict()
-          self.patient_statistics[patient_id_res[i]][threshold]['tp'] = 0
-          self.patient_statistics[patient_id_res[i]][threshold]['fn'] = 0
+          if confusion_key not in self.patient_statistics[patient_id_res[i]][
+              threshold]:
+            self.patient_statistics[patient_id_res[i]][threshold][
+              confusion_key] = 0
 
-        self.patient_statistics[patient_id_res[i]][threshold]['tp'] += tp
-        self.patient_statistics[patient_id_res[i]][threshold]['fn'] += fn
+          self.patient_statistics[patient_id_res[i]][threshold][
+            confusion_key] += val
 
   def end(self, session):
-    patient_recalls = dict()
-    for _, statistics in self.patient_statistics.items():
-      for threshold, tp_fn_dict in statistics.items():
-        tp = tp_fn_dict['tp']
-        fn = tp_fn_dict['fn']
+    patient_healthy_tnr = dict()
+    patient_cancer_tnr = dict()
+    patient_recall = dict()
+    patient_precision = dict()
+    patient_region_recall = dict()
+    patient_f1_score = dict()
+    patient_f2_score = dict()
 
-        assert(tp + fn > 0)
-
-        if threshold not in patient_recalls:
-          patient_recalls[threshold] = []
-
-        patient_recalls[threshold].append(tp / float((tp + fn)))
+    for threshold in self.tp_thresholds:
+      threshold = int(np.round(threshold * 100))
+      patient_healthy_tnr[threshold] = []
+      patient_cancer_tnr[threshold] = []
+      patient_recall[threshold] = []
+      patient_precision[threshold] = []
+      patient_region_recall[threshold] = []
+      patient_f1_score[threshold] = []
+      patient_f2_score[threshold] = []
 
     summary_writer = tf.summary.FileWriterCache.get(
       os.path.join(self.result_folder, 'eval'))
     global_step = tf.train.get_global_step().eval(session=session)
-    for threshold, recalls in patient_recalls.items():
-      recall = np.mean(recalls)
+    # Calculate per patient metrics
+    for patient_id, statistics in self.patient_statistics.items():
+      for threshold, confusion_dict in statistics.items():
+        region_tp = confusion_dict['region_tp']
+        region_fn = confusion_dict['region_fn']
+        tp = confusion_dict['tp']
+        fp = confusion_dict['fp']
+        fn = confusion_dict['fn']
+        tn = confusion_dict['tn']
 
+        if tp == 0 and fn == 0:
+          # There is no true label in the image, only calculate tnr
+          tnr = tn / (tn + fp)
+          patient_healthy_tnr[threshold].append(tnr)
+          summary = tf.Summary()
+          summary.value.add(tag='patient_metrics/{}/tnr_at_{}'.format(
+            patient_id.decode('utf-8'), threshold), simple_value=tnr)
+          summary_writer.add_summary(summary, global_step=global_step)
+        else:
+          assert(tn + fp > 0)
+          tnr = tn / (tn + fp)
+          patient_cancer_tnr[threshold].append(tnr)
+          summary = tf.Summary()
+          summary.value.add(tag='patient_metrics/{}/tnr_at_{}'.format(
+            patient_id.decode('utf-8'), threshold), simple_value=tnr)
+          summary_writer.add_summary(summary, global_step=global_step)
+
+          assert(tp + fn > 0)
+          recall = tp / (tp + fn)
+          patient_recall[threshold].append(recall)
+          summary = tf.Summary()
+          summary.value.add(tag='patient_metrics/{}/recall_at_{}'.format(
+            patient_id.decode('utf-8'), threshold), simple_value=recall)
+          summary_writer.add_summary(summary, global_step=global_step)
+
+          precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+          patient_precision[threshold].append(precision)
+          summary = tf.Summary()
+          summary.value.add(tag='patient_metrics/{}/precision_at_{}'.format(
+            patient_id.decode('utf-8'), threshold), simple_value=precision)
+          summary_writer.add_summary(summary, global_step=global_step)
+
+          assert(region_tp + region_fn > 0)
+          region_recall = region_tp / (region_tp + region_fn)
+          patient_region_recall[threshold].append(region_recall)
+          summary = tf.Summary()
+          summary.value.add(
+            tag='patient_metrics/{}/region_recall_at_{}'.format(
+              patient_id.decode('utf-8'), threshold),
+            simple_value=region_recall)
+          summary_writer.add_summary(summary, global_step=global_step)
+
+          f1_score = (2 * precision * recall / (precision + recall)) if (
+            precision + recall) > 0 else 0
+          patient_f1_score[threshold].append(f1_score)
+          summary = tf.Summary()
+          summary.value.add(
+            tag='patient_metrics/{}/f1_score_at_{}'.format(
+              patient_id.decode('utf-8'), threshold), simple_value=f1_score)
+          summary_writer.add_summary(summary, global_step=global_step)
+
+          f2_score = (5 * precision * recall / (4 * precision + recall)) if (
+            (4 * precision + recall)) > 0 else 0
+          patient_f2_score[threshold].append(f2_score)
+          summary = tf.Summary()
+          summary.value.add(
+            tag='patient_metrics/{}/f2_score_at_{}'.format(
+              patient_id.decode('utf-8'), threshold), simple_value=f2_score)
+          summary_writer.add_summary(summary, global_step=global_step)
+
+    for threshold in self.tp_thresholds:
+      threshold = int(np.round(threshold * 100))
+      population_tnr = np.mean(patient_healthy_tnr[threshold])
       summary = tf.Summary()
-      summary.value.add(tag='metrics/patient_adjusted_recall_at_{}'.format(
-        threshold), simple_value=recall)
+      summary.value.add(
+        tag='metrics/patient_adjusted/healthy_tnr_at_{}'.format(threshold),
+        simple_value=population_tnr)
       summary_writer.add_summary(summary, global_step=global_step)
 
-      logging.info("Summary for patient adjusted recall@{}".format(threshold))
+      population_tnr = np.mean(patient_cancer_tnr[threshold])
+      summary = tf.Summary()
+      summary.value.add(
+        tag='metrics/patient_adjusted/cancer_tnr_at_{}'.format(threshold),
+        simple_value=population_tnr)
+      summary_writer.add_summary(summary, global_step=global_step)
+
+      population_recall = np.mean(patient_recall[threshold])
+      summary = tf.Summary()
+      summary.value.add(
+        tag='metrics/patient_adjusted/recall_at_{}'.format(threshold),
+        simple_value=population_recall)
+      summary_writer.add_summary(summary, global_step=global_step)
+
+      population_precision = np.mean(patient_precision[threshold])
+      summary = tf.Summary()
+      summary.value.add(
+        tag='metrics/patient_adjusted/precision_at_{}'.format(threshold),
+        simple_value=population_precision)
+      summary_writer.add_summary(summary, global_step=global_step)
+
+      population_region_recall = np.mean(patient_region_recall[threshold])
+      summary = tf.Summary()
+      summary.value.add(
+        tag='metrics/patient_adjusted/region_recall_at_{}'.format(threshold),
+        simple_value=population_region_recall)
+      summary_writer.add_summary(summary, global_step=global_step)
+
+      population_f1_score = np.mean(patient_f1_score[threshold])
+      summary = tf.Summary()
+      summary.value.add(
+        tag='metrics/patient_adjusted/f1_score_at_{}'.format(threshold),
+        simple_value=population_f1_score)
+      summary_writer.add_summary(summary, global_step=global_step)
+
+      population_f2_score = np.mean(patient_f2_score[threshold])
+      summary = tf.Summary()
+      summary.value.add(
+        tag='metrics/patient_adjusted/f2_score_at_{}'.format(threshold),
+        simple_value=population_f2_score)
+      summary_writer.add_summary(summary, global_step=global_step)
 
 
 class PrintHook(tf.train.SessionRunHook):
