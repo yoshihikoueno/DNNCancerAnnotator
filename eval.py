@@ -28,8 +28,8 @@ flags.DEFINE_bool('all_checkpoints', False,
                   'checkpoint_dir from the beginning on.')
 flags.DEFINE_string('result_dir', '', 'Optional directory to write the '
                                       'results to.')
-flags.DEFINE_bool('repeated', False, 'Whether to evaluate successive '
-                                     'checkpoints')
+flags.DEFINE_bool('continuous', False, 'Whether to keep the process alive and '
+                  'query for new checkpoints at a certain interval')
 flags.DEFINE_string('split_name', '', 'train, val, or test')
 flags.DEFINE_bool('pdb', False, 'Whether to use pdb debugging functionality.')
 flags.DEFINE_integer('num_steps', 0,
@@ -48,7 +48,7 @@ def _eval_checkpoint(checkpoint_path, estimator, input_fn, num_steps):
 
 
 def main(_):
-  assert(not (FLAGS.repeated and FLAGS.checkpoint_name))
+  assert(not (FLAGS.continuous and FLAGS.checkpoint_name))
   assert(not (FLAGS.checkpoint_name != '' and FLAGS.all_checkpoints))
   assert(FLAGS.split_name in standard_fields.SplitNames.available_names)
   if FLAGS.pdb:
@@ -124,8 +124,12 @@ def main(_):
   else:
     num_steps = None
 
-  latest_checkpoint = ''
-  if FLAGS.all_checkpoints:
+  if FLAGS.checkpoint_name:
+    _eval_checkpoint(
+      os.path.join(FLAGS.checkpoint_dir,
+                   FLAGS.checkpoint_name), estimator, input_fn, num_steps)
+  elif FLAGS.all_checkpoints:
+    latest_checkpoint = ''
     evaluated_checkpoints = []
     # We need a loop, as new checkpoints might be generated while we are still
     # evaluating
@@ -142,13 +146,14 @@ def main(_):
         evaluated_checkpoints.append(checkpoint)
         latest_checkpoint = checkpoint
       if not new_checkpoint_evaluated:
-        break
-
-  if FLAGS.checkpoint_name:
-    _eval_checkpoint(
-      os.path.join(FLAGS.checkpoint_dir,
-                   FLAGS.checkpoint_name), estimator, input_fn, num_steps)
-  elif FLAGS.repeated:
+        if FLAGS.continuous:
+          logging.info('No new checkpoint. Checking back in {} seconds.'
+                       .format(pipeline_config.eval_config.eval_interval_secs))
+          time.sleep(pipeline_config.eval_config.eval_interval_secs)
+        else:
+          break
+  elif FLAGS.continous:
+    latest_checkpoint = ''
     while True:
       next_checkpoint = tf.train.latest_checkpoint(FLAGS.checkpoint_dir)
 
@@ -161,7 +166,7 @@ def main(_):
       _eval_checkpoint(next_checkpoint, estimator, input_fn, num_steps)
 
       latest_checkpoint = next_checkpoint
-  elif not FLAGS.all_checkpoints:
+  else:
     latest_checkpoint = tf.train.latest_checkpoint(FLAGS.checkpoint_dir)
 
     _eval_checkpoint(latest_checkpoint, estimator, input_fn, num_steps)
