@@ -18,7 +18,8 @@ def _load_existing_tfrecords(directory, split_name, target_dims, dataset_name,
       patient_ids=ids, is_training=is_training,
       dilate_groundtruth=dataset_config.prostate_cancer.dilate_groundtruth,
       dilate_kernel_size=dataset_config.
-      prostate_cancer.groundtruth_dilation_kernel_size)
+      prostate_cancer.groundtruth_dilation_kernel_size,
+      common_size_factor=dataset_config.prostate_cancer.common_size_factor)
   else:
     assert(False)
 

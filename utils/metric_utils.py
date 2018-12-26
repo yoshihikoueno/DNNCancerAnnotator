@@ -53,7 +53,7 @@ def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds,
     labels=groundtruth_batch, predictions=prediction_batch,
     thresholds=tp_thresholds)
 
-  recall = tf.metrics.precision_at_thresholds(
+  recall = tf.metrics.recall_at_thresholds(
     labels=groundtruth_batch, predictions=prediction_batch,
     thresholds=tp_thresholds)
 

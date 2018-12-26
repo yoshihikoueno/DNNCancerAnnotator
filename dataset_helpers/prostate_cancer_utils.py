@@ -43,7 +43,8 @@ def _extract_annotation(decoded_annotation, dilate_groundtruth,
   return annotation_mask
 
 
-def _preprocess_image(image_decoded, target_dims, is_annotation_mask):
+def _preprocess_image(image_decoded, target_dims, is_annotation_mask,
+                      common_size_factor):
   # Image should be quadratic
   image_shape = tf.shape(image_decoded)
   quadratic_assert_op = tf.Assert(tf.equal(image_shape[0], image_shape[1]),
@@ -101,7 +102,7 @@ def _preprocess_image(image_decoded, target_dims, is_annotation_mask):
 
 
 def _decode_example(example_dict, target_dims, dilate_groundtruth,
-                    dilate_kernel_size):
+                    dilate_kernel_size, common_size_factor):
   image_string = example_dict[standard_fields.TfExampleFields.image_encoded]
   image_decoded = tf.to_float(tf.image.decode_jpeg(
     image_string, channels=target_dims[2]))
@@ -116,11 +117,14 @@ def _decode_example(example_dict, target_dims, dilate_groundtruth,
   annotation_mask = _extract_annotation(annotation_decoded, dilate_groundtruth,
                                         dilate_kernel_size)
   annotation_mask_preprocessed = _preprocess_image(
-    annotation_mask, target_dims, is_annotation_mask=True)
+    annotation_mask, target_dims, is_annotation_mask=True,
+    common_size_factor=common_size_factor)
   annotation_preprocessed = _preprocess_image(
-    annotation_decoded, target_dims, is_annotation_mask=False)
+    annotation_decoded, target_dims, is_annotation_mask=False,
+    common_size_factor=common_size_factor)
   image_preprocessed = _preprocess_image(image_decoded, target_dims,
-                                         is_annotation_mask=False)
+                                         is_annotation_mask=False,
+                                         common_size_factor=common_size_factor)
 
   features = {
     standard_fields.InputDataFields.patient_id:
@@ -385,7 +389,7 @@ def _serialize_example(example):
 
 
 def _deserialize_and_decode_example(example, target_dims, dilate_groundtruth,
-                                    dilate_kernel_size):
+                                    dilate_kernel_size, common_size_factor):
   features = {
     standard_fields.TfExampleFields.patient_id: tf.FixedLenFeature(
       (), tf.string, default_value=''),
@@ -406,7 +410,8 @@ def _deserialize_and_decode_example(example, target_dims, dilate_groundtruth,
 
   return _decode_example(example_dict, target_dims=target_dims,
                          dilate_groundtruth=dilate_groundtruth,
-                         dilate_kernel_size=dilate_kernel_size)
+                         dilate_kernel_size=dilate_kernel_size,
+                         common_size_factor=common_size_factor)
 
 
 def _parse_from_file(image_file, annotation_file, label, patient_id,
@@ -494,7 +499,8 @@ def build_tfrecords_from_files(
 # patient_ids are only needed for train mode
 def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
                                     patient_ids, is_training,
-                                    dilate_groundtruth, dilate_kernel_size):
+                                    dilate_groundtruth, dilate_kernel_size,
+                                    common_size_factor):
   tfrecords_folder = os.path.join(directory, 'tfrecords', split_name)
   assert(os.path.exists(tfrecords_folder))
 
@@ -519,7 +525,8 @@ def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
   deserialize_and_decode_fn = functools.partial(
     _deserialize_and_decode_example, target_dims=target_dims,
     dilate_groundtruth=dilate_groundtruth,
-    dilate_kernel_size=dilate_kernel_size)
+    dilate_kernel_size=dilate_kernel_size,
+    common_size_factor=common_size_factor)
 
   dataset = dataset.map(deserialize_and_decode_fn,
                         num_parallel_calls=util_ops.get_cpu_count())
