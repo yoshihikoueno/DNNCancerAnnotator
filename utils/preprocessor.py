@@ -101,14 +101,13 @@ def _random_warp(images, masks):
   with tf.control_dependencies([equal_shape_assert]):
     warp_pts = tf.div(tf.reduce_min(images.get_shape()[1:3]), 2)
     src_control_pts = tf.stack([
-      tf.random_uniform([1, warp_pts], minval=0, maxval=images.get_shape(
-      ).as_list()[1]),
-      tf.random_uniform([1, warp_pts], minval=0, maxval=images.get_shape(
-      ).as_list()[2])],
-                               axis=2)
+      tf.random_uniform([images.get_shape()[0], warp_pts], minval=0,
+                        maxval=images.get_shape().as_list()[1]),
+      tf.random_uniform([images.get_shape()[0], warp_pts], minval=0,
+                        maxval=images.get_shape().as_list()[2])], axis=2)
     target_control_pts = tf.add(
-      src_control_pts, tf.random_uniform([1, warp_pts, 2], minval=-5,
-                                         maxval=5))
+      src_control_pts, tf.random_uniform([images.get_shape()[0], warp_pts, 2],
+                                         minval=-5, maxval=5))
 
     images, _ = tf.contrib.image.sparse_image_warp(
       images, source_control_point_locations=src_control_pts,

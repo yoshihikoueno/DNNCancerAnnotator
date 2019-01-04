@@ -152,7 +152,7 @@ def main(_):
           time.sleep(pipeline_config.eval_config.eval_interval_secs)
         else:
           break
-  elif FLAGS.continous:
+  elif FLAGS.continuous:
     latest_checkpoint = ''
     while True:
       next_checkpoint = tf.train.latest_checkpoint(FLAGS.checkpoint_dir)
