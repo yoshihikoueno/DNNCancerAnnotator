@@ -241,8 +241,7 @@ def get_model_fn(pipeline_config, result_folder, dataset_info,
     feature_extractor = unet.UNet(
       weight_decay=pipeline_config.train_config.weight_decay,
       conv_padding=pipeline_config.model.conv_padding,
-      final_filter_size=pipeline_config.model.unet.final_filter_size,
-      num_sample_steps=pipeline_config.model.unet.num_sample_steps)
+      filter_sizes=pipeline_config.model.unet.filter_sizes)
     return functools.partial(_general_model_fn,
                              pipeline_config=pipeline_config,
                              result_folder=result_folder,

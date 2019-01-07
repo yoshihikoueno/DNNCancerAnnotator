@@ -7,14 +7,12 @@ from utils import layer_utils as lu
 
 
 class UNet(object):
-  def __init__(self, weight_decay, conv_padding,
-               final_filter_size, num_sample_steps):
-    assert(num_sample_steps > 0)
+  def __init__(self, weight_decay, conv_padding, filter_sizes):
+    assert(len(filter_sizes) > 1)
     assert(conv_padding in ['same', 'valid'])
     self.weight_decay = weight_decay
     self.conv_padding = conv_padding
-    self.final_filter_size = final_filter_size
-    self.num_sample_steps = num_sample_steps
+    self.filter_sizes = filter_sizes
 
   def _downsample_block(self, inputs, nb_filters, is_training, use_batch_norm,
                         bn_momentum, bn_epsilon):
@@ -85,11 +83,6 @@ class UNet(object):
 
   def build_network(self, image_batch, is_training, num_classes,
                     use_batch_norm, bn_momentum, bn_epsilon):
-    filter_size_per_block = []
-    for i in range(self.num_sample_steps):
-      filter_size_per_block.append(
-        int(self.final_filter_size / (2**(self.num_sample_steps - i))))
-
     print(image_batch)
 
     ds_fn = functools.partial(self._downsample_block, is_training=is_training,
@@ -103,22 +96,22 @@ class UNet(object):
       ds_references = []
       with tf.variable_scope('DownSampleBlock_1'):
         ds, pool = ds_fn(inputs=image_batch,
-                         nb_filters=filter_size_per_block[0])
+                         nb_filters=self.filter_sizes[0])
         print(pool)
         ds_references.append(ds)
 
-      for i, filter_size in enumerate(filter_size_per_block[1:]):
+      for i, filter_size in enumerate(self.filter_sizes[1:-1]):
         with tf.variable_scope('DownSampleBlock_{}'.format(i + 2)):
           ds, pool = ds_fn(inputs=pool, nb_filters=filter_size)
           print(pool)
           ds_references.append(ds)
 
       with tf.variable_scope('FinalEncodingBlock'):
-        us, _ = ds_fn(inputs=pool, nb_filters=self.final_filter_size)
+        us, _ = ds_fn(inputs=pool, nb_filters=self.filter_sizes[-1])
         print(us)
 
       for i, filter_size in reversed(list(
-          enumerate(filter_size_per_block))):
+          enumerate(self.filter_sizes[:-1]))):
         with tf.variable_scope('UpSampleBlock_{}'.format(i + 1)):
           us = us_fn(
             inputs=us, downsample_reference=ds_references[i],
