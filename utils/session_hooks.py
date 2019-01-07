@@ -107,6 +107,7 @@ class PatientMetricHook(tf.train.SessionRunHook):
     patient_precision = dict()
     patient_region_recall = dict()
     patient_f1_score = dict()
+    patient_f1_5_score = dict()
     patient_f2_score = dict()
 
     for threshold in self.tp_thresholds:
@@ -117,6 +118,7 @@ class PatientMetricHook(tf.train.SessionRunHook):
       patient_precision[threshold] = []
       patient_region_recall[threshold] = []
       patient_f1_score[threshold] = []
+      patient_f1_5_score[threshold] = []
       patient_f2_score[threshold] = []
 
     summary_writer = tf.summary.FileWriterCache.get(
@@ -183,6 +185,16 @@ class PatientMetricHook(tf.train.SessionRunHook):
               patient_id.decode('utf-8'), threshold), simple_value=f1_score)
           summary_writer.add_summary(summary, global_step=global_step)
 
+          f1_5_score = (3.25 * precision * recall / (
+            2.25 * precision + recall)) if (
+              2.25 * precision + recall) > 0 else 0
+          patient_f1_5_score[threshold].append(f1_5_score)
+          summary = tf.Summary()
+          summary.value.add(
+            tag='patient_metrics/{}/f1_5_score_at_{}'.format(
+              patient_id.decode('utf-8'), threshold), simple_value=f1_5_score)
+          summary_writer.add_summary(summary, global_step=global_step)
+
           f2_score = (5 * precision * recall / (4 * precision + recall)) if (
             (4 * precision + recall)) > 0 else 0
           patient_f2_score[threshold].append(f2_score)
@@ -234,6 +246,13 @@ class PatientMetricHook(tf.train.SessionRunHook):
       summary.value.add(
         tag='metrics/patient_adjusted/f1_score_at_{}'.format(threshold),
         simple_value=population_f1_score)
+      summary_writer.add_summary(summary, global_step=global_step)
+
+      population_f1_5_score = np.mean(patient_f1_5_score[threshold])
+      summary = tf.Summary()
+      summary.value.add(
+        tag='metrics/patient_adjusted/f1_5_score_at_{}'.format(threshold),
+        simple_value=population_f1_5_score)
       summary_writer.add_summary(summary, global_step=global_step)
 
       population_f2_score = np.mean(patient_f2_score[threshold])
