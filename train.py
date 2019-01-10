@@ -28,11 +28,14 @@ flags.DEFINE_bool('pdb', False, 'Whether to use pdb debugging functionality.')
 flags.DEFINE_integer('num_gpu', -1, 'Number of GPUs to use. '
                      '-1 to use all available')
 flags.DEFINE_integer('visible_device_index', -1, 'Index of the visible device')
+flags.DEFINE_integer('num_train_steps', -1, 'Number of max training steps')
+flags.DEFINE_integer('num_eval_steps', -1, 'Number of max eval steps')
 
 FLAGS = flags.FLAGS
 
 
 def main(_):
+  assert(FLAGS.num_train_steps > 0)
   if FLAGS.pdb:
     debugger = pdb.Pdb(stdout=sys.__stdout__)
     debugger.set_trace()
@@ -86,11 +89,15 @@ def main(_):
     num_gpu = real_gpu_nb
 
   if num_gpu > 1:
-    distribution = tf.contrib.distribute.MirroredStrategy(num_gpus=num_gpu)
+    train_distribution = tf.contrib.distribute.MirroredStrategy(
+      num_gpus=num_gpu)
   else:
-    distribution = None
+    train_distribution = None
 
-  input_fn, dataset_info = setup_utils.get_input_fn(
+  # For now we cannot have mirrored evaluation distribution
+  eval_distribution = None
+
+  train_input_fn, dataset_info = setup_utils.get_input_fn(
     pipeline_config=pipeline_config, directory=FLAGS.result_dir,
     existing_tfrecords=FLAGS.warm_start,
     split_name=standard_fields.SplitNames.train,
@@ -99,13 +106,32 @@ def main(_):
   estimator = estimator_builder.build_estimator(
     pipeline_config=pipeline_config, result_dir=FLAGS.result_dir,
     dataset_info=dataset_info,
-    dataset_split_name=standard_fields.SplitNames.train,
+    eval_split_name=standard_fields.SplitNames.val,
     warm_start_path=FLAGS.result_dir if FLAGS.warm_start else None,
-    train_distribution=distribution,
-    eval_distribution=None, num_gpu=num_gpu, warm_start_ckpt_name=None)
+    train_distribution=train_distribution,
+    eval_distribution=eval_distribution, num_gpu=num_gpu,
+    warm_start_ckpt_name=None)
 
-  estimator.train(input_fn=input_fn,
-                  max_steps=pipeline_config.train_config.num_steps)
+  early_stop_hook = tf.contrib.estimator.stop_if_no_decrease_hook(
+    estimator=estimator, metric_name='loss', max_steps_without_decrease=5000,
+    min_steps=10000, run_every_secs=60)
+
+  train_spec = tf.estimator.TrainSpec(
+    input_fn=train_input_fn, max_steps=FLAGS.num_train_steps,
+    hooks=[early_stop_hook])
+
+  eval_input_fn, _ = setup_utils.get_input_fn(
+    pipeline_config=pipeline_config, directory=FLAGS.result_dir,
+    existing_tfrecords=True, split_name=standard_fields.SplitNames.val,
+    is_training=False)
+
+  eval_spec = tf.estimator.EvalSpec(
+    input_fn=eval_input_fn,
+    steps=None if FLAGS.num_eval_steps <= 0 else FLAGS.num_eval_steps,
+    start_delay_secs=0, throttle_secs=0)
+
+  tf.estimator.train_and_evaluate(estimator=estimator,
+                                  train_spec=train_spec, eval_spec=eval_spec)
 
 
 if __name__ == '__main__':

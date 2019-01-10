@@ -43,7 +43,7 @@ def _loss(labels, logits, loss_name, pos_weight):
 
 
 def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
-                      dataset_split_name, feature_extractor, mode, num_gpu,
+                      feature_extractor, mode, num_gpu,
                       visualization_file_names):
   num_classes = pipeline_config.dataset.num_classes
   add_background_class = pipeline_config.train_config.loss.name == 'softmax'
@@ -210,14 +210,14 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
 
 
 def get_model_fn(pipeline_config, result_folder, dataset_info,
-                 dataset_split_name, num_gpu):
+                 eval_split_name, num_gpu):
 
   file_names = dataset_info[
-    standard_fields.PickledDatasetInfo.file_names][dataset_split_name]
+    standard_fields.PickledDatasetInfo.file_names][eval_split_name]
   np.random.shuffle(file_names)
 
   patient_ids = dataset_info[
-    standard_fields.PickledDatasetInfo.patient_ids][dataset_split_name]
+    standard_fields.PickledDatasetInfo.patient_ids][eval_split_name]
 
   # Select one image per patient
   selected_files = dict()
@@ -246,7 +246,6 @@ def get_model_fn(pipeline_config, result_folder, dataset_info,
                              pipeline_config=pipeline_config,
                              result_folder=result_folder,
                              dataset_info=dataset_info,
-                             dataset_split_name=dataset_split_name,
                              feature_extractor=feature_extractor,
                              num_gpu=num_gpu,
                              visualization_file_names=visualization_file_names)

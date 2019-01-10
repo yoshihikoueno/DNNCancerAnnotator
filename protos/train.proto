@@ -16,10 +16,6 @@ message TrainConfig {
   // After how many seconds to save the current model
   optional int32 save_checkpoints_secs = 4;
 
-  // Number of steps to train the DetectionModel for. If 0, will train the model
-  // indefinitely.
-  optional uint32 num_steps = 7 [default=0];
-
   // Whether to shuffle the dataset
   optional bool shuffle = 12 [default=true];
 
