@@ -31,4 +31,8 @@ message TrainConfig {
   optional int32 shuffle_buffer_size = 19;
 
   optional Loss loss = 20;
+
+  optional int32 early_stopping_min_steps = 21;
+  optional int32 early_stopping_max_steps_without_decrease = 22;
+  optional int32 early_stopping_run_every_secs = 23;
 }

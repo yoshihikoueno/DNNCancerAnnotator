@@ -113,8 +113,11 @@ def main(_):
     warm_start_ckpt_name=None)
 
   early_stop_hook = tf.contrib.estimator.stop_if_no_decrease_hook(
-    estimator=estimator, metric_name='loss', max_steps_without_decrease=5000,
-    min_steps=10000, run_every_secs=60)
+    estimator=estimator, metric_name='loss',
+    max_steps_without_decrease=pipeline_config.train_config.
+    early_stopping_max_steps_without_decrease,
+    min_steps=pipeline_config.train_config.early_stopping_min_steps,
+    run_every_secs=pipeline_config.train_config.early_stopping_run_every_secs)
 
   train_spec = tf.estimator.TrainSpec(
     input_fn=train_input_fn, max_steps=FLAGS.num_train_steps,
