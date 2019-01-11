@@ -182,15 +182,6 @@ class PatientMetricHook(tf.train.SessionRunHook):
           threshold), simple_value=f1_score)
       summary_writer.add_summary(summary, global_step=global_step)
 
-      f1_5_score = (3.25 * precision * recall / (
-        2.25 * precision + recall)) if (
-          2.25 * precision + recall) > 0 else 0
-      summary = tf.Summary()
-      summary.value.add(
-        tag='metrics/patient_adjusted/population_f1_5_score_at_{}'.format(
-          threshold), simple_value=f1_5_score)
-      summary_writer.add_summary(summary, global_step=global_step)
-
       f2_score = (5 * precision * recall / (4 * precision + recall)) if (
         (4 * precision + recall)) > 0 else 0
       summary = tf.Summary()
