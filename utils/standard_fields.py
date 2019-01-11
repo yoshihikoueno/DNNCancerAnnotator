@@ -19,7 +19,16 @@ class InputDataFields:
   annotation_file = 'annotation_file'
   annotation_decoded = 'annotation_decoded'
   annotation_mask = 'annotation_mask'
+  individual_masks = 'individual_masks'
+  bounding_boxes = 'bounding_boxes'
   label = 'label'
+
+
+class BoundingBoxFields:
+  y_min = 'y_min'
+  y_max = 'y_max'
+  x_min = 'x_min'
+  x_max = 'x_max'
 
 
 class PickledDatasetInfo:

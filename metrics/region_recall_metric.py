@@ -1,25 +1,7 @@
 import tensorflow as tf
 import numpy as np
 
-
-# groundtruth = [HxW]
-def _split_groundtruth_mask(groundtruth):
-  assert(len(groundtruth.get_shape()) == 2)
-
-  # Label each cancer area with individual index
-  components = tf.contrib.image.connected_components(groundtruth)
-
-  unique_ids, unique_indices = tf.unique(tf.reshape(components, [-1]))
-
-  # Remove zero id, since it describes background
-  unique_ids = tf.gather_nd(unique_ids, tf.where(tf.not_equal(unique_ids, 0)))
-
-  # Create mask for each cancer area
-  individual_masks = tf.map_fn(
-    lambda unique_id: tf.equal(unique_id, components), elems=unique_ids,
-    dtype=tf.bool, parallel_iterations=4)
-
-  return individual_masks
+from dataset_helpers import prostate_cancer_utils
 
 
 # groundtruth_masks = [MxHxW]
@@ -110,7 +92,7 @@ def region_recall_at_thresholds(labels, predictions, thresholds,
   # M = Number of masks
   # N = batch size
   groundtruth_masks = tf.map_fn(
-    _split_groundtruth_mask, elems=labels, dtype=tf.bool,
+    prostate_cancer_utils.split_groundtruth_mask, elems=labels, dtype=tf.bool,
     parallel_iterations=parallel_iterations)
 
   result = []
