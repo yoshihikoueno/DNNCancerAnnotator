@@ -112,16 +112,20 @@ def main(_):
     eval_distribution=eval_distribution, num_gpu=num_gpu,
     warm_start_ckpt_name=None)
 
-  early_stop_hook = tf.contrib.estimator.stop_if_no_decrease_hook(
-    estimator=estimator, metric_name='loss',
-    max_steps_without_decrease=pipeline_config.train_config.
-    early_stopping_max_steps_without_decrease,
-    min_steps=pipeline_config.train_config.early_stopping_min_steps,
-    run_every_secs=pipeline_config.train_config.early_stopping_run_every_secs)
+  if pipeline_config.train_config.early_stopping:
+    early_stop_hook = tf.contrib.estimator.stop_if_no_decrease_hook(
+      estimator=estimator, metric_name='loss',
+      max_steps_without_decrease=pipeline_config.train_config.
+      early_stopping_max_steps_without_decrease,
+      min_steps=pipeline_config.train_config.early_stopping_min_steps,
+      run_every_secs=pipeline_config.train_config.
+      early_stopping_run_every_secs)
+  else:
+    early_stop_hook = None
 
   train_spec = tf.estimator.TrainSpec(
     input_fn=train_input_fn, max_steps=FLAGS.num_train_steps,
-    hooks=[early_stop_hook])
+    hooks=early_stop_hook if early_stop_hook is None else [early_stop_hook])
 
   eval_input_fn, _ = setup_utils.get_input_fn(
     pipeline_config=pipeline_config, directory=FLAGS.result_dir,
