@@ -131,10 +131,20 @@ def main(_):
   eval_spec = tf.estimator.EvalSpec(
     input_fn=eval_input_fn,
     steps=None if FLAGS.num_eval_steps <= 0 else FLAGS.num_eval_steps,
-    start_delay_secs=0, throttle_secs=0)
+    start_delay_secs=0, throttle_secs=0, name='val_eval')
 
   tf.estimator.train_and_evaluate(estimator=estimator,
                                   train_spec=train_spec, eval_spec=eval_spec)
+
+  # Evaluate train set
+  train_eval_input_fn, _ = setup_utils.get_input_fn(
+    pipeline_config=pipeline_config, directory=FLAGS.result_dir,
+    existing_tfrecords=True,
+    split_name=standard_fields.SplitNames.train,
+    is_training=False)
+
+  tf.estimator.evaluate(input_fn=train_eval_input_fn, steps=None,
+                        name='train_eval')
 
 
 if __name__ == '__main__':
