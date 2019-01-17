@@ -44,7 +44,7 @@ def _loss(labels, logits, loss_name, pos_weight):
 
 def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
                       feature_extractor, mode, num_gpu,
-                      visualization_file_names):
+                      visualization_file_names, eval_dir):
   num_classes = pipeline_config.dataset.num_classes
   add_background_class = pipeline_config.train_config.loss.name == 'softmax'
   if add_background_class:
@@ -194,12 +194,12 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
       annotation_decoded=features[
         standard_fields.InputDataFields.annotation_decoded],
       annotation_mask=annotation_mask_batch,
-      predicted_mask=scaled_network_output)
+      predicted_mask=scaled_network_output, eval_dir=eval_dir)
     patient_metric_hook = session_hooks.PatientMetricHook(
       statistics_dict=statistics_dict,
       patient_id=features[standard_fields.InputDataFields.patient_id],
       result_folder=result_folder,
-      tp_thresholds=pipeline_config.metrics_tp_thresholds)
+      tp_thresholds=pipeline_config.metrics_tp_thresholds, eval_dir=eval_dir)
 
     return tf.estimator.EstimatorSpec(
       mode, loss=total_loss, train_op=train_op,
@@ -248,6 +248,7 @@ def get_model_fn(pipeline_config, result_folder, dataset_info,
                              dataset_info=dataset_info,
                              feature_extractor=feature_extractor,
                              num_gpu=num_gpu,
-                             visualization_file_names=visualization_file_names)
+                             visualization_file_names=visualization_file_names,
+                             eval_dir='eval_' + eval_split_name)
   else:
     assert(False)

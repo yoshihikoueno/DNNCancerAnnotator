@@ -10,11 +10,12 @@ from utils import image_utils
 class VisualizationHook(tf.train.SessionRunHook):
   def __init__(self, result_folder, visualization_file_names,
                file_name, image_decoded, annotation_decoded, annotation_mask,
-               predicted_mask):
+               predicted_mask, eval_dir):
     assert(len(predicted_mask.get_shape()) == 3)
     self.visualization_file_names = visualization_file_names
     self.result_folder = result_folder
     self.file_name = file_name
+    self.eval_dir = eval_dir
 
     target_size = predicted_mask.get_shape().as_list()[1:3]
 
@@ -45,7 +46,7 @@ class VisualizationHook(tf.train.SessionRunHook):
 
     # Estimator writes summaries to the eval subfolder
     summary_writer = tf.summary.FileWriterCache.get(
-      os.path.join(self.result_folder, 'eval'))
+      os.path.join(self.result_folder, self.eval_dir))
 
     for batch_index in range(len(combined_image_res)):
       file_name = file_name_res[batch_index].decode('utf-8')
@@ -67,11 +68,12 @@ class VisualizationHook(tf.train.SessionRunHook):
 
 class PatientMetricHook(tf.train.SessionRunHook):
   def __init__(self, statistics_dict, patient_id, result_folder,
-               tp_thresholds):
+               tp_thresholds, eval_dir):
     self.statistics_dict = statistics_dict
     self.patient_id = patient_id
     self.result_folder = result_folder
     self.tp_thresholds = tp_thresholds
+    self.eval_dir = eval_dir
 
     self.patient_statistics = dict()
 
@@ -126,7 +128,7 @@ class PatientMetricHook(tf.train.SessionRunHook):
       population_tn[threshold] = 0
 
     summary_writer = tf.summary.FileWriterCache.get(
-      os.path.join(self.result_folder, 'eval'))
+      os.path.join(self.result_folder, self.eval_dir))
     global_step = tf.train.get_global_step().eval(session=session)
 
     for patient_id, statistics in self.patient_statistics.items():

@@ -135,7 +135,7 @@ def main(_):
   eval_spec = tf.estimator.EvalSpec(
     input_fn=eval_input_fn,
     steps=None if FLAGS.num_eval_steps <= 0 else FLAGS.num_eval_steps,
-    start_delay_secs=0, throttle_secs=0, name='val_eval')
+    start_delay_secs=0, throttle_secs=0, name=standard_fields.SplitNames.val)
 
   tf.estimator.train_and_evaluate(estimator=estimator,
                                   train_spec=train_spec, eval_spec=eval_spec)
@@ -147,8 +147,17 @@ def main(_):
     split_name=standard_fields.SplitNames.train,
     is_training=False)
 
-  tf.estimator.evaluate(input_fn=train_eval_input_fn, steps=None,
-                        name='train_eval')
+  estimator = estimator_builder.build_estimator(
+    pipeline_config=pipeline_config, result_dir=FLAGS.result_dir,
+    dataset_info=dataset_info,
+    eval_split_name=standard_fields.SplitNames.train,
+    warm_start_path=FLAGS.result_dir if FLAGS.warm_start else None,
+    train_distribution=train_distribution,
+    eval_distribution=eval_distribution, num_gpu=num_gpu,
+    warm_start_ckpt_name=None)
+
+  estimator.evaluate(input_fn=train_eval_input_fn, steps=None,
+                     name=standard_fields.SplitNames.train)
 
 
 if __name__ == '__main__':
