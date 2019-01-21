@@ -115,11 +115,13 @@ def main(_):
   if pipeline_config.train_config.early_stopping:
     early_stop_hook = tf.contrib.estimator.stop_if_no_decrease_hook(
       estimator=estimator, metric_name='loss',
-      max_steps_without_decrease=pipeline_config.train_config.
-      early_stopping_max_steps_without_decrease,
+      max_steps_without_decrease=pipeline_config.
+      train_config.early_stopping_max_steps_without_decrease,
       min_steps=pipeline_config.train_config.early_stopping_min_steps,
       run_every_secs=pipeline_config.train_config.
-      early_stopping_run_every_secs)
+      early_stopping_run_every_secs,
+      eval_dir=os.path.join(FLAGS.result_dir,
+                            'eval_' + standard_fields.SplitNames.val))
   else:
     early_stop_hook = None
 
