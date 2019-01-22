@@ -66,7 +66,7 @@ def apply_data_augmentation(data_augmentation_options, images, gt_masks,
     elif augmentation_type == 'random_hue':
       images = tf.map_fn(
         functools.partial(tf.image.random_hue,
-                          max_hue=step.random_hue.max_delta), elems=images,
+                          max_delta=step.random_hue.max_delta), elems=images,
         parallel_iterations=num_parallel_iterations)
 
     elif augmentation_type == 'random_saturation':
@@ -79,7 +79,7 @@ def apply_data_augmentation(data_augmentation_options, images, gt_masks,
     elif augmentation_type == 'random_brightness':
       images = tf.map_fn(
         functools.partial(tf.image.random_brightness,
-                          max_hue=step.random_brightness.max_delta),
+                          max_delta=step.random_brightness.max_delta),
         elems=images, parallel_iterations=num_parallel_iterations)
 
     elif augmentation_type == 'random_warp':
