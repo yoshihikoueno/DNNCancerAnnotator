@@ -8,8 +8,8 @@ def get_pooling_params():
 def get_conv_params(use_relu, weight_decay):
   res = {'data_format': 'channels_last', 'dilation_rate': 1,
          'use_bias': True,
-         'kernel_regularizer': tf.keras.regularizers.l2(weight_decay),
-         'bias_initializer': 'zeros', 'bias_regularizer': None,
+         'kernel_regularizer': tf.contrib.layers.l2_regularizer(weight_decay),
+         'bias_initializer': tf.zeros_initializer(), 'bias_regularizer': None,
          'activity_regularizer': None}
   if use_relu:
     # Variance Scaling is best for relu activations
@@ -28,8 +28,8 @@ def get_conv_params(use_relu, weight_decay):
 def get_conv_transpose_params(weight_decay):
   res = {'data_format': 'channels_last', 'dilation_rate': 1,
          'use_bias': True,
-         'kernel_regularizer': tf.keras.regularizers.l2(weight_decay),
-         'bias_initializer': 'zeros', 'bias_regularizer': None,
+         'kernel_regularizer': tf.contrib.layers.l2_regularizer(weight_decay),
+         'bias_initializer': tf.zeros_initializer(), 'bias_regularizer': None,
          'activity_regularizer': None, 'activation': None,
          'kernel_initializer': tf.keras.initializers.VarianceScaling(
            scale=2.0)}
@@ -44,9 +44,9 @@ def get_batch_norm_params(momentum, epsilon):
 
 def conv_2d(inputs, filters, kernel_size, strides, padding, conv_params,
             batch_norm_params, is_training, name=None):
-  res = tf.keras.layers.Conv2D(
-    filters=filters, kernel_size=kernel_size, strides=strides,
-    padding=padding, name=name, **conv_params)(inputs)
+  res = tf.layers.conv2d(
+    inputs, filters=filters, kernel_size=kernel_size, strides=strides,
+    padding=padding, name=name, **conv_params)
 
   if batch_norm_params:
     axis = -1 if conv_params['data_format'] == 'channels_last' else 1
@@ -60,9 +60,9 @@ def conv_2d(inputs, filters, kernel_size, strides, padding, conv_params,
 def conv_2d_transpose(inputs, filters, kernel_size, strides, padding,
                       conv_params, batch_norm_params,
                       is_training, name=None):
-  res = tf.keras.layers.Conv2DTranspose(
-    filters=filters, kernel_size=kernel_size, strides=strides,
-    padding=padding, name=name, **conv_params)(inputs)
+  res = tf.layers.conv2d_transpose(
+    inputs=inputs, filters=filters, kernel_size=kernel_size, strides=strides,
+    padding=padding, name=name, **conv_params)
 
   if batch_norm_params:
     axis = -1 if conv_params['data_format'] == 'channels_last' else 1
