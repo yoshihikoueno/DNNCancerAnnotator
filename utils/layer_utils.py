@@ -8,7 +8,8 @@ def get_pooling_params():
 def get_conv_params(use_relu, weight_decay):
   res = {'data_format': 'channels_last', 'dilation_rate': 1,
          'use_bias': True,
-         'kernel_regularizer': tf.contrib.layers.l2_regularizer(weight_decay),
+         'kernel_regularizer': (tf.contrib.layers.l2_regularizer(weight_decay)
+                                if weight_decay > 0 else None),
          'bias_initializer': tf.zeros_initializer(), 'bias_regularizer': None,
          'activity_regularizer': None}
   if use_relu:
@@ -26,9 +27,10 @@ def get_conv_params(use_relu, weight_decay):
 
 
 def get_conv_transpose_params(weight_decay):
-  res = {'data_format': 'channels_last', 'dilation_rate': 1,
+  res = {'data_format': 'channels_last',
          'use_bias': True,
-         'kernel_regularizer': tf.contrib.layers.l2_regularizer(weight_decay),
+         'kernel_regularizer': (tf.contrib.layers.l2_regularizer(weight_decay)
+                                if weight_decay > 0 else None),
          'bias_initializer': tf.zeros_initializer(), 'bias_regularizer': None,
          'activity_regularizer': None, 'activation': None,
          'kernel_initializer': tf.keras.initializers.VarianceScaling(
