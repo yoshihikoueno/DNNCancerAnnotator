@@ -93,8 +93,7 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
   assert(annotation_mask_batch.get_shape().as_list()[:3]
          == network_output.get_shape().as_list()[:3])
 
-  if (mode == tf.estimator.ModeKeys.TRAIN
-      and pipeline_config.train_config.loss.use_weighted):
+  if (pipeline_config.train_config.loss.use_weighted):
     patient_ratio = dataset_info[
       standard_fields.PickledDatasetInfo.patient_ratio]
     cancer_pixels = tf.reduce_sum(tf.to_float(annotation_mask_batch))
@@ -103,7 +102,8 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
 
     batch_pixel_ratio = tf.div(healthy_pixels, cancer_pixels + 1.0)
 
-    loss_weight = batch_pixel_ratio * patient_ratio
+    loss_weight = ((batch_pixel_ratio * patient_ratio)
+                   + pipeline_config.train_config.loss.weight_constant_add)
   else:
     loss_weight = tf.constant(1.0)
 
