@@ -6,4 +6,5 @@ message Loss {
   optional string name = 1;
   optional bool use_weighted = 2;
   optional float weight_constant_add = 3;
+  optional float weight_constant_multiply = 4;
 }
