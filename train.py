@@ -53,7 +53,7 @@ def main(_):
     raise ValueError("Result directory does not exist!")
 
   if FLAGS.warm_start:
-    pipeline_config_file = FLAGS.result_dir, 'pipeline_config'
+    pipeline_config_file = os.path.join(FLAGS.result_dir, 'pipeline.config')
   else:
     pipeline_config_file = FLAGS.pipeline_config_file
 
