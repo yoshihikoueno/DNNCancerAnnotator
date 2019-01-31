@@ -144,6 +144,7 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
       # Reenable once they fixed the bugs
       logging.warn(
         'EMA is currently not supported with tf DistributionStrategy.')
+      exit(1)
       pipeline_config.train_config.optimizer.use_moving_average = False
       # The swapping saver will swap the trained variables with their moving
       # averages before saving, thus removing the need to care for moving

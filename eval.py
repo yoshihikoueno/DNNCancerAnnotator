@@ -114,10 +114,8 @@ def main(_):
   estimator = estimator_builder.build_estimator(
     pipeline_config=pipeline_config, result_dir=result_folder,
     dataset_info=dataset_info,
-    eval_split_name=FLAGS.split_name,
-    warm_start_path=FLAGS.checkpoint_dir, train_distribution=None,
-    eval_distribution=distribution, num_gpu=num_gpu,
-    warm_start_ckpt_name=FLAGS.checkpoint_name)
+    eval_split_name=FLAGS.split_name, train_distribution=None,
+    eval_distribution=distribution, num_gpu=num_gpu)
 
   if FLAGS.num_steps > 0:
     num_steps = FLAGS.num_steps

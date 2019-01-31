@@ -5,6 +5,7 @@ import xml.etree.ElementTree
 import logging
 import sys
 import multiprocessing
+import os
 
 import numpy as np
 import tensorflow as tf
@@ -62,9 +63,9 @@ def init_logger(folder=None, resume=None):
 
   if folder:
     if resume:
-      fh = logging.FileHandler(folder + '/log', mode='a')
+      fh = logging.FileHandler(os.path.join(folder, 'log'), mode='a')
     else:
-      fh = logging.FileHandler(folder + '/log', mode='w')
+      fh = logging.FileHandler(os.path.join(folder, 'log'), mode='w')
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(formatter)
     logging.getLogger().addHandler(fh)

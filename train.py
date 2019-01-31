@@ -21,7 +21,7 @@ flags.DEFINE_string('result_dir', '', 'Path to the folder, in which to'
                                       'create the result folder.')
 flags.DEFINE_string('prefix', '', 'An optional prefix for the result'
                                   'folder name.')
-flags.DEFINE_bool('warm_start', False, 'Whether to resume training from a '
+flags.DEFINE_bool('resume', False, 'Whether to resume training from a '
                                    'previous checkpoint. If true, there'
                                    'will be no new result folder created')
 flags.DEFINE_bool('pdb', False, 'Whether to use pdb debugging functionality.')
@@ -52,7 +52,7 @@ def main(_):
   if not os.path.isdir(FLAGS.result_dir):
     raise ValueError("Result directory does not exist!")
 
-  if FLAGS.warm_start:
+  if FLAGS.resume:
     pipeline_config_file = os.path.join(FLAGS.result_dir, 'pipeline.config')
   else:
     pipeline_config_file = FLAGS.pipeline_config_file
@@ -62,7 +62,7 @@ def main(_):
   np.random.seed(pipeline_config.seed)
   tf.set_random_seed(pipeline_config.seed)
 
-  if not FLAGS.warm_start:
+  if not FLAGS.resume:
     if FLAGS.prefix:
       FLAGS.prefix += '_'
     # Create the new result folder.
@@ -74,7 +74,7 @@ def main(_):
     copy(pipeline_config_file, os.path.join(FLAGS.result_dir,
                                             'pipeline.config'))
 
-  util_ops.init_logger(FLAGS.result_dir, FLAGS.warm_start)
+  util_ops.init_logger(FLAGS.result_dir, FLAGS.resume)
 
   logging.info("Command line arguments: {}".format(sys.argv))
 
@@ -99,7 +99,7 @@ def main(_):
 
   train_input_fn, dataset_info = setup_utils.get_input_fn(
     pipeline_config=pipeline_config, directory=FLAGS.result_dir,
-    existing_tfrecords=FLAGS.warm_start,
+    existing_tfrecords=FLAGS.resume,
     split_name=standard_fields.SplitNames.train,
     is_training=True)
 
@@ -107,10 +107,8 @@ def main(_):
     pipeline_config=pipeline_config, result_dir=FLAGS.result_dir,
     dataset_info=dataset_info,
     eval_split_name=standard_fields.SplitNames.val,
-    warm_start_path=FLAGS.result_dir if FLAGS.warm_start else None,
     train_distribution=train_distribution,
-    eval_distribution=eval_distribution, num_gpu=num_gpu,
-    warm_start_ckpt_name=None)
+    eval_distribution=eval_distribution, num_gpu=num_gpu)
 
   if pipeline_config.train_config.early_stopping:
     early_stop_hook = tf.contrib.estimator.stop_if_no_decrease_hook(
@@ -153,10 +151,8 @@ def main(_):
     pipeline_config=pipeline_config, result_dir=FLAGS.result_dir,
     dataset_info=dataset_info,
     eval_split_name=standard_fields.SplitNames.train,
-    warm_start_path=FLAGS.result_dir if FLAGS.warm_start else None,
     train_distribution=train_distribution,
-    eval_distribution=eval_distribution, num_gpu=num_gpu,
-    warm_start_ckpt_name=None)
+    eval_distribution=eval_distribution, num_gpu=num_gpu)
 
   estimator.evaluate(input_fn=train_eval_input_fn, steps=None,
                      name=standard_fields.SplitNames.train)
