@@ -12,6 +12,7 @@ from utils import metric_utils
 from utils import image_utils
 from utils import util_ops
 from builders import optimizer_builder
+from builders import activation_fn_builder
 
 
 def _extract_patient_id(file_name):
@@ -73,7 +74,8 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
     num_classes=num_classes,
     use_batch_norm=pipeline_config.model.use_batch_norm,
     bn_momentum=pipeline_config.model.batch_norm_momentum,
-    bn_epsilon=pipeline_config.model.batch_norm_epsilon)
+    bn_epsilon=pipeline_config.model.batch_norm_epsilon,
+    activation_fn=activation_fn_builder.build(pipeline_config.model))
 
   # Record model variable summaries
   for var in tf.trainable_variables():

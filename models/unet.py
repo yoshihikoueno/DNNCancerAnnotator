@@ -15,8 +15,10 @@ class UNet(object):
     self.filter_sizes = filter_sizes
 
   def _downsample_block(self, inputs, nb_filters, is_training, use_batch_norm,
-                        bn_momentum, bn_epsilon):
-    conv_params = lu.get_conv_params(use_relu=True,
+                        bn_momentum, bn_epsilon, activation_fn):
+    assert(activation_fn is not None)
+
+    conv_params = lu.get_conv_params(activation_fn=activation_fn,
                                      weight_decay=self.weight_decay)
     if use_batch_norm:
       batch_norm_params = lu.get_batch_norm_params(momentum=bn_momentum,
@@ -40,10 +42,13 @@ class UNet(object):
                                         **pool_params)
 
   def _upsample_block(self, inputs, downsample_reference, nb_filters,
-                      is_training, use_batch_norm, bn_momentum, bn_epsilon):
+                      is_training, use_batch_norm, bn_momentum, bn_epsilon,
+                      activation_fn):
+    assert(activation_fn is not None)
+
     conv_transposed_params = lu.get_conv_transpose_params(
       weight_decay=self.weight_decay)
-    conv_params = lu.get_conv_params(use_relu=True,
+    conv_params = lu.get_conv_params(activation_fn=activation_fn,
                                      weight_decay=self.weight_decay)
     if use_batch_norm:
       batch_norm_params = lu.get_batch_norm_params(momentum=bn_momentum,
@@ -82,15 +87,18 @@ class UNet(object):
     return net
 
   def build_network(self, image_batch, is_training, num_classes,
-                    use_batch_norm, bn_momentum, bn_epsilon):
+                    use_batch_norm, bn_momentum, bn_epsilon, activation_fn):
     print(image_batch)
+    assert(activation_fn is not None)
 
-    ds_fn = functools.partial(self._downsample_block, is_training=is_training,
-                              use_batch_norm=use_batch_norm,
-                              bn_momentum=bn_momentum, bn_epsilon=bn_epsilon)
-    us_fn = functools.partial(self._upsample_block, is_training=is_training,
-                              use_batch_norm=use_batch_norm,
-                              bn_momentum=bn_momentum, bn_epsilon=bn_epsilon)
+    ds_fn = functools.partial(
+      self._downsample_block, is_training=is_training,
+      use_batch_norm=use_batch_norm, bn_momentum=bn_momentum,
+      bn_epsilon=bn_epsilon, activation_fn=activation_fn)
+    us_fn = functools.partial(
+      self._upsample_block, is_training=is_training,
+      use_batch_norm=use_batch_norm, bn_momentum=bn_momentum,
+      bn_epsilon=bn_epsilon, activation_fn=activation_fn)
 
     with tf.variable_scope('UNet'):
       ds_references = []
@@ -118,7 +126,7 @@ class UNet(object):
             nb_filters=filter_size)
           print(us)
 
-      conv_params = lu.get_conv_params(use_relu=False,
+      conv_params = lu.get_conv_params(activation_fn=None,
                                        weight_decay=self.weight_decay)
 
       final = lu.conv_2d(inputs=us, filters=num_classes, kernel_size=1,

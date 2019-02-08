@@ -1,0 +1,17 @@
+syntax = "proto2";
+
+package netng.protos;
+
+message ActivationFunction {
+  oneof activation_fn {
+    Relu relu = 10;
+    LeakyRelu leaky_relu = 11;
+  }
+}
+
+message Relu {
+}
+
+message LeakyRelu {
+  optional float alpha = 1[default=0.2];
+}

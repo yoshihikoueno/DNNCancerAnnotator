@@ -5,22 +5,15 @@ def get_pooling_params():
   return {'data_format': 'channels_last'}
 
 
-def get_conv_params(use_relu, weight_decay):
+def get_conv_params(activation_fn, weight_decay):
   res = {'data_format': 'channels_last', 'dilation_rate': 1,
          'use_bias': True,
          'kernel_regularizer': (tf.contrib.layers.l2_regularizer(weight_decay)
                                 if weight_decay > 0 else None),
          'bias_initializer': tf.zeros_initializer(), 'bias_regularizer': None,
-         'activity_regularizer': None}
-  if use_relu:
-    # Variance Scaling is best for relu activations
-    res['activation'] = 'relu'
-    res['kernel_initializer'] = tf.keras.initializers.VarianceScaling(
-      scale=2.0)
-  else:
-    #res['kernel_initializer'] = tf.keras.initializers.glorot_uniform()
-    res['activation'] = None
-    res['kernel_initializer'] = tf.keras.initializers.VarianceScaling(
+         'activity_regularizer': None, 'activation': activation_fn}
+
+  res['kernel_initializer'] = tf.keras.initializers.VarianceScaling(
       scale=2.0)
 
   return res
