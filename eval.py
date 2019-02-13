@@ -32,10 +32,10 @@ flags.DEFINE_bool('continuous', False, 'Whether to keep the process alive and '
                   'query for new checkpoints at a certain interval')
 flags.DEFINE_string('split_name', '', 'train, val, or test')
 flags.DEFINE_bool('pdb', False, 'Whether to use pdb debugging functionality.')
+flags.DEFINE_bool('use_gpu', True, 'Whether to use GPU')
 flags.DEFINE_integer('num_steps', 0,
                      'For debugging purposes, a possible limit to '
                      'the number of steps. 0 means no limit')
-flags.DEFINE_integer('num_gpu', 0, 'Number of GPUs to use.')
 flags.DEFINE_integer('visible_device_index', -1, 'Index of the visible device')
 
 FLAGS = flags.FLAGS
@@ -55,14 +55,19 @@ def main(_):
     debugger = pdb.Pdb(stdout=sys.__stdout__)
     debugger.set_trace()
 
-  os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-  if FLAGS.num_gpu == 0:
-    os.environ["CUDA_VISIBLE_DEVICES"] = ''
-  else:
-    if FLAGS.visible_device_index != -1:
-      assert(FLAGS.num_gpu == 1)
-      os.environ["CUDA_VISIBLE_DEVICES"] = '{}'.format(
-        FLAGS.visible_device_index)
+  # Get the number of GPU from env
+  num_gpu = 0
+  if FLAGS.use_gpu:
+    if 'CUDA_VISIBLE_DEVICES' in os.environ:
+      index_list = os.environ['CUDA_VISIBLE_DEVICES']
+      index_list = index_list.split(',')
+      if len(index_list) == 1 and index_list[0] == '':
+        # No indices set, use all GPUs available
+        num_gpu = len(util_ops.get_devices())
+      else:
+        num_gpu = len(index_list)
+    else:
+      num_gpu = len(util_ops.get_devices())
 
   if not os.path.isdir(FLAGS.checkpoint_dir):
     raise ValueError("Checkpoint directory does not exist!")
@@ -90,16 +95,6 @@ def main(_):
   # Init Logger
   util_ops.init_logger(result_folder)
   logging.info("Command line arguments: {}".format(sys.argv))
-
-  num_gpu = FLAGS.num_gpu
-  if num_gpu <= -1:
-    num_gpu = None
-  real_gpu_nb = len(util_ops.get_devices())
-  if num_gpu is not None:
-    if num_gpu > real_gpu_nb:
-      raise ValueError("Too many GPUs specified!")
-  else:
-    num_gpu = real_gpu_nb
 
   if num_gpu > 1:
     distribution = tf.contrib.distribute.MirroredStrategy(num_gpus=num_gpu)

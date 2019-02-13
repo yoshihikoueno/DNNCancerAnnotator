@@ -25,9 +25,7 @@ flags.DEFINE_bool('resume', False, 'Whether to resume training from a '
                                    'previous checkpoint. If true, there'
                                    'will be no new result folder created')
 flags.DEFINE_bool('pdb', False, 'Whether to use pdb debugging functionality.')
-flags.DEFINE_integer('num_gpu', -1, 'Number of GPUs to use. '
-                     '-1 to use all available')
-flags.DEFINE_integer('visible_device_index', -1, 'Index of the visible device')
+flags.DEFINE_bool('use_gpu', True, 'Whether to use GPU')
 flags.DEFINE_integer('num_train_steps', -1, 'Number of max training steps')
 flags.DEFINE_integer('num_eval_steps', -1, 'Number of max eval steps')
 
@@ -40,14 +38,19 @@ def main(_):
     debugger = pdb.Pdb(stdout=sys.__stdout__)
     debugger.set_trace()
 
-  os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-  if FLAGS.num_gpu == 0:
-    os.environ["CUDA_VISIBLE_DEVICES"] = ''
-  else:
-    if FLAGS.visible_device_index != -1:
-      assert(FLAGS.num_gpu == 1)
-      os.environ["CUDA_VISIBLE_DEVICES"] = '{}'.format(
-        FLAGS.visible_device_index)
+  # Get the number of GPU from env
+  num_gpu = 0
+  if FLAGS.use_gpu:
+    if 'CUDA_VISIBLE_DEVICES' in os.environ:
+      index_list = os.environ['CUDA_VISIBLE_DEVICES']
+      index_list = index_list.split(',')
+      if len(index_list) == 1 and index_list[0] == '':
+        # No indices set, use all GPUs available
+        num_gpu = len(util_ops.get_devices())
+      else:
+        num_gpu = len(index_list)
+    else:
+      num_gpu = len(util_ops.get_devices())
 
   if not os.path.isdir(FLAGS.result_dir):
     raise ValueError("Result directory does not exist!")
@@ -77,16 +80,6 @@ def main(_):
   util_ops.init_logger(FLAGS.result_dir, FLAGS.resume)
 
   logging.info("Command line arguments: {}".format(sys.argv))
-
-  num_gpu = FLAGS.num_gpu
-  if num_gpu <= -1:
-    num_gpu = None
-  real_gpu_nb = len(util_ops.get_devices())
-  if num_gpu is not None:
-    if num_gpu > real_gpu_nb:
-      raise ValueError("Too many GPUs specified!")
-  else:
-    num_gpu = real_gpu_nb
 
   if num_gpu > 1:
     train_distribution = tf.contrib.distribute.MirroredStrategy(
