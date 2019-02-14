@@ -4,7 +4,6 @@ import functools
 import logging
 import pickle
 import itertools
-import multiprocessing
 
 import numpy as np
 import tensorflow as tf
@@ -532,18 +531,16 @@ def build_tfrecords_from_files(
 
       elem_batch = it.get_next()
 
-      # For some weird reason, if we set the number of processes to something
-      # other than 4, the pool will deadlock in the map call later
-      pool = multiprocessing.Pool(processes=4)
-
       while True:
         try:
           elem_batch_result = sess.run(elem_batch)
 
           elem_batch_serialized = list(zip(*elem_batch_result.values()))
 
-          elem_batch_serialized = pool.map(_serialize_example,
-                                           elem_batch_serialized)
+          # Unfortunately for some reason we cannot use multiprocessing here.
+          # Sometimes the map call will freeze
+          elem_batch_serialized = map(_serialize_example,
+                                      elem_batch_serialized)
 
           for i, elem_serialized in enumerate(elem_batch_serialized):
             writer_dict[elem_batch_result[
@@ -551,8 +548,6 @@ def build_tfrecords_from_files(
                 'utf-8')].write(elem_serialized)
         except tf.errors.OutOfRangeError:
           break
-
-      pool.close()
 
       for writer in writer_dict.values():
         writer.close()
