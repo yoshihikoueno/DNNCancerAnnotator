@@ -526,19 +526,22 @@ def build_tfrecords_from_files(
           itertools.chain.from_iterable(data.values())))]))
       dataset = dataset.map(_parse_from_file,
                             num_parallel_calls=util_ops.get_cpu_count())
-      dataset = dataset.batch(512)
+      dataset = dataset.batch(40)
 
       it = dataset.make_one_shot_iterator()
 
       elem_batch = it.get_next()
 
-      pool = multiprocessing.Pool(processes=util_ops.get_cpu_count())
+      # For some weird reason, if we set the number of processes to something
+      # other than 4, the pool will deadlock in the map call later
+      pool = multiprocessing.Pool(processes=4)
 
       while True:
         try:
           elem_batch_result = sess.run(elem_batch)
 
           elem_batch_serialized = list(zip(*elem_batch_result.values()))
+
           elem_batch_serialized = pool.map(_serialize_example,
                                            elem_batch_serialized)
 
@@ -549,10 +552,10 @@ def build_tfrecords_from_files(
         except tf.errors.OutOfRangeError:
           break
 
+      pool.close()
+
       for writer in writer_dict.values():
         writer.close()
-
-      pool.close()
 
   logging.info("Finished creating patient tfrecords.")
   f = open(os.path.join(
