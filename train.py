@@ -2,7 +2,6 @@ import logging
 import os
 import sys
 import pdb
-from datetime import datetime
 from shutil import copy
 
 import numpy as np
@@ -17,17 +16,14 @@ flags = tf.app.flags
 flags.DEFINE_string('pipeline_config_file', '',
                     'Path to the pipeline config file. If resume is true,'
                     ' will take pipeline config from result_dir instead.')
-flags.DEFINE_string('result_dir', '', 'Path to the folder, in which to'
-                                      'create the result folder.')
-flags.DEFINE_string('prefix', '', 'An optional prefix for the result'
-                                  'folder name.')
-flags.DEFINE_bool('resume', False, 'Whether to resume training from a '
-                                   'previous checkpoint. If true, there'
-                                   'will be no new result folder created')
+flags.DEFINE_string(
+  'result_dir', '', 'Path to the result folder. '
+  'If it already exists, it is assumed that training is resumed')
 flags.DEFINE_bool('pdb', False, 'Whether to use pdb debugging functionality.')
-flags.DEFINE_bool('use_gpu', True, 'Whether to use GPU')
+flags.DEFINE_bool('no_gpu', False, 'Whether to use GPU')
 flags.DEFINE_integer('num_train_steps', -1, 'Number of max training steps')
-flags.DEFINE_integer('num_eval_steps', -1, 'Number of max eval steps')
+flags.DEFINE_integer('num_eval_steps', -1, 'Number of max eval steps'
+                     '-1 for evaluating whole data split.')
 
 FLAGS = flags.FLAGS
 
@@ -40,7 +36,9 @@ def main(_):
 
   # Get the number of GPU from env
   num_gpu = 0
-  if FLAGS.use_gpu:
+  if FLAGS.no_gpu:
+    os.environ['CUDA_VISIBLE_DEVICES'] = ''
+  else:
     if 'CUDA_VISIBLE_DEVICES' in os.environ:
       index_list = os.environ['CUDA_VISIBLE_DEVICES']
       index_list = index_list.split(',')
@@ -52,10 +50,14 @@ def main(_):
     else:
       num_gpu = len(util_ops.get_devices())
 
-  if not os.path.isdir(FLAGS.result_dir):
-    raise ValueError("Result directory does not exist!")
+  if os.path.exists(FLAGS.result_dir):
+    if not os.path.isdir(FLAGS.result_dir):
+      raise ValueError("Invalid result directory.")
+    resume_training = True
+  else:
+    resume_training = False
 
-  if FLAGS.resume:
+  if resume_training:
     pipeline_config_file = os.path.join(FLAGS.result_dir, 'pipeline.config')
   else:
     pipeline_config_file = FLAGS.pipeline_config_file
@@ -65,19 +67,12 @@ def main(_):
   np.random.seed(pipeline_config.seed)
   tf.set_random_seed(pipeline_config.seed)
 
-  if not FLAGS.resume:
-    if FLAGS.prefix:
-      FLAGS.prefix += '_'
-    # Create the new result folder.
-    result_folder_name = FLAGS.prefix + 'train_{}_{}'.format(
-      os.path.basename(pipeline_config.dataset.dataset_path),
-      datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
-    FLAGS.result_dir = os.path.join(FLAGS.result_dir, result_folder_name)
+  if not resume_training:
     os.mkdir(FLAGS.result_dir)
     copy(pipeline_config_file, os.path.join(FLAGS.result_dir,
                                             'pipeline.config'))
 
-  util_ops.init_logger(FLAGS.result_dir, FLAGS.resume)
+  util_ops.init_logger(FLAGS.result_dir, resume_training)
 
   logging.info("Command line arguments: {}".format(sys.argv))
 
@@ -92,7 +87,7 @@ def main(_):
 
   train_input_fn, dataset_info = setup_utils.get_input_fn(
     pipeline_config=pipeline_config, directory=FLAGS.result_dir,
-    existing_tfrecords=FLAGS.resume,
+    existing_tfrecords=resume_training,
     split_name=standard_fields.SplitNames.train,
     is_training=True)
 
