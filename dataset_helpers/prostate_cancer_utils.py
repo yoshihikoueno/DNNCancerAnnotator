@@ -539,8 +539,8 @@ def build_tfrecords_from_files(
 
           # Unfortunately for some reason we cannot use multiprocessing here.
           # Sometimes the map call will freeze
-          elem_batch_serialized = map(_serialize_example,
-                                      elem_batch_serialized)
+          elem_batch_serialized = list(map(_serialize_example,
+                                           elem_batch_serialized))
 
           for i, elem_serialized in enumerate(elem_batch_serialized):
             writer_dict[elem_batch_result[
