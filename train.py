@@ -14,7 +14,7 @@ from builders import estimator_builder
 
 flags = tf.app.flags
 flags.DEFINE_string('pipeline_config_file', '',
-                    'Path to the pipeline config file. If resume is true,'
+                    'Path to the pipeline config file. If result_dir exists,'
                     ' will take pipeline config from result_dir instead.')
 flags.DEFINE_string(
   'result_dir', '', 'Path to the result folder. '
@@ -50,7 +50,8 @@ def main(_):
     else:
       num_gpu = len(util_ops.get_devices())
 
-  if os.path.exists(FLAGS.result_dir):
+  if os.path.exists(FLAGS.result_dir) and os.path.exists(os.path.join(
+      FLAGS.result_dir, 'pipeline.config')):
     if not os.path.isdir(FLAGS.result_dir):
       raise ValueError("Invalid result directory.")
     resume_training = True
@@ -68,7 +69,8 @@ def main(_):
   tf.set_random_seed(pipeline_config.seed)
 
   if not resume_training:
-    os.mkdir(FLAGS.result_dir)
+    if not os.path.exists(FLAGS.result_dir):
+      os.mkdir(FLAGS.result_dir)
     copy(pipeline_config_file, os.path.join(FLAGS.result_dir,
                                             'pipeline.config'))
 
