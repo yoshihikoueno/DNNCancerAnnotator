@@ -534,21 +534,24 @@ def build_tfrecords_from_files(
 
       elem_batch = it.get_next()
 
-      for elem_batch in dataset:
-        elem_batch_result = sess.run(elem_batch)
-        keys = list(elem_batch_result.keys())
-        elem_batch_serialized = list(zip(*elem_batch_result.values()))
+      while True:
+        try:
+          elem_batch_result = sess.run(elem_batch)
+          keys = list(elem_batch_result.keys())
+          elem_batch_serialized = list(zip(*elem_batch_result.values()))
 
-        # Unfortunately for some reason we cannot use multiprocessing here.
-        # Sometimes the map call will freeze
-        elem_batch_serialized = list(map(
-          lambda v: _serialize_example(keys, v),
-          elem_batch_serialized))
+          # Unfortunately for some reason we cannot use multiprocessing here.
+          # Sometimes the map call will freeze
+          elem_batch_serialized = list(map(
+            lambda v: _serialize_example(keys, v),
+            elem_batch_serialized))
 
-        for i, elem_serialized in enumerate(elem_batch_serialized):
-          writer_dict[elem_batch_result[
-            standard_fields.TfExampleFields.patient_id][i].decode(
-              'utf-8')].write(elem_serialized)
+          for i, elem_serialized in enumerate(elem_batch_serialized):
+            writer_dict[elem_batch_result[
+              standard_fields.TfExampleFields.patient_id][i].decode(
+                'utf-8')].write(elem_serialized)
+        except tf.errors.OutOfRangeError:
+          break
 
       for writer in writer_dict.values():
         writer.close()
