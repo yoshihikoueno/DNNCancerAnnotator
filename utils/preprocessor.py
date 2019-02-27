@@ -102,7 +102,8 @@ def _random_warp(images, masks):
     equal_shape_assert = tf.Assert(True, data=[])
 
   with tf.control_dependencies([equal_shape_assert]):
-    warp_pts = tf.reduce_min(images.get_shape()[1:3]) / tf.constant(2.0)
+    warp_pts = tf.cast(tf.divide(tf.reduce_min(images.get_shape()[1:3]), 2),
+                       tf.int32)
     src_control_pts = tf.stack([
       tf.random_uniform([images.get_shape()[0], warp_pts], minval=0,
                         maxval=images.get_shape().as_list()[1]),
