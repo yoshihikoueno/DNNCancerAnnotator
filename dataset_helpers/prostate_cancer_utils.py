@@ -423,14 +423,17 @@ def _load_from_files(dataset_path, dataset_type, balance_classes,
   return data_dict, pickle_data
 
 
-def _serialize_example(example):
-  patient_id = example[0]
-  slice_id = example[1]
-  image_file = example[2]
-  image_encoded = example[3]
-  annotation_file = example[4]
-  annotation_encoded = example[5]
-  label = example[6]
+def _serialize_example(keys, example):
+  patient_id = example[keys.index(standard_fields.TfExampleFields.patient_id)]
+  slice_id = example[keys.index(standard_fields.TfExampleFields.slice_id)]
+  image_file = example[keys.index(standard_fields.TfExampleFields.image_file)]
+  image_encoded = example[keys.index(
+    standard_fields.TfExampleFields.image_encoded)]
+  annotation_file = example[keys.index(
+    standard_fields.TfExampleFields.annotation_file)]
+  annotation_encoded = example[keys.index(
+    standard_fields.TfExampleFields.annotation_encoded)]
+  label = example[keys.index(standard_fields.TfExampleFields.label)]
 
   feature = {
     standard_fields.TfExampleFields.patient_id: dh.bytes_feature(
@@ -534,13 +537,14 @@ def build_tfrecords_from_files(
       while True:
         try:
           elem_batch_result = sess.run(elem_batch)
-
+          keys = list(elem_batch_result.keys())
           elem_batch_serialized = list(zip(*elem_batch_result.values()))
 
           # Unfortunately for some reason we cannot use multiprocessing here.
           # Sometimes the map call will freeze
-          elem_batch_serialized = list(map(_serialize_example,
-                                           elem_batch_serialized))
+          elem_batch_serialized = list(map(
+            lambda v: _serialize_example(keys, v),
+            elem_batch_serialized))
 
           for i, elem_serialized in enumerate(elem_batch_serialized):
             writer_dict[elem_batch_result[
