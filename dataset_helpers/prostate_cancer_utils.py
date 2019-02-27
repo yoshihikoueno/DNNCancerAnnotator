@@ -14,23 +14,23 @@ from dataset_helpers import helpers as dh
 
 
 # groundtruth = [HxW]
-def split_groundtruth_mask(groundtruth_mask):
-  assert(len(groundtruth_mask.get_shape()) == 2)
+# def split_groundtruth_mask(groundtruth_mask):
+#   assert(len(groundtruth_mask.get_shape()) == 2)
 
-  # Label each cancer area with individual index
-  components = tf.contrib.image.connected_components(groundtruth_mask)
+#   # Label each cancer area with individual index
+#   components = tf.contrib.image.connected_components(groundtruth_mask)
 
-  unique_ids, unique_indices = tf.unique(tf.reshape(components, [-1]))
+#   unique_ids, unique_indices = tf.unique(tf.reshape(components, [-1]))
 
-  # Remove zero id, since it describes background
-  unique_ids = tf.gather_nd(unique_ids, tf.where(tf.not_equal(unique_ids, 0)))
+#   # Remove zero id, since it describes background
+#   unique_ids = tf.gather_nd(unique_ids, tf.where(tf.not_equal(unique_ids, 0)))
 
-  # Create mask for each cancer area
-  individual_masks = tf.map_fn(
-    lambda unique_id: tf.equal(unique_id, components), elems=unique_ids,
-    dtype=tf.bool, parallel_iterations=4)
+#   # Create mask for each cancer area
+#   individual_masks = tf.map_fn(
+#     lambda unique_id: tf.equal(unique_id, components), elems=unique_ids,
+#     dtype=tf.bool, parallel_iterations=4)
 
-  return individual_masks
+#   return individual_masks
 
 
 def _get_smallest_patient_data_key(data):
@@ -45,23 +45,23 @@ def _get_smallest_patient_data_key(data):
   return res_key
 
 
-def _extract_bounding_box(groundtruth_mask):
-  assert(len(groundtruth_mask.get_shape()) == 2)
-  assert(groundtruth_mask.dtype == tf.bool)
+# def _extract_bounding_box(groundtruth_mask):
+#   assert(len(groundtruth_mask.get_shape()) == 2)
+#   assert(groundtruth_mask.dtype == tf.bool)
 
-  indices = tf.transpose(tf.where(groundtruth_mask))
+#   indices = tf.transpose(tf.where(groundtruth_mask))
 
-  groundtruth_shape = groundtruth_mask.get_shape().as_list()
-  y_min = tf.div(tf.to_float(tf.reduce_min(indices[0])),
-                 tf.constant(groundtruth_shape[0], dtype=tf.float32))
-  y_max = tf.div(tf.to_float(tf.reduce_min(indices[0])),
-                 tf.constant(groundtruth_shape[0], dtype=tf.float32))
-  x_min = tf.div(tf.to_float(tf.reduce_min(indices[1])),
-                 tf.constant(groundtruth_shape[1], dtype=tf.float32))
-  x_max = tf.div(tf.to_float(tf.reduce_min(indices[1])),
-                 tf.constant(groundtruth_shape[1], dtype=tf.float32))
+#   groundtruth_shape = groundtruth_mask.get_shape().as_list()
+#   y_min = tf.div(tf.to_float(tf.reduce_min(indices[0])),
+#                  tf.constant(groundtruth_shape[0], dtype=tf.float32))
+#   y_max = tf.div(tf.to_float(tf.reduce_min(indices[0])),
+#                  tf.constant(groundtruth_shape[0], dtype=tf.float32))
+#   x_min = tf.div(tf.to_float(tf.reduce_min(indices[1])),
+#                  tf.constant(groundtruth_shape[1], dtype=tf.float32))
+#   x_max = tf.div(tf.to_float(tf.reduce_min(indices[1])),
+#                  tf.constant(groundtruth_shape[1], dtype=tf.float32))
 
-  return [y_min, y_max, x_min, x_max]
+#   return [y_min, y_max, x_min, x_max]
 
 
 def _extract_annotation(decoded_annotation, dilate_groundtruth,
@@ -142,15 +142,15 @@ def _preprocess_image(image_decoded, target_dims, is_annotation_mask,
 def _decode_example(example_dict, target_dims, dilate_groundtruth,
                     dilate_kernel_size, common_size_factor):
   image_string = example_dict[standard_fields.TfExampleFields.image_encoded]
-  image_decoded = tf.to_float(tf.image.decode_jpeg(
-    image_string, channels=target_dims[2]))
+  image_decoded = tf.cast(tf.image.decode_jpeg(
+    image_string, channels=target_dims[2]), tf.float32)
 
   label = example_dict[standard_fields.TfExampleFields.label]
 
   annotation_string = example_dict[
       standard_fields.TfExampleFields.annotation_encoded]
-  annotation_decoded = tf.to_float(tf.image.decode_jpeg(
-      annotation_string, channels=3))
+  annotation_decoded = tf.cast(tf.image.decode_jpeg(
+      annotation_string, channels=3), tf.float32)
 
   annotation_mask = _extract_annotation(
     annotation_decoded, dilate_groundtruth, dilate_kernel_size)
@@ -164,27 +164,27 @@ def _decode_example(example_dict, target_dims, dilate_groundtruth,
     image_decoded, target_dims, is_annotation_mask=False,
     common_size_factor=common_size_factor)
 
-  individual_masks = split_groundtruth_mask(tf.squeeze(tf.cast(
-    annotation_mask_preprocessed, tf.bool), axis=2))
+  #individual_masks = split_groundtruth_mask(tf.squeeze(tf.cast(
+  #  annotation_mask_preprocessed, tf.bool), axis=2))
 
-  bounding_box_coordinates = tf.cond(
-    tf.equal(label, 0), lambda: [tf.constant([], dtype=tf.float32),
-                                 tf.constant([], dtype=tf.float32),
-                                 tf.constant([], dtype=tf.float32),
-                                 tf.constant([], dtype=tf.float32)],
-    lambda: tf.map_fn(_extract_bounding_box,
-                      elems=individual_masks,
-                      dtype=[tf.float32, tf.float32, tf.float32, tf.float32]))
+  #bounding_box_coordinates = tf.cond(
+  #  tf.equal(label, 0), lambda: [tf.constant([], dtype=tf.float32),
+  #                               tf.constant([], dtype=tf.float32),
+  #                               tf.constant([], dtype=tf.float32),
+  #                               tf.constant([], dtype=tf.float32)],
+  #  lambda: tf.map_fn(_extract_bounding_box,
+  #                    elems=individual_masks,
+  #                    dtype=[tf.float32, tf.float32, tf.float32, tf.float32]))
 
-  y_mins = bounding_box_coordinates[0]
-  y_maxs = bounding_box_coordinates[1]
-  x_mins = bounding_box_coordinates[2]
-  x_maxs = bounding_box_coordinates[3]
+  #y_mins = bounding_box_coordinates[0]
+  #y_maxs = bounding_box_coordinates[1]
+  #x_mins = bounding_box_coordinates[2]
+  #x_maxs = bounding_box_coordinates[3]
 
-  bounding_boxes = {standard_fields.BoundingBoxFields.y_min: y_mins,
-                    standard_fields.BoundingBoxFields.y_max: y_maxs,
-                    standard_fields.BoundingBoxFields.x_min: x_mins,
-                    standard_fields.BoundingBoxFields.x_max: x_maxs}
+  #bounding_boxes = {standard_fields.BoundingBoxFields.y_min: y_mins,
+  #                  standard_fields.BoundingBoxFields.y_max: y_maxs,
+  #                  standard_fields.BoundingBoxFields.x_min: x_mins,
+  #                  standard_fields.BoundingBoxFields.x_max: x_maxs}
 
   features = {
     standard_fields.InputDataFields.patient_id:
@@ -534,24 +534,21 @@ def build_tfrecords_from_files(
 
       elem_batch = it.get_next()
 
-      while True:
-        try:
-          elem_batch_result = sess.run(elem_batch)
-          keys = list(elem_batch_result.keys())
-          elem_batch_serialized = list(zip(*elem_batch_result.values()))
+      for elem_batch in dataset:
+        elem_batch_result = sess.run(elem_batch)
+        keys = list(elem_batch_result.keys())
+        elem_batch_serialized = list(zip(*elem_batch_result.values()))
 
-          # Unfortunately for some reason we cannot use multiprocessing here.
-          # Sometimes the map call will freeze
-          elem_batch_serialized = list(map(
-            lambda v: _serialize_example(keys, v),
-            elem_batch_serialized))
+        # Unfortunately for some reason we cannot use multiprocessing here.
+        # Sometimes the map call will freeze
+        elem_batch_serialized = list(map(
+          lambda v: _serialize_example(keys, v),
+          elem_batch_serialized))
 
-          for i, elem_serialized in enumerate(elem_batch_serialized):
-            writer_dict[elem_batch_result[
-              standard_fields.TfExampleFields.patient_id][i].decode(
-                'utf-8')].write(elem_serialized)
-        except tf.errors.OutOfRangeError:
-          break
+        for i, elem_serialized in enumerate(elem_batch_serialized):
+          writer_dict[elem_batch_result[
+            standard_fields.TfExampleFields.patient_id][i].decode(
+              'utf-8')].write(elem_serialized)
 
       for writer in writer_dict.values():
         writer.close()

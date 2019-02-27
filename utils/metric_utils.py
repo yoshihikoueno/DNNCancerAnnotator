@@ -119,3 +119,8 @@ def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds,
     statistics_dict[t]['tn'] = tn_batch[:, i]
 
   return metric_dict, statistics_dict
+
+def _get_region_based_metrics(prediction_batch, groundtruth_batch,
+                              tp_thresholds, parallel_iterations):
+  assert(len(prediction_batch.get_shape()) == 3)
+  assert(len(groundtruth_batch.get_shape()) == 3)

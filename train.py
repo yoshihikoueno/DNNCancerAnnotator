@@ -79,8 +79,10 @@ def main(_):
   logging.info("Command line arguments: {}".format(sys.argv))
 
   if num_gpu > 1:
-    train_distribution = tf.contrib.distribute.MirroredStrategy(
-      num_gpus_per_worker=num_gpu)
+    device_strings = ['/device:GPU:{}'.format(index)
+                      for index in range(num_gpu)]
+    train_distribution = tf.distribute.MirroredStrategy(
+      devices=device_strings)
   else:
     train_distribution = None
 
