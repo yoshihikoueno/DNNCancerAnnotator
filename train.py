@@ -80,7 +80,7 @@ def main(_):
 
   if num_gpu > 1:
     train_distribution = tf.contrib.distribute.MirroredStrategy(
-      num_gpus=num_gpu)
+      num_gpus_per_worker=num_gpu)
   else:
     train_distribution = None
 
