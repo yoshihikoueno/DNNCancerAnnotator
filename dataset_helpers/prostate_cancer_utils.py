@@ -14,23 +14,23 @@ from dataset_helpers import helpers as dh
 
 
 # groundtruth = [HxW]
-# def split_groundtruth_mask(groundtruth_mask):
-#   assert(len(groundtruth_mask.get_shape()) == 2)
+def split_groundtruth_mask(groundtruth_mask):
+  assert(len(groundtruth_mask.get_shape()) == 2)
 
-#   # Label each cancer area with individual index
-#   components = tf.contrib.image.connected_components(groundtruth_mask)
+  # Label each cancer area with individual index
+  components = tf.contrib.image.connected_components(groundtruth_mask)
 
-#   unique_ids, unique_indices = tf.unique(tf.reshape(components, [-1]))
+  unique_ids, unique_indices = tf.unique(tf.reshape(components, [-1]))
 
-#   # Remove zero id, since it describes background
-#   unique_ids = tf.gather_nd(unique_ids, tf.where(tf.not_equal(unique_ids, 0)))
+  # Remove zero id, since it describes background
+  unique_ids = tf.gather_nd(unique_ids, tf.where(tf.not_equal(unique_ids, 0)))
 
-#   # Create mask for each cancer area
-#   individual_masks = tf.map_fn(
-#     lambda unique_id: tf.equal(unique_id, components), elems=unique_ids,
-#     dtype=tf.bool, parallel_iterations=4)
+  # Create mask for each cancer area
+  individual_masks = tf.map_fn(
+    lambda unique_id: tf.equal(unique_id, components), elems=unique_ids,
+    dtype=tf.bool, parallel_iterations=4)
 
-#   return individual_masks
+  return individual_masks
 
 
 def _get_smallest_patient_data_key(data):
