@@ -3,6 +3,7 @@ import tensorflow as tf
 
 from metrics import region_recall_metric
 from metrics import confusion_metrics
+from metrics import pc_metrics
 from utils import util_ops
 
 
@@ -19,7 +20,7 @@ def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds,
       predictions=pred_gt_stack[0],
       thresholds=tp_thresholds), elems=tf.stack([
         prediction_batch, tf.to_float(groundtruth_batch)], axis=1),
-    parallel_iterations=util_ops.get_cpu_count(),
+    parallel_iterations=parallel_iterations,
     dtype=tf.int64)
 
   fp_batch = tf.map_fn(
@@ -28,7 +29,7 @@ def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds,
       predictions=pred_gt_stack[0],
       thresholds=tp_thresholds), elems=tf.stack([
         prediction_batch, tf.to_float(groundtruth_batch)], axis=1),
-    parallel_iterations=util_ops.get_cpu_count(),
+    parallel_iterations=parallel_iterations,
     dtype=tf.int64)
 
   fn_batch = tf.map_fn(
@@ -37,17 +38,12 @@ def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds,
       predictions=pred_gt_stack[0],
       thresholds=tp_thresholds), elems=tf.stack([
         prediction_batch, tf.to_float(groundtruth_batch)], axis=1),
-    parallel_iterations=util_ops.get_cpu_count(),
+    parallel_iterations=parallel_iterations,
     dtype=tf.int64)
 
-  tn_batch = tf.map_fn(
-    lambda pred_gt_stack: confusion_metrics.true_negatives_at_thresholds(
-      labels=tf.cast(pred_gt_stack[1], dtype=tf.int64),
-      predictions=pred_gt_stack[0],
-      thresholds=tp_thresholds), elems=tf.stack([
-        prediction_batch, tf.to_float(groundtruth_batch)], axis=1),
-    parallel_iterations=util_ops.get_cpu_count(),
-    dtype=tf.int64)
+  region_cm_values = pc_metrics.get_region_cm_values_at_thresholds(
+    prediction_batch=prediction_batch, groundtruth_batch=groundtruth_batch,
+    thresholds=tp_thresholds, parallel_iterations=parallel_iterations)
 
   # precision = tf.metrics.precision_at_thresholds(
   #   labels=groundtruth_batch, predictions=prediction_batch,
@@ -81,9 +77,9 @@ def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds,
   # with tf.control_dependencies([precision[1], recall[1]]):
   #   f2_score_update_op = tf.identity(f2_score)
 
-  region_recall = region_recall_metric.region_recall_at_thresholds(
-    groundtruth_batch, prediction_batch, tp_thresholds,
-    parallel_iterations=parallel_iterations)
+  #region_recall = region_recall_metric.region_recall_at_thresholds(
+  #  groundtruth_batch, prediction_batch, tp_thresholds,
+  #  parallel_iterations=parallel_iterations)
 
   #metric_dict = {'metrics/auc': auc}
   metric_dict = {}
@@ -111,16 +107,11 @@ def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds,
 
     statistics_dict[t] = dict()
 
-    statistics_dict[t]['region_tp'] = region_recall[i][2]
-    statistics_dict[t]['region_fn'] = region_recall[i][3]
+    statistics_dict[t]['region_tp'] = region_cm_values[i][0]
+    statistics_dict[t]['region_fn'] = region_cm_values[i][1]
+    statistics_dict[t]['region_fp'] = region_cm_values[i][1]
     statistics_dict[t]['tp'] = tp_batch[:, i]
     statistics_dict[t]['fp'] = fp_batch[:, i]
     statistics_dict[t]['fn'] = fn_batch[:, i]
-    statistics_dict[t]['tn'] = tn_batch[:, i]
 
   return metric_dict, statistics_dict
-
-def _get_region_based_metrics(prediction_batch, groundtruth_batch,
-                              tp_thresholds, parallel_iterations):
-  assert(len(prediction_batch.get_shape()) == 3)
-  assert(len(groundtruth_batch.get_shape()) == 3)

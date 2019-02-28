@@ -113,19 +113,19 @@ class PatientMetricHook(tf.train.SessionRunHook):
     # Collect all normalized confusion values
     population_region_tp = dict()
     population_region_fn = dict()
+    population_region_fp = dict()
     population_tp = dict()
     population_fp = dict()
     population_fn = dict()
-    population_tn = dict()
 
     for threshold in self.tp_thresholds:
       threshold = int(np.round(threshold * 100))
       population_region_tp[threshold] = 0
       population_region_fn[threshold] = 0
+      population_region_fp[threshold] = 0
       population_tp[threshold] = 0
       population_fp[threshold] = 0
       population_fn[threshold] = 0
-      population_tn[threshold] = 0
 
     summary_writer = tf.summary.FileWriterCache.get(
       os.path.join(self.result_folder, self.eval_dir))
@@ -140,19 +140,20 @@ class PatientMetricHook(tf.train.SessionRunHook):
                                             / float(num_slices))
         population_region_fn[threshold] += (confusion_dict['region_fn']
                                             / float(num_slices))
+        population_region_fp[threshold] += (confusion_dict['region_fp']
+                                            / float(num_slices))
         population_tp[threshold] += (confusion_dict['tp'] / float(num_slices))
         population_fp[threshold] += (confusion_dict['fp'] / float(num_slices))
         population_fn[threshold] += (confusion_dict['fn'] / float(num_slices))
-        population_tn[threshold] += (confusion_dict['tn'] / float(num_slices))
 
     for threshold in self.tp_thresholds:
       threshold = int(np.round(threshold * 100))
       region_tp = population_region_tp[threshold]
       region_fn = population_region_fn[threshold]
+      region_fp = population_region_fp[threshold]
       tp = population_tp[threshold]
       fp = population_fp[threshold]
       fn = population_fn[threshold]
-      tn = population_tn[threshold]
 
       recall = tp / (tp + fn) if (tp + fn > 0) else 0
       summary = tf.Summary()
@@ -166,14 +167,6 @@ class PatientMetricHook(tf.train.SessionRunHook):
       summary.value.add(
         tag='metrics/patient_adjusted/population_precision_at_{}'.format(
           threshold), simple_value=precision)
-      summary_writer.add_summary(summary, global_step=global_step)
-
-      region_recall = region_tp / (region_tp + region_fn) if (
-        region_tp + region_fn > 0) else 0
-      summary = tf.Summary()
-      summary.value.add(
-        tag='metrics/patient_adjusted/population_region_recall_at_{}'.format(
-          threshold), simple_value=region_recall)
       summary_writer.add_summary(summary, global_step=global_step)
 
       f1_score = (2 * precision * recall / (precision + recall)) if (
@@ -190,6 +183,40 @@ class PatientMetricHook(tf.train.SessionRunHook):
       summary.value.add(
         tag='metrics/patient_adjusted/population_f2_score_at_{}'.format(
           threshold), simple_value=f2_score)
+      summary_writer.add_summary(summary, global_step=global_step)
+
+      region_recall = region_tp / (region_tp + region_fn) if (
+        region_tp + region_fn > 0) else 0
+      summary = tf.Summary()
+      summary.value.add(
+        tag='metrics/patient_adjusted/population_region_recall_at_{}'.format(
+          threshold), simple_value=region_recall)
+      summary_writer.add_summary(summary, global_step=global_step)
+
+      region_precision = region_tp / (region_tp + region_fp) if (
+        region_tp + region_fp > 0) else 0
+      summary = tf.Summary()
+      summary.value.add(
+        tag='metrics/patient_adjusted/population_region_precision_at_{}'.format(
+          threshold), simple_value=region_precision)
+      summary_writer.add_summary(summary, global_step=global_step)
+
+      region_f1_score = (2 * region_precision * region_recall / (
+        region_precision + region_recall)) if (
+          region_precision + region_recall) > 0 else 0
+      summary = tf.Summary()
+      summary.value.add(
+        tag='metrics/patient_adjusted/population_region_f1_score_at_{}'.format(
+          threshold), simple_value=region_f1_score)
+      summary_writer.add_summary(summary, global_step=global_step)
+
+      region_f2_score = (5 * region_precision * region_recall / (
+        4 * region_precision + region_recall)) if (
+          (4 * region_precision + region_recall)) > 0 else 0
+      summary = tf.Summary()
+      summary.value.add(
+        tag='metrics/patient_adjusted/population_region_f2_score_at_{}'.format(
+          threshold), simple_value=region_f2_score)
       summary_writer.add_summary(summary, global_step=global_step)
 
 

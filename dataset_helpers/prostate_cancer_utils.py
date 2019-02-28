@@ -13,12 +13,19 @@ from utils import standard_fields
 from dataset_helpers import helpers as dh
 
 
-# groundtruth = [HxW]
-def split_groundtruth_mask(groundtruth_mask):
-  assert(len(groundtruth_mask.get_shape()) == 2)
+# mask = [HxW]
+def split_mask(mask, dilate_mask=False):
+  assert(len(mask.get_shape()) == 2)
+  assert(mask.dtype == tf.int64)
 
-  # Label each cancer area with individual index
-  components = tf.contrib.image.connected_components(groundtruth_mask)
+  if dilate_mask:
+    mask = tf.squeeze(tf.keras.layers.MaxPool2D(
+      (5, 5), strides=1, padding='same',
+      data_format='channels_last')(
+        tf.expand_dims(tf.expand_dims(mask, axis=0), axis=3)))
+
+  # Label each area with individual index
+  components = tf.contrib.image.connected_components(mask)
 
   unique_ids, unique_indices = tf.unique(tf.reshape(components, [-1]))
 
