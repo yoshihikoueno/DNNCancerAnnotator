@@ -9,7 +9,7 @@ from utils import image_utils
 
 class VisualizationHook(tf.train.SessionRunHook):
   def __init__(self, result_folder, visualization_file_names,
-               file_name, image_decoded, annotation_decoded, annotation_mask,
+               file_name, image_decoded, annotation_decoded,
                predicted_mask, eval_dir):
     assert(len(predicted_mask.get_shape()) == 3)
     self.visualization_file_names = visualization_file_names
@@ -25,15 +25,19 @@ class VisualizationHook(tf.train.SessionRunHook):
                                tf.zeros_like(predicted_mask),
                               tf.zeros_like(predicted_mask)], axis=3)
 
-    annotation_decoded = image_utils.central_crop(
-      annotation_decoded, target_size)
-
     predicted_mask_overlay = tf.clip_by_value(
       image_decoded * 0.5 + predicted_mask, 0, 255)
 
-    self.combined_image = tf.concat([
-      image_decoded, annotation_decoded, predicted_mask_overlay,
-      predicted_mask], axis=2)
+    if annotation_decoded is None:
+      # Predict Mode
+      self.combined_image = tf.concat([
+        image_decoded, predicted_mask_overlay, predicted_mask], axis=2)
+    else:
+      annotation_decoded = image_utils.central_crop(
+        annotation_decoded, target_size)
+      self.combined_image = tf.concat([
+        image_decoded, annotation_decoded, predicted_mask_overlay,
+        predicted_mask], axis=2)
 
   def before_run(self, run_context):
     return tf.train.SessionRunArgs(fetches=[
@@ -46,12 +50,14 @@ class VisualizationHook(tf.train.SessionRunHook):
 
     # Estimator writes summaries to the eval subfolder
     summary_writer = tf.summary.FileWriterCache.get(
-      os.path.join(self.result_folder, self.eval_dir))
+      self.eval_dir)
 
     for batch_index in range(len(combined_image_res)):
       file_name = file_name_res[batch_index].decode('utf-8')
 
-      if file_name in self.visualization_file_names:
+      # In prediction mode we want to visualize in any case
+      if (self.visualization_file_names is None
+          or file_name in self.visualization_file_names):
         summary = tf.Summary(value=[
           tf.Summary.Value(
             tag=file_name,

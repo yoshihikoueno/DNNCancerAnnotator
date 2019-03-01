@@ -100,7 +100,9 @@ def main(_):
     dataset_info=dataset_info,
     eval_split_name=standard_fields.SplitNames.val,
     train_distribution=train_distribution,
-    eval_distribution=eval_distribution, num_gpu=num_gpu)
+    eval_distribution=eval_distribution, num_gpu=num_gpu,
+    eval_dir=os.path.join(FLAGS.result_dir,
+                          'eval_' + standard_fields.SplitNames.val))
 
   if pipeline_config.train_config.early_stopping:
     early_stop_hook = tf.contrib.estimator.stop_if_no_decrease_hook(
@@ -144,7 +146,9 @@ def main(_):
     dataset_info=dataset_info,
     eval_split_name=standard_fields.SplitNames.train,
     train_distribution=train_distribution,
-    eval_distribution=eval_distribution, num_gpu=num_gpu)
+    eval_distribution=eval_distribution, num_gpu=num_gpu,
+    eval_dir=os.path.join(FLAGS.result_dir,
+                          'eval_' + standard_fields.SplitNames.train))
 
   estimator.evaluate(input_fn=train_eval_input_fn, steps=None,
                      name=standard_fields.SplitNames.train)

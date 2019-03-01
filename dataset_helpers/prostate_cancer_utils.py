@@ -606,3 +606,35 @@ def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
                         num_parallel_calls=util_ops.get_cpu_count())
 
   return dataset
+
+
+def build_predict_tf_dataset(directory, target_dims, common_size_factor):
+  files = os.listdir(directory)
+  for i, f in enumerate(files):
+    files[i] = os.path.join(directory, f)
+  files = [f for f in files if os.path.isfile(f)]
+
+  dataset = tf.data.Dataset.from_tensor_slices(files)
+
+  preprocess_fn = functools.partial(
+    _prepare_predict_example, target_dims=target_dims,
+    common_size_factor=common_size_factor)
+
+  dataset = dataset.map(
+    preprocess_fn, num_parallel_calls=util_ops.get_cpu_count())
+
+  return dataset
+
+
+def _prepare_predict_example(image_file, target_dims, common_size_factor):
+  image_string = tf.read_file(image_file)
+
+  image_decoded = tf.cast(tf.image.decode_jpeg(
+    image_string, channels=target_dims[2]), tf.float32)
+
+  image_preprocessed = _preprocess_image(
+    image_decoded, target_dims=target_dims, is_annotation_mask=False,
+    common_size_factor=common_size_factor)
+
+  return {standard_fields.InputDataFields.image_decoded: image_preprocessed,
+          standard_fields.InputDataFields.image_file: image_file}

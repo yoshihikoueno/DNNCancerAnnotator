@@ -12,6 +12,19 @@ def load_config(pipeline_config_path):
   return pipeline_config
 
 
+def get_predict_input_fn(pipeline_config, input_dir):
+  target_dims = [pipeline_config.model.input_image_size_x,
+                 pipeline_config.model.input_image_size_y,
+                 pipeline_config.model.input_image_channels]
+
+  def input_fn():
+    return dataset_builder.build_predict_dataset(
+      pipeline_config.dataset.WhichOneof('dataset_type'), input_dir=input_dir,
+      target_dims=target_dims, dataset_config=pipeline_config.dataset)
+
+  return input_fn
+
+
 def get_input_fn(pipeline_config, directory, existing_tfrecords,
                  split_name, is_training):
   target_dims = [pipeline_config.model.input_image_size_x,

@@ -32,7 +32,7 @@ flags.DEFINE_bool('continuous', False, 'Whether to keep the process alive and '
                   'query for new checkpoints at a certain interval')
 flags.DEFINE_string('split_name', '', 'train, val, or test')
 flags.DEFINE_bool('pdb', False, 'Whether to use pdb debugging functionality.')
-flags.DEFINE_bool('use_gpu', True, 'Whether to use GPU')
+flags.DEFINE_bool('use_gpu', False, 'Whether to use GPU')
 flags.DEFINE_integer('num_steps', 0,
                      'For debugging purposes, a possible limit to '
                      'the number of steps. 0 means no limit')
@@ -41,10 +41,11 @@ flags.DEFINE_integer('visible_device_index', -1, 'Index of the visible device')
 FLAGS = flags.FLAGS
 
 
-def _eval_checkpoint(checkpoint_path, estimator, input_fn, num_steps):
+def _eval_checkpoint(checkpoint_path, estimator, input_fn, num_steps,
+                     split_name):
   logging.info('Evaluating {}'.format(checkpoint_path))
   return estimator.evaluate(input_fn=input_fn, checkpoint_path=checkpoint_path,
-                            steps=num_steps)
+                            steps=num_steps, name=split_name)
 
 
 def main(_):
@@ -68,6 +69,8 @@ def main(_):
         num_gpu = len(index_list)
     else:
       num_gpu = len(util_ops.get_devices())
+  else:
+    os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
   if not os.path.isdir(FLAGS.checkpoint_dir):
     raise ValueError("Checkpoint directory does not exist!")
@@ -113,7 +116,9 @@ def main(_):
     pipeline_config=pipeline_config, result_dir=result_folder,
     dataset_info=dataset_info,
     eval_split_name=FLAGS.split_name, train_distribution=None,
-    eval_distribution=distribution, num_gpu=num_gpu)
+    eval_distribution=distribution, num_gpu=num_gpu,
+    eval_dir=os.path.join(FLAGS.result_dir,
+                          'eval_' + FLAGS.split_name))
 
   if FLAGS.num_steps > 0:
     num_steps = FLAGS.num_steps
@@ -123,7 +128,8 @@ def main(_):
   if FLAGS.checkpoint_name:
     _eval_checkpoint(
       os.path.join(FLAGS.checkpoint_dir,
-                   FLAGS.checkpoint_name), estimator, input_fn, num_steps)
+                   FLAGS.checkpoint_name), estimator, input_fn, num_steps,
+      split_name=FLAGS.split_name)
   elif FLAGS.all_checkpoints:
     latest_checkpoint = ''
     evaluated_checkpoints = []
@@ -138,7 +144,8 @@ def main(_):
           continue
         else:
           new_checkpoint_evaluated = True
-        _eval_checkpoint(checkpoint, estimator, input_fn, num_steps)
+        _eval_checkpoint(checkpoint, estimator, input_fn, num_steps,
+                         split_name=FLAGS.split_name)
         evaluated_checkpoints.append(checkpoint)
         latest_checkpoint = checkpoint
       if not new_checkpoint_evaluated:
@@ -159,13 +166,15 @@ def main(_):
         time.sleep(pipeline_config.eval_config.eval_interval_secs)
         continue
 
-      _eval_checkpoint(next_checkpoint, estimator, input_fn, num_steps)
+      _eval_checkpoint(next_checkpoint, estimator, input_fn, num_steps,
+                       split_name=FLAGS.split_name)
 
       latest_checkpoint = next_checkpoint
   else:
     latest_checkpoint = tf.train.latest_checkpoint(FLAGS.checkpoint_dir)
 
-    _eval_checkpoint(latest_checkpoint, estimator, input_fn, num_steps)
+    _eval_checkpoint(latest_checkpoint, estimator, input_fn, num_steps,
+                     split_name=FLAGS.split_name)
 
 
 if __name__ == '__main__':

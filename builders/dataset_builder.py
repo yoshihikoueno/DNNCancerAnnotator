@@ -97,3 +97,17 @@ def build_dataset(dataset_name, directory,
   dataset = dataset.prefetch(None)
 
   return dataset
+
+
+def build_predict_dataset(dataset_name, input_dir, target_dims,
+                          dataset_config):
+  if dataset_name == 'prostate_cancer':
+    dataset = pc.build_predict_tf_dataset(
+      directory=input_dir, target_dims=target_dims,
+      common_size_factor=dataset_config.prostate_cancer.common_size_factor)
+  else:
+    assert(False)
+
+  dataset = dataset.batch(1)
+
+  return dataset

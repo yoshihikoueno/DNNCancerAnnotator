@@ -109,7 +109,7 @@ def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds,
 
     statistics_dict[t]['region_tp'] = region_cm_values[i][0]
     statistics_dict[t]['region_fn'] = region_cm_values[i][1]
-    statistics_dict[t]['region_fp'] = region_cm_values[i][1]
+    statistics_dict[t]['region_fp'] = region_cm_values[i][2]
     statistics_dict[t]['tp'] = tp_batch[:, i]
     statistics_dict[t]['fp'] = fp_batch[:, i]
     statistics_dict[t]['fn'] = fn_batch[:, i]

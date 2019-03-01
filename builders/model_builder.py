@@ -54,8 +54,11 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
 
   image_batch = features[standard_fields.InputDataFields.image_decoded]
 
-  annotation_mask_batch = features[
-    standard_fields.InputDataFields.annotation_mask]
+  if mode == tf.estimator.ModeKeys.PREDICT:
+    annotation_mask_batch = None
+  else:
+    annotation_mask_batch = features[
+      standard_fields.InputDataFields.annotation_mask]
 
   if mode == tf.estimator.ModeKeys.TRAIN:
     # Augment images
@@ -77,23 +80,25 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
     bn_epsilon=pipeline_config.model.batch_norm_epsilon,
     activation_fn=activation_fn_builder.build(pipeline_config.model))
 
-  # Record model variable summaries
-  for var in tf.trainable_variables():
-    tf.summary.histogram('ModelVars/' + var.op.name, var)
+  if mode == tf.estimator.ModeKeys.TRAIN:
+    # Record model variable summaries
+    for var in tf.trainable_variables():
+      tf.summary.histogram('ModelVars/' + var.op.name, var)
 
   network_output_shape = network_output.get_shape().as_list()
-  if (network_output_shape[1:3]
-      != annotation_mask_batch.get_shape().as_list()[1:3]):
-    annotation_mask_batch = image_utils.central_crop(
-      annotation_mask_batch,
-      desired_size=network_output.get_shape().as_list()[1:3])
+  if mode != tf.estimator.ModeKeys.PREDICT:
+    if (network_output_shape[1:3]
+        != annotation_mask_batch.get_shape().as_list()[1:3]):
+      annotation_mask_batch = image_utils.central_crop(
+        annotation_mask_batch,
+        desired_size=network_output.get_shape().as_list()[1:3])
 
-  annotation_mask_batch = tf.cast(
-    tf.clip_by_value(annotation_mask_batch, 0, 1), dtype=tf.int64)
+    annotation_mask_batch = tf.cast(
+      tf.clip_by_value(annotation_mask_batch, 0, 1), dtype=tf.int64)
 
-  assert(len(annotation_mask_batch.get_shape()) == 4)
-  assert(annotation_mask_batch.get_shape().as_list()[:3]
-         == network_output.get_shape().as_list()[:3])
+    assert(len(annotation_mask_batch.get_shape()) == 4)
+    assert(annotation_mask_batch.get_shape().as_list()[:3]
+           == network_output.get_shape().as_list()[:3])
 
   # We should not apply the loss to evaluation. This would just cause
   # our loss to be minimum for f2 score, but we also get the same
@@ -115,28 +120,32 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
   else:
     loss_weight = tf.constant(1.0)
 
-  loss = _loss(tf.reshape(annotation_mask_batch, [-1]),
-               tf.reshape(network_output, [-1, num_classes]),
-               loss_name=pipeline_config.train_config.loss.name,
-               pos_weight=loss_weight)
-  loss = tf.identity(loss, name='ModelLoss')
-  tf.summary.scalar(loss.op.name, loss, family='Loss')
+  if mode == tf.estimator.ModeKeys.PREDICT:
+    loss = None
+  else:
+    loss = _loss(tf.reshape(annotation_mask_batch, [-1]),
+                 tf.reshape(network_output, [-1, num_classes]),
+                 loss_name=pipeline_config.train_config.loss.name,
+                 pos_weight=loss_weight)
+    loss = tf.identity(loss, name='ModelLoss')
+    tf.summary.scalar(loss.op.name, loss, family='Loss')
 
-  total_loss = tf.identity(loss, name='TotalLoss')
-  if mode == tf.estimator.ModeKeys.TRAIN:
-    if pipeline_config.train_config.add_regularization_loss:
-      regularization_losses = tf.get_collection(
-        tf.GraphKeys.REGULARIZATION_LOSSES)
-      if regularization_losses:
-        regularization_loss = tf.add_n(regularization_losses,
-                                       name='RegularizationLoss')
-        total_loss = tf.add_n([loss, regularization_loss],
-                              name='TotalLoss')
-        tf.summary.scalar(regularization_loss.op.name, regularization_loss,
-                          family='Loss')
+    total_loss = tf.identity(loss, name='TotalLoss')
 
-  tf.summary.scalar(total_loss.op.name, total_loss, family='Loss')
-  total_loss = tf.check_numerics(total_loss, 'LossTensor is inf or nan.')
+    if mode == tf.estimator.ModeKeys.TRAIN:
+      if pipeline_config.train_config.add_regularization_loss:
+        regularization_losses = tf.get_collection(
+          tf.GraphKeys.REGULARIZATION_LOSSES)
+        if regularization_losses:
+          regularization_loss = tf.add_n(regularization_losses,
+                                         name='RegularizationLoss')
+          total_loss = tf.add_n([loss, regularization_loss],
+                                name='TotalLoss')
+          tf.summary.scalar(regularization_loss.op.name, regularization_loss,
+                            family='Loss')
+
+    tf.summary.scalar(total_loss.op.name, total_loss, family='Loss')
+    total_loss = tf.check_numerics(total_loss, 'LossTensor is inf or nan.')
 
   scaffold = None
   update_ops = []
@@ -167,12 +176,15 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
   update_ops.append(graph_update_ops)
   update_op = tf.group(*update_ops, name='update_barrier')
   with tf.control_dependencies([update_op]):
-    train_op = tf.identity(total_loss)
-
-  logging.info("Total number of trainable parameters: {}".format(np.sum([
-    np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])))
+    if mode == tf.estimator.ModeKeys.PREDICT:
+      train_op = None
+    else:
+      train_op = tf.identity(total_loss)
 
   if mode == tf.estimator.ModeKeys.TRAIN:
+    logging.info("Total number of trainable parameters: {}".format(np.sum([
+      np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])))
+
     # Training Hooks are not working with MirroredStrategy. Fixed in 1.13
     #print_hook = session_hooks.PrintHook(
     #  file_name=features[standard_fields.InputDataFields.image_file],
@@ -202,7 +214,6 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
       image_decoded=image_batch,
       annotation_decoded=features[
         standard_fields.InputDataFields.annotation_decoded],
-      annotation_mask=annotation_mask_batch,
       predicted_mask=scaled_network_output, eval_dir=eval_dir)
     patient_metric_hook = session_hooks.PatientMetricHook(
       statistics_dict=statistics_dict,
@@ -214,36 +225,67 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
       mode, loss=total_loss, train_op=train_op,
       evaluation_hooks=[vis_hook, patient_metric_hook],
       eval_metric_ops=metric_dict)
+  elif mode == tf.estimator.ModeKeys.PREDICT:
+    if pipeline_config.train_config.loss.name == 'sigmoid':
+      scaled_network_output = tf.nn.sigmoid(network_output)[:, :, :, 0]
+    elif pipeline_config.train_config.loss.name == 'softmax':
+      assert(network_output.get_shape().as_list()[-1] == 2)
+      scaled_network_output = tf.nn.softmax(network_output)[:, :, :, 1]
+
+    vis_hook = session_hooks.VisualizationHook(
+      result_folder=result_folder,
+      visualization_file_names=None,
+      file_name=features[standard_fields.InputDataFields.image_file],
+      image_decoded=image_batch,
+      annotation_decoded=None,
+      predicted_mask=scaled_network_output, eval_dir=eval_dir)
+
+    predicted_mask = tf.stack([scaled_network_output * 255,
+                               tf.zeros_like(scaled_network_output),
+                              tf.zeros_like(scaled_network_output)], axis=3)
+
+    predicted_mask_overlay = tf.clip_by_value(
+      features[standard_fields.InputDataFields.image_decoded]
+      * 0.5 + predicted_mask, 0, 255)
+
+    return tf.estimator.EstimatorSpec(
+      mode, prediction_hooks=[vis_hook], predictions={
+        'image_file': features[standard_fields.InputDataFields.image_file],
+        'prediction': predicted_mask_overlay})
   else:
     assert(False)
 
 
 def get_model_fn(pipeline_config, result_folder, dataset_info,
-                 eval_split_name, num_gpu):
+                 eval_split_name, num_gpu, eval_dir):
 
-  file_names = dataset_info[
-    standard_fields.PickledDatasetInfo.file_names][eval_split_name]
-  np.random.shuffle(file_names)
-
-  patient_ids = dataset_info[
-    standard_fields.PickledDatasetInfo.patient_ids][eval_split_name]
-
-  # Select one image per patient
-  selected_files = dict()
-  for file_name in file_names:
-    patient_id = _extract_patient_id(file_name)
-    assert(patient_id in patient_ids)
-    if patient_id not in selected_files:
-      selected_files[patient_id] = file_name
-
-  num_visualizations = pipeline_config.eval_config.num_images_to_visualize
-  if num_visualizations is None or num_visualizations == -1:
-    num_visualizations = len(selected_files)
+  if dataset_info is None:
+    visualization_file_names = None
   else:
-    num_visualizations = min(num_visualizations,
-                             len(selected_files))
+    file_names = dataset_info[
+      standard_fields.PickledDatasetInfo.file_names][eval_split_name]
+    np.random.shuffle(file_names)
 
-  visualization_file_names = list(selected_files.values())[:num_visualizations]
+    patient_ids = dataset_info[
+      standard_fields.PickledDatasetInfo.patient_ids][eval_split_name]
+
+    # Select one image per patient
+    selected_files = dict()
+    for file_name in file_names:
+      patient_id = _extract_patient_id(file_name)
+      assert(patient_id in patient_ids)
+      if patient_id not in selected_files:
+        selected_files[patient_id] = file_name
+
+    num_visualizations = pipeline_config.eval_config.num_images_to_visualize
+    if num_visualizations is None or num_visualizations == -1:
+      num_visualizations = len(selected_files)
+    else:
+      num_visualizations = min(num_visualizations,
+                               len(selected_files))
+
+    visualization_file_names = list(selected_files.values())[
+      :num_visualizations]
 
   model_name = pipeline_config.model.WhichOneof('model_type')
   if model_name == 'unet':
@@ -258,6 +300,6 @@ def get_model_fn(pipeline_config, result_folder, dataset_info,
                              feature_extractor=feature_extractor,
                              num_gpu=num_gpu,
                              visualization_file_names=visualization_file_names,
-                             eval_dir='eval_' + eval_split_name)
+                             eval_dir=eval_dir)
   else:
     assert(False)
