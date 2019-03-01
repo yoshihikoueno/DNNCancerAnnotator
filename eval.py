@@ -26,8 +26,6 @@ flags.DEFINE_string('checkpoint_name', '', 'Optional name of a specific '
 flags.DEFINE_bool('all_checkpoints', False,
                   'Optional flag to evaluate all existing checkpoints in '
                   'checkpoint_dir from the beginning on.')
-flags.DEFINE_string('result_dir', '', 'Optional directory to write the '
-                                      'results to.')
 flags.DEFINE_bool('continuous', False, 'Whether to keep the process alive and '
                   'query for new checkpoints at a certain interval')
 flags.DEFINE_string('split_name', '', 'train, val, or test')
@@ -82,18 +80,12 @@ def main(_):
   np.random.seed(pipeline_config.seed)
   tf.set_random_seed(pipeline_config.seed)
 
-  result_folder_name = 'eval_{}_{}_{}'.format(
-    FLAGS.split_name + '-split',
-    os.path.basename(pipeline_config.dataset.dataset_path),
-    datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+  result_folder = os.path.join(FLAGS.checkpoint_dir,
+                               'eval_{}'.format(FLAGS.split_name))
+  if os.path.exists(result_folder):
+    raise ValueError("Evaluation already took place!")
 
-  if FLAGS.result_dir:
-    result_folder = os.path.join(FLAGS.result_dir, result_folder_name)
-  else:
-    result_folder = os.path.join(FLAGS.checkpoint_dir, result_folder_name)
   os.mkdir(result_folder)
-  copy(pipeline_config_file, os.path.join(result_folder,
-                                                'pipeline.config'))
 
   # Init Logger
   util_ops.init_logger(result_folder)
@@ -117,8 +109,7 @@ def main(_):
     dataset_info=dataset_info,
     eval_split_name=FLAGS.split_name, train_distribution=None,
     eval_distribution=distribution, num_gpu=num_gpu,
-    eval_dir=os.path.join(FLAGS.result_dir,
-                          'eval_' + FLAGS.split_name))
+    eval_dir=result_folder)
 
   if FLAGS.num_steps > 0:
     num_steps = FLAGS.num_steps

@@ -27,6 +27,12 @@ def split_mask(mask, dilate_mask=False):
   # Label each area with individual index
   components = tf.contrib.image.connected_components(mask)
 
+  if dilate_mask:
+    # we need to erode the mask again
+    components = tf.where(tf.equal(mask, tf.constant(0, dtype=tf.int64)),
+                          tf.zeros_like(components, dtype=tf.int32),
+                          components)
+
   unique_ids, unique_indices = tf.unique(tf.reshape(components, [-1]))
 
   # Remove zero id, since it describes background
