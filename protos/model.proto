@@ -4,7 +4,6 @@ package netng.protos;
 
 import "protos/faster_rcnn.proto";
 import "protos/unet.proto";
-import "protos/activation.proto";
 
 message Model {
   optional int32 input_image_size_x = 1[default=0];
@@ -23,5 +22,4 @@ message Model {
 
   // same or valid
   optional string conv_padding = 9[default='valid'];
-  optional ActivationFunction activation = 10;
 }

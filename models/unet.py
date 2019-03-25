@@ -4,21 +4,23 @@ import numpy as np
 import tensorflow as tf
 
 from utils import layer_utils as lu
+from builders import activation_fn_builder as ab
 
 
 class UNet(object):
-  def __init__(self, weight_decay, conv_padding, filter_sizes):
+  def __init__(self, weight_decay, conv_padding, filter_sizes, down_activation,
+               up_activation):
     assert(len(filter_sizes) > 1)
     assert(conv_padding in ['same', 'valid'])
     self.weight_decay = weight_decay
     self.conv_padding = conv_padding
     self.filter_sizes = filter_sizes
+    self.down_activation = ab.build(down_activation)
+    self.up_activation = ab.build(up_activation)
 
   def _downsample_block(self, inputs, nb_filters, is_training, use_batch_norm,
-                        bn_momentum, bn_epsilon, activation_fn):
-    assert(activation_fn is not None)
-
-    conv_params = lu.get_conv_params(activation_fn=activation_fn,
+                        bn_momentum, bn_epsilon):
+    conv_params = lu.get_conv_params(activation_fn=self.down_activation,
                                      weight_decay=self.weight_decay)
     if use_batch_norm:
       batch_norm_params = lu.get_batch_norm_params(momentum=bn_momentum,
@@ -42,13 +44,10 @@ class UNet(object):
                                         **pool_params)
 
   def _upsample_block(self, inputs, downsample_reference, nb_filters,
-                      is_training, use_batch_norm, bn_momentum, bn_epsilon,
-                      activation_fn):
-    assert(activation_fn is not None)
-
+                      is_training, use_batch_norm, bn_momentum, bn_epsilon):
     conv_transposed_params = lu.get_conv_transpose_params(
       weight_decay=self.weight_decay)
-    conv_params = lu.get_conv_params(activation_fn=activation_fn,
+    conv_params = lu.get_conv_params(activation_fn=self.up_activation,
                                      weight_decay=self.weight_decay)
     if use_batch_norm:
       batch_norm_params = lu.get_batch_norm_params(momentum=bn_momentum,
@@ -87,18 +86,17 @@ class UNet(object):
     return net
 
   def build_network(self, image_batch, is_training, num_classes,
-                    use_batch_norm, bn_momentum, bn_epsilon, activation_fn):
+                    use_batch_norm, bn_momentum, bn_epsilon):
     print(image_batch)
-    assert(activation_fn is not None)
 
     ds_fn = functools.partial(
       self._downsample_block, is_training=is_training,
       use_batch_norm=use_batch_norm, bn_momentum=bn_momentum,
-      bn_epsilon=bn_epsilon, activation_fn=activation_fn)
+      bn_epsilon=bn_epsilon)
     us_fn = functools.partial(
       self._upsample_block, is_training=is_training,
       use_batch_norm=use_batch_norm, bn_momentum=bn_momentum,
-      bn_epsilon=bn_epsilon, activation_fn=activation_fn)
+      bn_epsilon=bn_epsilon)
 
     with tf.variable_scope('UNet'):
       ds_references = []

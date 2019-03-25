@@ -3,8 +3,6 @@ import sys
 import os
 import logging
 import time
-from datetime import datetime
-from shutil import copy
 
 import numpy as np
 import tensorflow as tf

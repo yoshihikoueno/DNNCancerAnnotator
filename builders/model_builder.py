@@ -12,7 +12,6 @@ from utils import metric_utils
 from utils import image_utils
 from utils import util_ops
 from builders import optimizer_builder
-from builders import activation_fn_builder
 
 
 def _extract_patient_id(file_name):
@@ -77,8 +76,7 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
     num_classes=num_classes,
     use_batch_norm=pipeline_config.model.use_batch_norm,
     bn_momentum=pipeline_config.model.batch_norm_momentum,
-    bn_epsilon=pipeline_config.model.batch_norm_epsilon,
-    activation_fn=activation_fn_builder.build(pipeline_config.model))
+    bn_epsilon=pipeline_config.model.batch_norm_epsilon)
 
   if mode == tf.estimator.ModeKeys.TRAIN:
     # Record model variable summaries
@@ -251,7 +249,8 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
     return tf.estimator.EstimatorSpec(
       mode, prediction_hooks=[vis_hook], predictions={
         'image_file': features[standard_fields.InputDataFields.image_file],
-        'prediction': predicted_mask_overlay})
+        'prediction_overlay': predicted_mask_overlay,
+        'prediction': predicted_mask})
   else:
     assert(False)
 
@@ -292,7 +291,9 @@ def get_model_fn(pipeline_config, result_folder, dataset_info,
     feature_extractor = unet.UNet(
       weight_decay=pipeline_config.train_config.weight_decay,
       conv_padding=pipeline_config.model.conv_padding,
-      filter_sizes=pipeline_config.model.unet.filter_sizes)
+      filter_sizes=pipeline_config.model.unet.filter_sizes,
+      down_activation=pipeline_config.model.unet.down_activation,
+      up_activation=pipeline_config.model.unet.up_activation)
     return functools.partial(_general_model_fn,
                              pipeline_config=pipeline_config,
                              result_folder=result_folder,

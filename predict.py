@@ -89,13 +89,25 @@ def main(_):
 
   predictions = estimator.predict(
     input_fn, yield_single_examples=False)
-  for prediction in predictions:
-    file_name = prediction['image_file'][0].decode('UTF-8')
-    output = prediction['prediction'][0]
-    output = output.astype(np.uint8)
+  overlay_folder = os.path.join(result_folder, 'prediction_overlay')
+  prediction_folder = os.path.join(result_folder, 'prediction')
 
-    img = Image.fromarray(output)
-    img.save(os.path.join(result_folder, file_name))
+  os.mkdir(overlay_folder)
+  os.mkdir(prediction_folder)
+
+  for prediction in predictions:
+    file_name = os.path.basename(prediction['image_file'][0].decode('UTF-8'))
+    prediction_overlay = prediction['prediction_overlay'][0]
+    prediction = prediction['prediction'][0]
+
+    prediction_overlay = prediction_overlay.astype(np.uint8)
+    prediction = prediction.astype(np.uint8)
+
+    prediction_overlay_img = Image.fromarray(prediction_overlay)
+    prediction_overlay_img.save(os.path.join(overlay_folder, file_name))
+
+    prediction_img = Image.fromarray(prediction)
+    prediction_img.save(os.path.join(prediction_folder, file_name))
 
 
 if __name__ == '__main__':
