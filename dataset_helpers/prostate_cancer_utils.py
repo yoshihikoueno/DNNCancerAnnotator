@@ -4,6 +4,7 @@ import functools
 import logging
 import pickle
 import itertools
+import shutil
 
 import numpy as np
 import tensorflow as tf
@@ -286,10 +287,14 @@ def _parse_from_file(image_file, annotation_file, label, patient_id,
 
 
 def build_tfrecords_from_files(
-    dataset_path, dataset_info_file, dataset_type, balance_classes,
-    balance_remove_smallest,
-    balance_remove_random,
+    dataset_path, dataset_info_file,
     only_cancer_images, input_image_dims, seed, output_dir):
+  if os.path.exists(output_dir):
+    # Clean everything inside
+    shutil.rmtree(output_dir)
+
+  os.path.mkdir(output_dir)
+
   dataset_info_file = os.path.join(dataset_path, dataset_info_file)
   if not os.path.exists(dataset_info_file):
     raise ValueError("Pickled dataset info file missing!")
@@ -299,16 +304,15 @@ def build_tfrecords_from_files(
 
   logging.info("Creating patient tfrecords.")
   with tf.Session() as sess:
-    os.mkdir(os.path.join(output_dir, 'tfrecords'))
     for split, data in pickle_data[
         standard_fields.PickledDatasetInfo.data_dict].items():
-      os.mkdir(os.path.join(output_dir, 'tfrecords', split))
+      os.mkdir(os.path.join(output_dir, split))
 
       writer_dict = dict()
       # Create writers
       for patient_id in data.keys():
         writer = tf.python_io.TFRecordWriter(os.path.join(
-          output_dir, 'tfrecords', split, patient_id + '.tfrecords'))
+          output_dir, split, patient_id + '.tfrecords'))
         writer_dict[patient_id] = writer
 
       dataset = tf.data.Dataset.from_tensor_slices(
@@ -348,10 +352,6 @@ def build_tfrecords_from_files(
         writer.close()
 
   logging.info("Finished creating patient tfrecords.")
-  f = open(os.path.join(
-    output_dir, standard_fields.PickledDatasetInfo.pickled_file_name), 'wb')
-  pickle.dump(pickle_data, f)
-  f.close()
 
 
 # patient_ids are only needed for train mode

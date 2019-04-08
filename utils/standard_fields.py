@@ -32,7 +32,6 @@ class BoundingBoxFields:
 
 
 class PickledDatasetInfo:
-  pickled_file_name = 'tfrecords_pickle'
   seed = 'seed'
   patient_ids = 'patient_ids'
   file_names = 'file_names'
