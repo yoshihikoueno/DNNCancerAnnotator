@@ -293,7 +293,7 @@ def build_tfrecords_from_files(
     # Clean everything inside
     shutil.rmtree(output_dir)
 
-  os.path.mkdir(output_dir)
+  os.mkdir(output_dir)
 
   dataset_info_file = os.path.join(dataset_path, dataset_info_file)
   if not os.path.exists(dataset_info_file):
