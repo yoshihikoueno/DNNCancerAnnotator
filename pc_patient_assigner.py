@@ -18,7 +18,8 @@ parser.add_argument('--seed', required=True, type=int)
 args = parser.parse_args()
 
 
-def load_from_folder(folder, id_prefix, class_label, annotation_folder=None):
+def load_from_folder(folder, dataset_folder, id_prefix, class_label,
+                     annotation_folder=None):
   assert ((class_label == 0 and annotation_folder is None) or (class_label == 1
           and annotation_folder is not None))
 
@@ -45,8 +46,13 @@ def load_from_folder(folder, id_prefix, class_label, annotation_folder=None):
       else:
         annotation_file = os.path.join(dirpath, filename)
 
+      image_file = os.path.join(dirpath, filename)
+
+      annotation_file = annotation_file[len(dataset_folder) + 1:]
+      image_file = image_file[len(dataset_folder) + 1:]
+
       images[patient_id].append([
-        os.path.join(dirpath, filename), annotation_file,
+        image_file, annotation_file,
         class_label, patient_id, int(filename.split('.')[0])])
       num_images += 1
 
@@ -102,10 +108,12 @@ def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
     num_healthy_patients = 0
   else:
     healthy_images, num_healthy_images, num_healthy_patients = (
-      load_from_folder(healthy_cases_folder, id_prefix='h', class_label=0))
+      load_from_folder(healthy_cases_folder, dataset_folder=dataset_folder,
+                       id_prefix='h', class_label=0))
 
   cancer_images, num_cancer_images, num_cancer_patients = (
-    load_from_folder(cancer_cases_folder, id_prefix='c', class_label=1,
+    load_from_folder(cancer_cases_folder, dataset_folder=dataset_folder,
+                     id_prefix='c', class_label=1,
                      annotation_folder=cancer_annotations_folder))
 
   print("Healthy patients (images): {} ({})".format(

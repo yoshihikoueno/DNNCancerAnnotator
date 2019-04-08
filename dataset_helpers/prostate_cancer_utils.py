@@ -268,8 +268,11 @@ def _deserialize_and_decode_example(example, target_dims, dilate_groundtruth,
 
 
 def _parse_from_file(image_file, annotation_file, label, patient_id,
-                     slice_id):
+                     slice_id, dataset_folder):
+  image_file = tf.strings.join([dataset_folder, '/', image_file])
   image_string = tf.read_file(image_file)
+
+  annotation_file = tf.strings.join([dataset_folder, '/', annotation_file])
   annotation_string = tf.read_file(annotation_file)
 
   return {
@@ -311,7 +314,10 @@ def build_tfrecords_from_files(
       dataset = tf.data.Dataset.from_tensor_slices(
         tuple([list(t) for t in zip(*list(
           itertools.chain.from_iterable(data.values())))]))
-      dataset = dataset.map(_parse_from_file,
+
+      parse_fn = functools.partial(_parse_from_file,
+                                   dataset_folder=dataset_path)
+      dataset = dataset.map(parse_fn,
                             num_parallel_calls=util_ops.get_cpu_count())
       dataset = dataset.batch(40)
 
