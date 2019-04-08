@@ -45,19 +45,6 @@ def split_mask(mask, dilate_mask=False):
 
   return individual_masks
 
-
-def _get_smallest_patient_data_key(data):
-  res_key = ''
-  smallest_size = 99999999999
-
-  for patient_id, patient_data in data:
-    if len(patient_data) < smallest_size:
-      smallest_size = len(patient_data)
-      res_key = patient_id
-
-  return res_key
-
-
 # def _extract_bounding_box(groundtruth_mask):
 #   assert(len(groundtruth_mask.get_shape()) == 2)
 #   assert(groundtruth_mask.dtype == tf.bool)
@@ -222,220 +209,6 @@ def _decode_example(example_dict, target_dims, dilate_groundtruth,
   return features
 
 
-# Copies part of the data dict consisting of the keys ids into a new dict
-def _make_dataset_split(data, ids):
-  return dict((k, data[k]) for k in ids)
-
-
-def _make_dataset_splits(data):
-  patient_ids = list(data.keys())
-  np.random.shuffle(patient_ids)
-
-  train_nb = int(np.floor(len(patient_ids) * 0.8))
-  val_nb = int(np.floor(len(patient_ids) * 0.15))
-
-  train_ids = patient_ids[:train_nb]
-  val_ids = patient_ids[train_nb:train_nb + val_nb]
-  test_ids = patient_ids[train_nb + val_nb:]
-
-  train_split = _make_dataset_split(data, train_ids)
-  val_split = _make_dataset_split(data, val_ids)
-  test_split = _make_dataset_split(data, test_ids)
-
-  return train_split, val_split, test_split
-
-
-def _sort_files(dataset_folder, balance_classes, balance_remove_smallest,
-                balance_remove_random, only_cancer):
-  healthy_cases_folder = os.path.join(dataset_folder, 'healthy_cases')
-  cancer_cases_folder = os.path.join(dataset_folder, 'cancer_cases')
-  cancer_annotations_folder = os.path.join(dataset_folder,
-                                           'cancer_annotations')
-
-  # Healthy Cases
-  healthy_images = dict()
-  healthy_nb = 0
-  healthy_patient_nb = 0
-  if not only_cancer:
-    for (dirpath, _, filenames) in os.walk(healthy_cases_folder):
-      if not filenames:
-        continue
-
-      patient_id = 'h' + os.path.basename(dirpath)
-      assert(patient_id not in healthy_images)
-      healthy_images[patient_id] = []
-      healthy_patient_nb += 1
-      for filename in filenames:
-        healthy_images[patient_id].append([
-          os.path.join(dirpath, filename), os.path.join(dirpath, filename), 0,
-          patient_id, int(filename.split('.')[0])])
-        healthy_nb += 1
-
-  logging.info("Healthy Images: {}".format(healthy_nb))
-
-  # Cancer Cases
-  cancer_images = dict()
-  cancer_nb = 0
-  cancer_patient_nb = 0
-  for (dirpath, _, filenames) in os.walk(cancer_cases_folder):
-    if not filenames:
-      continue
-    patient_id = 'c' + os.path.basename(dirpath)
-    if (patient_id in cancer_images or patient_id in healthy_images):
-      logging.error("Patient ID {} is already loaded!".format(patient_id))
-      assert(patient_id not in cancer_images and patient_id not in
-             healthy_images)
-    cancer_images[patient_id] = []
-    cancer_patient_nb += 1
-    for filename in filenames:
-      annotation_file = os.path.join(cancer_annotations_folder,
-                                     os.path.split(dirpath)[1],
-                                     os.path.splitext(filename)[0]) + '.png'
-      if not os.path.exists(annotation_file):
-        logging.error("{} has no annotation file {}.".format(
-          os.path.join(dirpath, filename), annotation_file))
-        assert os.path.exists(annotation_file)
-      cancer_images[patient_id].append([os.path.join(dirpath, filename),
-                                        annotation_file, 1, patient_id,
-                                        int(filename.split('.')[0])])
-      cancer_nb += 1
-
-  logging.info("Cancer Images: {}".format(cancer_nb))
-
-  if balance_classes:
-    assert(not only_cancer)
-    logging.info("Healthy:Cancer patients {}:{}".format(healthy_patient_nb,
-                                                        cancer_patient_nb))
-    # Balance class distribution
-    while (healthy_patient_nb != cancer_patient_nb):
-      if healthy_patient_nb > cancer_patient_nb:
-        if balance_remove_smallest:
-          assert(not balance_remove_random)
-          key = _get_smallest_patient_data_key(healthy_images)
-        else:
-          assert(balance_remove_random)
-          key = random.choice(list(healthy_images.keys()))
-        del healthy_images[key]
-        healthy_patient_nb -= 1
-      else:
-        if balance_remove_smallest:
-          assert(not balance_remove_random)
-          key = _get_smallest_patient_data_key(cancer_images)
-        else:
-          assert(balance_remove_random)
-          key = random.choice(list(cancer_images.keys()))
-        del cancer_images[key]
-        cancer_patient_nb -= 1
-
-  logging.info("Final Healthy:Cancer patients {}:{}".format(healthy_patient_nb,
-                                                            cancer_patient_nb))
-
-  # Since we only train with one patient slice per epoch, we do not need to
-  # Consider the actual number of images
-  if healthy_patient_nb != 0:
-    patient_ratio = healthy_patient_nb / float(cancer_patient_nb)
-  else:
-    patient_ratio = 1
-
-  healthy_train, healthy_val, healthy_test = _make_dataset_splits(
-    healthy_images)
-  cancer_train, cancer_val, cancer_test = _make_dataset_splits(
-    cancer_images)
-
-  logging.info("Healthy Patient Train/Val/Test: {}/{}/{}".format(
-    len(healthy_train), len(healthy_val), len(healthy_test)))
-  logging.info("Cancer Patient Train/Val/Test: {}/{}/{}".format(
-    len(cancer_train), len(cancer_val), len(cancer_test)))
-
-  train_data_dict = {**healthy_train, **cancer_train}
-
-  train_patient_ids = list(train_data_dict.keys())
-  train_files = []
-  train_size = 0
-  for _, entries in train_data_dict.items():
-    train_size += len(entries)
-    for entry in entries:
-      train_files.append(entry[0])
-
-  assert(len(train_files) == train_size)
-
-  val_data_dict = {**healthy_val, **cancer_val}
-
-  val_patient_ids = list(val_data_dict.keys())
-  val_files = []
-  val_size = 0
-  for _, entries in val_data_dict.items():
-    val_size += len(entries)
-    for entry in entries:
-      val_files.append(entry[0])
-
-  assert(len(val_files) == val_size)
-
-  test_data_dict = {**healthy_test, **cancer_test}
-
-  test_patient_ids = list(test_data_dict.keys())
-  test_files = []
-  test_size = 0
-  for _, entries in test_data_dict.items():
-    test_size += len(entries)
-    for entry in entries:
-      test_files.append(entry[0])
-
-  assert(len(test_files) == test_size)
-
-  dataset_size = train_size + val_size + test_size
-
-  assert(dataset_size == cancer_nb + healthy_nb)
-
-  logging.info("Total dataset size: {}".format(dataset_size))
-
-  logging.info("Total Train/Val/Test Data: {}/{}/{}".format(
-    train_size, val_size, test_size))
-
-  data_dict = dict()
-  data_dict[standard_fields.SplitNames.train] = train_data_dict
-  data_dict[standard_fields.SplitNames.val] = val_data_dict
-  data_dict[standard_fields.SplitNames.test] = test_data_dict
-
-  return data_dict, {
-    standard_fields.PickledDatasetInfo.patient_ids:
-    {standard_fields.SplitNames.train: train_patient_ids,
-     standard_fields.SplitNames.val: val_patient_ids,
-     standard_fields.SplitNames.test: test_patient_ids},
-    standard_fields.PickledDatasetInfo.file_names:
-    {standard_fields.SplitNames.train: train_files,
-     standard_fields.SplitNames.val: val_files,
-     standard_fields.SplitNames.test: test_files},
-    standard_fields.PickledDatasetInfo.patient_ratio: patient_ratio}
-
-
-def _load_from_files(dataset_path, dataset_type, balance_classes,
-                     balance_remove_smallest, balance_remove_random,
-                     only_cancer_images,
-                     input_image_dims, seed):
-  assert(dataset_type == 'prostate_cancer')
-  assert(os.path.exists(dataset_path))
-  assert(not (balance_remove_smallest and balance_remove_random))
-
-  data_dict, dataset_files_dict = _sort_files(
-    dataset_folder=dataset_path,
-    balance_classes=balance_classes,
-    balance_remove_smallest=balance_remove_smallest,
-    balance_remove_random=balance_remove_random,
-    only_cancer=only_cancer_images)
-
-  pickle_data = {
-    standard_fields.PickledDatasetInfo.seed: seed,
-    standard_fields.PickledDatasetInfo.patient_ids:
-    dataset_files_dict[standard_fields.PickledDatasetInfo.patient_ids],
-    standard_fields.PickledDatasetInfo.file_names:
-    dataset_files_dict[standard_fields.PickledDatasetInfo.file_names],
-    standard_fields.PickledDatasetInfo.patient_ratio:
-    dataset_files_dict[standard_fields.PickledDatasetInfo.patient_ratio]}
-
-  return data_dict, pickle_data
-
-
 def _serialize_example(keys, example):
   patient_id = example[keys.index(standard_fields.TfExampleFields.patient_id)]
   slice_id = example[keys.index(standard_fields.TfExampleFields.slice_id)]
@@ -513,20 +286,21 @@ def build_tfrecords_from_files(
     dataset_path, dataset_type, balance_classes, balance_remove_smallest,
     balance_remove_random,
     only_cancer_images, input_image_dims, seed, output_dir):
-  data_dict, pickle_data = \
-    _load_from_files(
-      dataset_path=dataset_path, dataset_type=dataset_type,
-      balance_classes=balance_classes,
-      balance_remove_smallest=balance_remove_smallest,
-      balance_remove_random=balance_remove_random,
-      only_cancer_images=only_cancer_images,
-      input_image_dims=input_image_dims,
-      seed=seed)
+  of course, this pickle_file name needs to come from the config file,
+  since it varies depending on which data distribution we want
+  pickle_file = os.path.join(
+    dataset_path, standard_fields.PickledDatasetInfo.pickled_file_name)
+  if not os.path.exists(pickle_file):
+    raise ValueError("Pickled dataset info file missing!")
+
+  with open(pickle_file, 'rb') as f:
+    pickle_data = pickle.load(f)
 
   logging.info("Creating patient tfrecords.")
   with tf.Session() as sess:
     os.mkdir(os.path.join(output_dir, 'tfrecords'))
-    for split, data in data_dict.items():
+    for split, data in pickle_data[
+        standard_fields.PickledDatasetInfo.data_dict].items():
       os.mkdir(os.path.join(output_dir, 'tfrecords', split))
 
       writer_dict = dict()
