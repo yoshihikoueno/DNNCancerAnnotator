@@ -7,6 +7,8 @@ import "protos/prostate_cancer_dataset.proto";
 message Dataset {
   optional string dataset_path = 1[default=''];
 
+  optional string dataset_info_file = 2[default=''];
+
   // 0: 0 - 255
   // 1: 0 - 1
   // 2: -1 - 1

@@ -50,6 +50,7 @@ def prepare_dataset(dataset_config, directory, existing_tfrecords,
                                balance_remove_random_patient_set)
       pc.build_tfrecords_from_files(
         dataset_path=dataset_config.dataset_path, dataset_type=dataset_type,
+        dataset_info_file=dataset_config.dataset_info_file,
         balance_classes=dataset_config.balance_classes,
         balance_remove_smallest=balance_remove_smallest,
         balance_remove_random=balance_remove_random,

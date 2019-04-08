@@ -283,17 +283,15 @@ def _parse_from_file(image_file, annotation_file, label, patient_id,
 
 
 def build_tfrecords_from_files(
-    dataset_path, dataset_type, balance_classes, balance_remove_smallest,
+    dataset_path, dataset_info_file, dataset_type, balance_classes,
+    balance_remove_smallest,
     balance_remove_random,
     only_cancer_images, input_image_dims, seed, output_dir):
-  of course, this pickle_file name needs to come from the config file,
-  since it varies depending on which data distribution we want
-  pickle_file = os.path.join(
-    dataset_path, standard_fields.PickledDatasetInfo.pickled_file_name)
-  if not os.path.exists(pickle_file):
+  dataset_info_file = os.path.join(dataset_path, dataset_info_file)
+  if not os.path.exists(dataset_info_file):
     raise ValueError("Pickled dataset info file missing!")
 
-  with open(pickle_file, 'rb') as f:
+  with open(dataset_info_file, 'rb') as f:
     pickle_data = pickle.load(f)
 
   logging.info("Creating patient tfrecords.")
