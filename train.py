@@ -96,7 +96,7 @@ def main(_):
     is_training=True)
 
   estimator = estimator_builder.build_estimator(
-    pipeline_config=pipeline_config, result_dir=FLAGS.result_dir,
+    pipeline_config=pipeline_config, checkpoint_folder=FLAGS.result_dir,
     dataset_info=dataset_info,
     dataset_folder=pipeline_config.dataset.dataset_path,
     eval_split_name=standard_fields.SplitNames.val,
@@ -143,7 +143,7 @@ def main(_):
     is_training=False)
 
   estimator = estimator_builder.build_estimator(
-    pipeline_config=pipeline_config, result_dir=FLAGS.result_dir,
+    pipeline_config=pipeline_config, checkpoint_folder=FLAGS.result_dir,
     dataset_info=dataset_info,
     dataset_folder=pipeline_config.dataset.dataset_path,
     eval_split_name=standard_fields.SplitNames.train,

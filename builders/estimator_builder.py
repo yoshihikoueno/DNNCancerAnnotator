@@ -4,14 +4,15 @@ import tensorflow as tf
 from builders import model_builder
 
 
-def build_estimator(pipeline_config, result_dir, dataset_folder, dataset_info,
+def build_estimator(pipeline_config, checkpoint_folder,
+                    dataset_folder, dataset_info,
                     eval_split_name, train_distribution, eval_distribution,
                     num_gpu, eval_dir):
   np.random.seed(pipeline_config.seed)
   tf.set_random_seed(pipeline_config.seed)
 
   model_fn = model_builder.get_model_fn(pipeline_config=pipeline_config,
-                                        result_folder=result_dir,
+                                        result_folder=checkpoint_folder,
                                         dataset_folder=dataset_folder,
                                         dataset_info=dataset_info,
                                         eval_split_name=eval_split_name,
@@ -21,7 +22,7 @@ def build_estimator(pipeline_config, result_dir, dataset_folder, dataset_info,
   # limit i.e. 0 or None, the checkpoint file will not contain all checkpoint
   # names.
   run_config = tf.estimator.RunConfig(
-    model_dir=result_dir, tf_random_seed=pipeline_config.seed,
+    model_dir=checkpoint_folder, tf_random_seed=pipeline_config.seed,
     save_summary_steps=pipeline_config.train_config.save_summary_steps,
     save_checkpoints_secs=pipeline_config.train_config.save_checkpoints_secs,
     session_config=tf.ConfigProto(allow_soft_placement=True,

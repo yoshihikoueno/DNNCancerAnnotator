@@ -82,7 +82,7 @@ def main(_):
   input_fn = setup_utils.get_predict_input_fn(pipeline_config, FLAGS.input_dir)
 
   estimator = estimator_builder.build_estimator(
-    pipeline_config=pipeline_config, result_dir=FLAGS.checkpoint_dir,
+    pipeline_config=pipeline_config, checkpoint_folder=FLAGS.checkpoint_dir,
     dataset_info=None, eval_split_name=None, train_distribution=None,
     dataset_folder=None,
     eval_distribution=distribution, num_gpu=num_gpu,
