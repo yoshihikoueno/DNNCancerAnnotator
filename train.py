@@ -98,6 +98,7 @@ def main(_):
   estimator = estimator_builder.build_estimator(
     pipeline_config=pipeline_config, result_dir=FLAGS.result_dir,
     dataset_info=dataset_info,
+    dataset_folder=pipeline_config.dataset.dataset_path,
     eval_split_name=standard_fields.SplitNames.val,
     train_distribution=train_distribution,
     eval_distribution=eval_distribution, num_gpu=num_gpu,
@@ -144,6 +145,7 @@ def main(_):
   estimator = estimator_builder.build_estimator(
     pipeline_config=pipeline_config, result_dir=FLAGS.result_dir,
     dataset_info=dataset_info,
+    dataset_folder=pipeline_config.dataset.dataset_path,
     eval_split_name=standard_fields.SplitNames.train,
     train_distribution=train_distribution,
     eval_distribution=eval_distribution, num_gpu=num_gpu,

@@ -105,6 +105,7 @@ def main(_):
   estimator = estimator_builder.build_estimator(
     pipeline_config=pipeline_config, result_dir=result_folder,
     dataset_info=dataset_info,
+    dataset_folder=pipeline_config.dataset.dataset_path,
     eval_split_name=FLAGS.split_name, train_distribution=None,
     eval_distribution=distribution, num_gpu=num_gpu,
     eval_dir=result_folder)

@@ -84,6 +84,7 @@ def main(_):
   estimator = estimator_builder.build_estimator(
     pipeline_config=pipeline_config, result_dir=FLAGS.checkpoint_dir,
     dataset_info=None, eval_split_name=None, train_distribution=None,
+    dataset_folder=None,
     eval_distribution=distribution, num_gpu=num_gpu,
     eval_dir=result_folder)
 

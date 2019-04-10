@@ -1,5 +1,6 @@
 import functools
 import logging
+import os
 
 import numpy as np
 import tensorflow as tf
@@ -255,7 +256,7 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
     assert(False)
 
 
-def get_model_fn(pipeline_config, result_folder, dataset_info,
+def get_model_fn(pipeline_config, result_folder, dataset_folder, dataset_info,
                  eval_split_name, num_gpu, eval_dir):
 
   if dataset_info is None:
@@ -263,6 +264,7 @@ def get_model_fn(pipeline_config, result_folder, dataset_info,
   else:
     file_names = dataset_info[
       standard_fields.PickledDatasetInfo.file_names][eval_split_name]
+    file_names = [os.path.join(dataset_folder, f) for f in file_names]
     np.random.shuffle(file_names)
 
     patient_ids = dataset_info[
