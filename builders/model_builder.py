@@ -33,7 +33,8 @@ def _loss(labels, logits, loss_name, pos_weight):
   if loss_name == 'sigmoid':
     assert(logits.get_shape().as_list()[1] == 1)
     return tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(
-      tf.to_float(labels), tf.squeeze(logits, axis=1), pos_weight))
+      tf.cast(labels, dtype=tf.float32), tf.squeeze(logits, axis=1),
+      pos_weight))
   elif loss_name == 'softmax':
     # Logits should be of shape [batch_size, num_classes]
     assert(len(logits.get_shape()) == 2)
@@ -45,7 +46,7 @@ def _loss(labels, logits, loss_name, pos_weight):
 
 def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
                       feature_extractor, mode, num_gpu,
-                      visualization_file_names, eval_dir):
+                      visualization_file_names, eval_dir, calc_froc):
   num_classes = pipeline_config.dataset.num_classes
   add_background_class = pipeline_config.train_config.loss.name == 'softmax'
   if add_background_class:
@@ -106,9 +107,10 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
       and mode == tf.estimator.ModeKeys.TRAIN):
     patient_ratio = dataset_info[
       standard_fields.PickledDatasetInfo.patient_ratio]
-    cancer_pixels = tf.reduce_sum(tf.to_float(annotation_mask_batch))
-    healthy_pixels = tf.to_float(tf.size(
-      annotation_mask_batch)) - cancer_pixels
+    cancer_pixels = tf.reduce_sum(tf.cast(annotation_mask_batch,
+                                          dtype=tf.float32))
+    healthy_pixels = tf.cast(tf.size(
+      annotation_mask_batch), dtype=tf.float32) - cancer_pixels
 
     batch_pixel_ratio = tf.div(healthy_pixels, cancer_pixels + 1.0)
 
@@ -199,12 +201,13 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
       scaled_network_output = tf.nn.softmax(network_output)[:, :, :, 1]
 
       # Metrics
-    metric_dict, statistics_dict = metric_utils.get_metrics(
-      scaled_network_output, annotation_mask_batch,
-      tp_thresholds=np.array(pipeline_config.metrics_tp_thresholds,
-                             dtype=np.float32),
-      parallel_iterations=min(pipeline_config.eval_config.batch_size,
-                              util_ops.get_cpu_count()))
+    (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
+     froc_thresholds) = (
+      metric_utils.get_metrics(
+        scaled_network_output, annotation_mask_batch,
+        parallel_iterations=min(pipeline_config.eval_config.batch_size,
+                                util_ops.get_cpu_count()),
+        calc_froc=calc_froc))
 
     vis_hook = session_hooks.VisualizationHook(
       result_folder=result_folder,
@@ -217,8 +220,9 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
     patient_metric_hook = session_hooks.PatientMetricHook(
       statistics_dict=statistics_dict,
       patient_id=features[standard_fields.InputDataFields.patient_id],
-      result_folder=result_folder,
-      tp_thresholds=pipeline_config.metrics_tp_thresholds, eval_dir=eval_dir)
+      result_folder=result_folder, eval_dir=eval_dir, num_lesions=num_lesions,
+      froc_region_cm_values=froc_region_cm_values,
+      froc_thresholds=froc_thresholds)
 
     return tf.estimator.EstimatorSpec(
       mode, loss=total_loss, train_op=train_op,
@@ -257,7 +261,7 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
 
 
 def get_model_fn(pipeline_config, result_folder, dataset_folder, dataset_info,
-                 eval_split_name, num_gpu, eval_dir):
+                 eval_split_name, num_gpu, eval_dir, calc_froc):
 
   if dataset_info is None:
     visualization_file_names = None
@@ -303,6 +307,6 @@ def get_model_fn(pipeline_config, result_folder, dataset_folder, dataset_info,
                              feature_extractor=feature_extractor,
                              num_gpu=num_gpu,
                              visualization_file_names=visualization_file_names,
-                             eval_dir=eval_dir)
+                             eval_dir=eval_dir, calc_froc=calc_froc)
   else:
     assert(False)

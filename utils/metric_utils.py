@@ -1,117 +1,61 @@
 import numpy as np
 import tensorflow as tf
 
-from metrics import region_recall_metric
 from metrics import confusion_metrics
 from metrics import pc_metrics
-from utils import util_ops
+from dataset_helpers import prostate_cancer_utils
 
 
-def get_metrics(prediction_batch, groundtruth_batch, tp_thresholds,
-                parallel_iterations):
+def get_metrics(prediction_batch, groundtruth_batch,
+                parallel_iterations, calc_froc):
   assert(len(prediction_batch.get_shape()) == 3)
   assert(len(groundtruth_batch.get_shape()) == 4)
 
   groundtruth_batch = tf.squeeze(groundtruth_batch, axis=3)
+  prediction_batch = tf.cast(tf.greater_equal(prediction_batch, 0.5), tf.int64)
 
-  tp_batch = tf.map_fn(
-    lambda pred_gt_stack: confusion_metrics.true_positives_at_thresholds(
-      labels=tf.cast(pred_gt_stack[1], dtype=tf.int64),
-      predictions=pred_gt_stack[0],
-      thresholds=tp_thresholds), elems=tf.stack([
-        prediction_batch, tf.to_float(groundtruth_batch)], axis=1),
-    parallel_iterations=parallel_iterations,
-    dtype=tf.int64)
+  # Currently only batch size of 1 is supported
+  groundtruth = tf.squeeze(groundtruth_batch, axis=0)
+  prediction = tf.squeeze(prediction_batch, axis=0)
 
-  fp_batch = tf.map_fn(
-    lambda pred_gt_stack: confusion_metrics.false_positives_at_thresholds(
-      labels=tf.cast(pred_gt_stack[1], dtype=tf.int64),
-      predictions=pred_gt_stack[0],
-      thresholds=tp_thresholds), elems=tf.stack([
-        prediction_batch, tf.to_float(groundtruth_batch)], axis=1),
-    parallel_iterations=parallel_iterations,
-    dtype=tf.int64)
+  split_groundtruth = prostate_cancer_utils.split_mask(groundtruth)
+  num_lesions = tf.shape(split_groundtruth)[0]
 
-  fn_batch = tf.map_fn(
-    lambda pred_gt_stack: confusion_metrics.false_negatives_at_thresholds(
-      labels=tf.cast(pred_gt_stack[1], dtype=tf.int64),
-      predictions=pred_gt_stack[0],
-      thresholds=tp_thresholds), elems=tf.stack([
-        prediction_batch, tf.to_float(groundtruth_batch)], axis=1),
-    parallel_iterations=parallel_iterations,
-    dtype=tf.int64)
+  tp = confusion_metrics.true_positives(labels=groundtruth,
+                                        predictions=prediction)
+  fp = confusion_metrics.false_positives(labels=groundtruth,
+                                         predictions=prediction)
+  fn = confusion_metrics.false_negatives(labels=groundtruth,
+                                         predictions=prediction)
 
-  region_cm_values = pc_metrics.get_region_cm_values_at_thresholds(
-    prediction_batch=prediction_batch, groundtruth_batch=groundtruth_batch,
-    thresholds=tp_thresholds, parallel_iterations=parallel_iterations)
+  region_cm_values = pc_metrics.get_region_cm_values(
+    prediction=prediction, split_groundtruth=split_groundtruth,
+    parallel_iterations=parallel_iterations)
 
-  # precision = tf.metrics.precision_at_thresholds(
-  #   labels=groundtruth_batch, predictions=prediction_batch,
-  #   thresholds=tp_thresholds)
+  if calc_froc:
+    # Get FROC values
+    num_thresholds = 200.0
+    thresholds = np.linspace(0, 1, num=num_thresholds, endpoint=True)
+    froc_region_cm_values = pc_metrics.get_region_cm_values_at_thresholds(
+      prediction=prediction, split_groundtruth=split_groundtruth,
+      thresholds=thresholds, parallel_iterations=parallel_iterations)
+  else:
+    froc_region_cm_values = None
+    thresholds = []
 
-  # recall = tf.metrics.recall_at_thresholds(
-  #   labels=groundtruth_batch, predictions=prediction_batch,
-  #   thresholds=tp_thresholds)
-
-  # auc = tf.metrics.auc(groundtruth_batch, prediction_batch)
-
-  # f1_score = tf.where(tf.greater(1 * precision[0] + recall[0], 0.0),
-  #                     (2 * precision[0] * recall[0]) / (
-  #                       1 * precision[0] + recall[0]), [0.0]
-  #                     * len(tp_thresholds))
-  # with tf.control_dependencies([precision[1], recall[1]]):
-  #   f1_score_update_op = tf.identity(f1_score)
-
-  # f1_5_score = tf.where(tf.greater(2.25 * precision[0] + recall[0], 0.0),
-  #                       (3.25 * precision[0] * recall[0]) / (
-  #                         2.25 * precision[0] + recall[0]), [0.0]
-  #                       * len(tp_thresholds))
-  # with tf.control_dependencies([precision[1], recall[1]]):
-  #   f1_5_score_update_op = tf.identity(f1_5_score)
-
-  # # More weight on recall
-  # f2_score = tf.where(tf.greater(4 * precision[0] + recall[0], 0.0),
-  #                     (5 * precision[0] * recall[0]) / (
-  #                       4 * precision[0] + recall[0]), [0.0]
-  #                     * len(tp_thresholds))
-  # with tf.control_dependencies([precision[1], recall[1]]):
-  #   f2_score_update_op = tf.identity(f2_score)
-
-  #region_recall = region_recall_metric.region_recall_at_thresholds(
-  #  groundtruth_batch, prediction_batch, tp_thresholds,
-  #  parallel_iterations=parallel_iterations)
-
-  #metric_dict = {'metrics/auc': auc}
   metric_dict = {}
-
   # We want to collect the statistics for the regions so that we can calculate
   # patient centered metrics later
   statistics_dict = {}
-  for i, t in enumerate(tp_thresholds):
-    t = int(np.round(t * 100))
-    # metric_dict['metrics/precision_at_{}'.format(t)] = (
-    #   precision[0][i], precision[1][i])
-    # metric_dict['metrics/recall_at_{}'.format(t)] = (
-    #   recall[0][i], recall[1][i])
-    # metric_dict['metrics/f1_score_at_{}'.format(t)] = (
-    #   f1_score[i], f1_score_update_op[i])
-    # metric_dict['metrics/f1_5_score_at_{}'.format(t)] = (
-    #   f1_5_score[i], f1_5_score_update_op[i])
-    # metric_dict['metrics/f2_score_at_{}'.format(t)] = (
-    #   f2_score[i], f2_score_update_op[i])
+  statistics_dict['region_tp'] = tf.expand_dims(region_cm_values[0],
+                                                axis=0)
+  statistics_dict['region_fn'] = tf.expand_dims(region_cm_values[1],
+                                                axis=0)
+  statistics_dict['region_fp'] = tf.expand_dims(region_cm_values[2],
+                                                axis=0)
+  statistics_dict['tp'] = tf.expand_dims(tp, axis=0)
+  statistics_dict['fn'] = tf.expand_dims(fn, axis=0)
+  statistics_dict['fp'] = tf.expand_dims(fp, axis=0)
 
-    #metric_dict['metrics/region_recall_at_{}'.format(t)] = (
-    #  region_recall[i][0], region_recall[i][1])
-
-    assert(t not in statistics_dict)
-
-    statistics_dict[t] = dict()
-
-    statistics_dict[t]['region_tp'] = region_cm_values[i][0]
-    statistics_dict[t]['region_fn'] = region_cm_values[i][1]
-    statistics_dict[t]['region_fp'] = region_cm_values[i][2]
-    statistics_dict[t]['tp'] = tp_batch[:, i]
-    statistics_dict[t]['fp'] = fp_batch[:, i]
-    statistics_dict[t]['fn'] = fn_batch[:, i]
-
-  return metric_dict, statistics_dict
+  return (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
+          thresholds)

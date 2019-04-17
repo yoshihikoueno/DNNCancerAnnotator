@@ -14,6 +14,4 @@ message PipelineConfig {
   optional Dataset dataset = 4;
 
   optional int32 seed = 5;
-  // If a prediction is higher than threshold, it will be counted as true positive
-  repeated float metrics_tp_thresholds = 6 [packed=true];
 }

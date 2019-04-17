@@ -103,7 +103,8 @@ def main(_):
     train_distribution=train_distribution,
     eval_distribution=eval_distribution, num_gpu=num_gpu,
     eval_dir=os.path.join(FLAGS.result_dir,
-                          'eval_' + standard_fields.SplitNames.val))
+                          'eval_' + standard_fields.SplitNames.val),
+    calc_froc=False)
 
   if pipeline_config.train_config.early_stopping:
     early_stop_hook = tf.contrib.estimator.stop_if_no_decrease_hook(
@@ -135,6 +136,21 @@ def main(_):
   tf.estimator.train_and_evaluate(estimator=estimator,
                                   train_spec=train_spec, eval_spec=eval_spec)
 
+  # Reevaluate last checkpoint in order to calculate froc
+  estimator = estimator_builder.build_estimator(
+    pipeline_config=pipeline_config, checkpoint_folder=FLAGS.result_dir,
+    dataset_info=dataset_info,
+    dataset_folder=pipeline_config.dataset.dataset_path,
+    eval_split_name=standard_fields.SplitNames.val,
+    train_distribution=train_distribution,
+    eval_distribution=eval_distribution, num_gpu=num_gpu,
+    eval_dir=os.path.join(FLAGS.result_dir,
+                          'eval_' + standard_fields.SplitNames.val),
+    calc_froc=True)
+
+  estimator.evaluate(input_fn=eval_input_fn, steps=None,
+                     name=standard_fields.SplitNames.val)
+
   # Evaluate train set
   train_eval_input_fn, _ = setup_utils.get_input_fn(
     pipeline_config=pipeline_config, directory=FLAGS.result_dir,
@@ -150,7 +166,8 @@ def main(_):
     train_distribution=train_distribution,
     eval_distribution=eval_distribution, num_gpu=num_gpu,
     eval_dir=os.path.join(FLAGS.result_dir,
-                          'eval_' + standard_fields.SplitNames.train))
+                          'eval_' + standard_fields.SplitNames.train),
+    calc_froc=True)
 
   estimator.evaluate(input_fn=train_eval_input_fn, steps=None,
                      name=standard_fields.SplitNames.train)

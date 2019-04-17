@@ -7,7 +7,7 @@ from builders import model_builder
 def build_estimator(pipeline_config, checkpoint_folder,
                     dataset_folder, dataset_info,
                     eval_split_name, train_distribution, eval_distribution,
-                    num_gpu, eval_dir):
+                    num_gpu, eval_dir, calc_froc):
   np.random.seed(pipeline_config.seed)
   tf.set_random_seed(pipeline_config.seed)
 
@@ -16,7 +16,8 @@ def build_estimator(pipeline_config, checkpoint_folder,
                                         dataset_folder=dataset_folder,
                                         dataset_info=dataset_info,
                                         eval_split_name=eval_split_name,
-                                        num_gpu=num_gpu, eval_dir=eval_dir)
+                                        num_gpu=num_gpu, eval_dir=eval_dir,
+                                        calc_froc=calc_froc)
 
   # keep_checkpoint_max is set to this number because when setting it as no
   # limit i.e. 0 or None, the checkpoint file will not contain all checkpoint

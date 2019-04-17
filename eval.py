@@ -108,7 +108,8 @@ def main(_):
     dataset_folder=pipeline_config.dataset.dataset_path,
     eval_split_name=FLAGS.split_name, train_distribution=None,
     eval_distribution=distribution, num_gpu=num_gpu,
-    eval_dir=result_folder)
+    eval_dir=result_folder,
+    calc_froc=not FLAGS.all_checkpoints and not FLAGS.continuous)
 
   if FLAGS.num_steps > 0:
     num_steps = FLAGS.num_steps
@@ -123,6 +124,7 @@ def main(_):
   elif FLAGS.all_checkpoints:
     latest_checkpoint = ''
     evaluated_checkpoints = []
+    all_checkpoints = []
     # We need a loop, as new checkpoints might be generated while we are still
     # evaluating
     while True:
@@ -145,6 +147,21 @@ def main(_):
           time.sleep(pipeline_config.eval_config.eval_interval_secs)
         else:
           break
+
+    # Reevaluate last checkpoint to calculate froc
+    estimator = estimator_builder.build_estimator(
+      pipeline_config=pipeline_config, checkpoint_folder=FLAGS.checkpoint_dir,
+      dataset_info=dataset_info,
+      dataset_folder=pipeline_config.dataset.dataset_path,
+      eval_split_name=FLAGS.split_name, train_distribution=None,
+      eval_distribution=distribution, num_gpu=num_gpu,
+      eval_dir=result_folder,
+      calc_froc=True)
+
+    ckpt = all_checkpoints[-1]
+
+    _eval_checkpoint(ckpt, estimator, input_fn, num_steps,
+                     split_name=FLAGS.split_name)
   elif FLAGS.continuous:
     latest_checkpoint = ''
     while True:

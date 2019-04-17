@@ -86,7 +86,7 @@ def main(_):
     dataset_info=None, eval_split_name=None, train_distribution=None,
     dataset_folder=None,
     eval_distribution=distribution, num_gpu=num_gpu,
-    eval_dir=result_folder)
+    eval_dir=result_folder, calc_froc=False)
 
   predictions = estimator.predict(
     input_fn, yield_single_examples=False)

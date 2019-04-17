@@ -3,24 +3,22 @@ import tensorflow as tf
 from dataset_helpers import prostate_cancer_utils
 
 
-def get_region_cm_values_at_thresholds(prediction_batch, groundtruth_batch,
+def get_region_cm_values_at_thresholds(prediction, split_groundtruth,
                                        thresholds, parallel_iterations):
-  # Currently only support batch size of 1
-  prediction = tf.squeeze(prediction_batch, axis=0)
-  groundtruth = tf.squeeze(groundtruth_batch, axis=0)
   assert(len(prediction.get_shape()) == 2)
-  assert(len(groundtruth.get_shape()) == 2)
+  assert(len(split_groundtruth.get_shape()) == 3)
 
-  split_groundtruth = prostate_cancer_utils.split_mask(groundtruth)
+  v = tf.map_fn(lambda threshold: get_region_cm_values(
+    tf.cast(tf.greater_equal(
+      tf.cast(prediction, tf.float64), threshold), tf.int64),
+    split_groundtruth=split_groundtruth,
+    parallel_iterations=parallel_iterations), elems=thresholds,
+                parallel_iterations=parallel_iterations,
+                dtype=(tf.int64, tf.int64, tf.int64))
 
-  result = []
-  for threshold in thresholds:
-    result.append(get_region_cm_values(
-      tf.cast(tf.greater_equal(prediction, threshold), tf.int64),
-      split_groundtruth=split_groundtruth,
-      parallel_iterations=parallel_iterations))
+  v_dict = {'region_tp': v[0], 'region_fn': v[1], 'region_fp': v[2]}
 
-  return result
+  return v_dict
 
 
 def get_region_cm_values(prediction, split_groundtruth, parallel_iterations):
@@ -32,10 +30,10 @@ def get_region_cm_values(prediction, split_groundtruth, parallel_iterations):
                                                       dilate_mask=True)
 
   def calc_without_groundtruth():
-    return (tf.expand_dims(tf.constant(0, dtype=tf.int64), axis=0),
-            tf.expand_dims(tf.constant(0, dtype=tf.int64), axis=0),
-            tf.cast(tf.expand_dims(tf.shape(split_prediction)[0], axis=0),
-                    dtype=tf.int64))
+    return (tf.constant(0, dtype=tf.int64),
+            tf.constant(0, dtype=tf.int64),
+            tf.cast(tf.shape(split_prediction)[0],
+                                 dtype=tf.int64))
 
   def calc_with_groundtruth():
     def calc_with_prediction():
@@ -67,7 +65,6 @@ def get_region_cm_values(prediction, split_groundtruth, parallel_iterations):
                                  [None, None])])[1]
 
       best_f_scores = tf.reduce_max(f_scores, axis=1)
-      best_predictions = tf.argmax(f_scores, axis=1)
 
       assigned_predictions = tf.greater(best_f_scores, 0.3)
 
@@ -75,18 +72,16 @@ def get_region_cm_values(prediction, split_groundtruth, parallel_iterations):
       region_fn = tf.reduce_sum(tf.cast(tf.logical_not(assigned_predictions),
                                         tf.int64))
       region_fp = tf.cast(tf.subtract(
-        tf.shape(split_prediction)[0],
-        tf.shape(tf.unique(best_predictions)[0])[0]), tf.int64)
+        tf.cast(tf.shape(split_prediction)[0], tf.int64), region_tp),
+                          tf.int64)
 
-      return (tf.expand_dims(region_tp, axis=0),
-              tf.expand_dims(region_fn, axis=0),
-              tf.expand_dims(region_fp, axis=0))
+      return (region_tp, region_fn, region_fp)
 
     def calc_without_prediction():
-      return (tf.expand_dims(tf.constant(0, dtype=tf.int64), axis=0),
-              tf.cast(tf.expand_dims(tf.shape(split_groundtruth)[0], axis=0),
-                      tf.int64),
-              tf.expand_dims(tf.constant(0, dtype=tf.int64), axis=0))
+      return (tf.constant(0, dtype=tf.int64),
+              tf.cast(tf.shape(split_groundtruth)[0],
+                      dtype=tf.int64),
+              tf.constant(0, dtype=tf.int64))
 
     return tf.cond(tf.equal(tf.shape(split_prediction)[0], tf.constant(0)),
                    calc_without_prediction, calc_with_prediction)
