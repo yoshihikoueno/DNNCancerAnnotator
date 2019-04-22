@@ -28,11 +28,11 @@ class UNet(object):
     else:
       batch_norm_params = None
 
-    net = lu.conv_2d(
+    net = lu.conv(
       inputs=inputs, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
       batch_norm_params=batch_norm_params, is_training=is_training)
-    net = lu.conv_2d(
+    net = lu.conv(
       inputs=net, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
       batch_norm_params=batch_norm_params, is_training=is_training)
@@ -55,7 +55,7 @@ class UNet(object):
     else:
       batch_norm_params = None
 
-    net = lu.conv_2d_transpose(
+    net = lu.conv_t(
       inputs=inputs, filters=nb_filters, kernel_size=2, strides=2,
       padding=self.conv_padding, conv_params=conv_transposed_params,
       is_training=is_training, batch_norm_params=batch_norm_params)
@@ -74,11 +74,11 @@ class UNet(object):
 
     net = tf.concat([net, downsample_reference], axis=-1)
 
-    net = lu.conv_2d(
+    net = lu.conv(
       inputs=net, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
       batch_norm_params=batch_norm_params, is_training=is_training)
-    net = lu.conv_2d(
+    net = lu.conv(
       inputs=net, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
       batch_norm_params=batch_norm_params, is_training=is_training)
@@ -127,7 +127,7 @@ class UNet(object):
       conv_params = lu.get_conv_params(activation_fn=None,
                                        weight_decay=self.weight_decay)
 
-      final = lu.conv_2d(inputs=us, filters=num_classes, kernel_size=1,
+      final = lu.conv(inputs=us, filters=num_classes, kernel_size=1,
                          strides=1, padding=self.conv_padding,
                          is_training=is_training, conv_params=conv_params,
                          batch_norm_params=None, name='OutputLayer')
