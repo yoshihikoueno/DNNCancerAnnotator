@@ -22,4 +22,6 @@ message Model {
 
   // same or valid
   optional string conv_padding = 9[default='valid'];
+
+  optional bool conv_bn_first = 10[default=false];
 }

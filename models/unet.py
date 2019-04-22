@@ -9,7 +9,7 @@ from builders import activation_fn_builder as ab
 
 class UNet(object):
   def __init__(self, weight_decay, conv_padding, filter_sizes, down_activation,
-               up_activation):
+               up_activation, conv_bn_first):
     assert(len(filter_sizes) > 1)
     assert(conv_padding in ['same', 'valid'])
     self.weight_decay = weight_decay
@@ -17,6 +17,7 @@ class UNet(object):
     self.filter_sizes = filter_sizes
     self.down_activation = ab.build(down_activation)
     self.up_activation = ab.build(up_activation)
+    self.conv_bn_first = conv_bn_first
 
   def _downsample_block(self, inputs, nb_filters, is_training, use_batch_norm,
                         bn_momentum, bn_epsilon):
@@ -31,11 +32,13 @@ class UNet(object):
     net = lu.conv(
       inputs=inputs, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
-      batch_norm_params=batch_norm_params, is_training=is_training)
+      batch_norm_params=batch_norm_params, is_training=is_training,
+      bn_first=self.conv_bn_first)
     net = lu.conv(
       inputs=net, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
-      batch_norm_params=batch_norm_params, is_training=is_training)
+      batch_norm_params=batch_norm_params, is_training=is_training,
+      bn_first=self.conv_bn_first)
 
     pool_params = lu.get_pooling_params()
 
@@ -58,7 +61,8 @@ class UNet(object):
     net = lu.conv_t(
       inputs=inputs, filters=nb_filters, kernel_size=2, strides=2,
       padding=self.conv_padding, conv_params=conv_transposed_params,
-      is_training=is_training, batch_norm_params=batch_norm_params)
+      is_training=is_training, batch_norm_params=batch_norm_params,
+      bn_first=self.conv_bn_first)
 
     if self.conv_padding == 'valid':
       downsample_size = downsample_reference[0].get_shape().as_list()[0]
@@ -77,11 +81,13 @@ class UNet(object):
     net = lu.conv(
       inputs=net, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
-      batch_norm_params=batch_norm_params, is_training=is_training)
+      batch_norm_params=batch_norm_params, is_training=is_training,
+      bn_first=self.conv_bn_first)
     net = lu.conv(
       inputs=net, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
-      batch_norm_params=batch_norm_params, is_training=is_training)
+      batch_norm_params=batch_norm_params, is_training=is_training,
+      bn_first=self.conv_bn_first)
 
     return net
 

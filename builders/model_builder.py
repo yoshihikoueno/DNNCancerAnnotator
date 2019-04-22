@@ -299,7 +299,8 @@ def get_model_fn(pipeline_config, result_folder, dataset_folder, dataset_info,
       conv_padding=pipeline_config.model.conv_padding,
       filter_sizes=pipeline_config.model.unet.filter_sizes,
       down_activation=pipeline_config.model.unet.down_activation,
-      up_activation=pipeline_config.model.unet.up_activation)
+      up_activation=pipeline_config.model.unet.up_activation,
+      conv_bn_first=pipeline_config.model.conv_bn_first)
     return functools.partial(_general_model_fn,
                              pipeline_config=pipeline_config,
                              result_folder=result_folder,
