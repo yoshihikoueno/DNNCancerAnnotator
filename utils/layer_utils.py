@@ -37,6 +37,43 @@ def get_batch_norm_params(momentum, epsilon):
           'momentum': momentum, 'center': True, 'trainable': True}
 
 
+def conv_af_bn(inputs, filters, kernel_size, strides, padding, conv_params,
+                 batch_norm_params, is_training, name=None):
+  assert(batch_norm_params is not None)
+
+  res = tf.layers.conv2d(
+    inputs, filters=filters, kernel_size=kernel_size, strides=strides,
+    padding=padding, name=name, **conv_params)
+
+  axis = -1 if conv_params['data_format'] == 'channels_last' else 1
+  res = tf.layers.batch_normalization(
+    inputs=res, axis=axis, name=name + 'BN' if name is not None else None,
+    **batch_norm_params, training=is_training)
+
+  return res
+
+
+def conv_bn_af(inputs, filters, kernel_size, strides, padding, conv_params,
+                 batch_norm_params, is_training, name=None):
+  assert(batch_norm_params is not None)
+
+  activation = conv_params['activation']
+  conv_params['activation'] = None
+
+  res = tf.layers.conv2d(
+    inputs, filters=filters, kernel_size=kernel_size, strides=strides,
+    padding=padding, name=name, **conv_params)
+
+  axis = -1 if conv_params['data_format'] == 'channels_last' else 1
+  res = tf.layers.batch_normalization(
+    inputs=res, axis=axis, name=name + 'BN' if name is not None else None,
+    **batch_norm_params, training=is_training)
+
+  res = activation(res)
+
+  return res
+
+
 def conv_2d(inputs, filters, kernel_size, strides, padding, conv_params,
             batch_norm_params, is_training, name=None):
   res = tf.layers.conv2d(
