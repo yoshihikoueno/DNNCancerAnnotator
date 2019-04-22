@@ -19,13 +19,13 @@ def get_conv_params(activation_fn, weight_decay):
   return res
 
 
-def get_conv_transpose_params(weight_decay):
+def get_conv_transpose_params(activation_fn, weight_decay):
   res = {'data_format': 'channels_last',
          'use_bias': True,
          'kernel_regularizer': (tf.contrib.layers.l2_regularizer(weight_decay)
                                 if weight_decay > 0 else None),
          'bias_initializer': tf.zeros_initializer(), 'bias_regularizer': None,
-         'activity_regularizer': None, 'activation': None,
+         'activity_regularizer': None, 'activation': activation_fn,
          'kernel_initializer': tf.keras.initializers.VarianceScaling(
            scale=2.0)}
 

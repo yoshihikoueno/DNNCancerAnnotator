@@ -46,7 +46,7 @@ class UNet(object):
   def _upsample_block(self, inputs, downsample_reference, nb_filters,
                       is_training, use_batch_norm, bn_momentum, bn_epsilon):
     conv_transposed_params = lu.get_conv_transpose_params(
-      weight_decay=self.weight_decay)
+      activation_fn=self.up_activation, weight_decay=self.weight_decay)
     conv_params = lu.get_conv_params(activation_fn=self.up_activation,
                                      weight_decay=self.weight_decay)
     if use_batch_norm:
