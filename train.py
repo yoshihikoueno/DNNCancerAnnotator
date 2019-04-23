@@ -131,7 +131,9 @@ def main(_):
   eval_spec = tf.estimator.EvalSpec(
     input_fn=eval_input_fn,
     steps=None if FLAGS.num_eval_steps <= 0 else FLAGS.num_eval_steps,
-    start_delay_secs=0, throttle_secs=0, name=standard_fields.SplitNames.val)
+    start_delay_secs=0,
+    throttle_secs=pipeline_config.eval_config.eval_interval_secs,
+    name=standard_fields.SplitNames.val)
 
   tf.estimator.train_and_evaluate(estimator=estimator,
                                   train_spec=train_spec, eval_spec=eval_spec)
