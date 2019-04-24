@@ -86,7 +86,10 @@ def build_dataset(dataset_name, directory,
     # nothing will be dropped anyway, and now we have a defined batch dim
     dataset = dataset.batch(batch_size, drop_remainder=True)
   else:
-    dataset = dataset.batch(batch_size, drop_remainder=False)
+    assert(batch_size == 1)
+    # We need a defined shape, once we set batch size > 1 we cannot drop
+    # remainder anymore
+    dataset = dataset.batch(batch_size, drop_remainder=True)
 
   # Buffer size of None means autotune
   dataset = dataset.prefetch(None)
