@@ -26,7 +26,7 @@ def get_predict_input_fn(pipeline_config, input_dir):
 
 
 def get_input_fn(pipeline_config, directory, existing_tfrecords,
-                 split_name, is_training):
+                 split_name, is_training, num_parallel_iterations):
   target_dims = [pipeline_config.model.input_image_size_x,
                  pipeline_config.model.input_image_size_y,
                  pipeline_config.model.input_image_channels]
@@ -53,6 +53,10 @@ def get_input_fn(pipeline_config, directory, existing_tfrecords,
       shuffle=shuffle,
       shuffle_buffer_size=shuffle_buffer_size,
       is_training=is_training, dataset_info=meta_info,
-      dataset_config=pipeline_config.dataset)
+      dataset_config=pipeline_config.dataset,
+      is_gan_model=pipeline_config.model.WhichOneof('model_type') == 'gan',
+      data_augmentation_options=(
+        pipeline_config.train_config.data_augmentation_options),
+      num_parallel_iterations=num_parallel_iterations)
 
   return input_fn, meta_info

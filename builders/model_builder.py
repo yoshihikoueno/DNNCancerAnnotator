@@ -5,7 +5,7 @@ import os
 import numpy as np
 import tensorflow as tf
 
-from models import unet
+from models import unet, unet_pix2pix, gan_discriminator
 from utils import standard_fields
 from utils import preprocessor
 from utils import session_hooks
@@ -44,41 +44,48 @@ def _loss(labels, logits, loss_name, pos_weight):
     assert(False and 'Loss name "{}" not recognized.'.format(loss_name))
 
 
-def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
-                      feature_extractor, mode, num_gpu,
-                      visualization_file_names, eval_dir, calc_froc):
+def _gan_discriminator_model_fn(generated_data, conditioning,
+                                model,
+                                use_batch_norm, bn_momentum, bn_epsilon):
+  print(generated_data)
+  print(conditioning)
+  return model.build_network(
+    tf.concat([generated_data, conditioning], axis=-1), is_training=True,
+    num_classes=2, use_batch_norm=use_batch_norm, bn_momentum=bn_momentum,
+    bn_epsilon=bn_epsilon)
+
+
+def _general_model_fn(features, mode, calc_froc, pipeline_config,
+                      result_folder,
+                      dataset_info, feature_extractor,
+                      visualization_file_names, eval_dir,
+                      as_gan_generator):
   num_classes = pipeline_config.dataset.num_classes
   add_background_class = pipeline_config.train_config.loss.name == 'softmax'
   if add_background_class:
     assert(num_classes == 1)
     num_classes += 1
 
-  image_batch = features[standard_fields.InputDataFields.image_decoded]
+  if as_gan_generator:
+    image_batch = features
+  else:
+    image_batch = features[standard_fields.InputDataFields.image_decoded]
+
+  network_output = feature_extractor.build_network(
+    image_batch, is_training=mode == tf.estimator.ModeKeys.TRAIN,
+    num_classes=num_classes,
+    use_batch_norm=pipeline_config.model.use_batch_norm,
+    bn_momentum=pipeline_config.model.batch_norm_momentum,
+    bn_epsilon=pipeline_config.model.batch_norm_epsilon)
+
+  if as_gan_generator:
+    return network_output
 
   if mode == tf.estimator.ModeKeys.PREDICT:
     annotation_mask_batch = None
   else:
     annotation_mask_batch = features[
       standard_fields.InputDataFields.annotation_mask]
-
-  if mode == tf.estimator.ModeKeys.TRAIN:
-    # Augment images
-    image_batch, annotation_mask_batch = preprocessor.apply_data_augmentation(
-      pipeline_config.train_config.data_augmentation_options,
-      images=image_batch, gt_masks=annotation_mask_batch,
-      batch_size=pipeline_config.train_config.batch_size)
-
-  # General preprocessing
-  image_batch_preprocessed = preprocessor.preprocess(
-    image_batch, pipeline_config.dataset.val_range,
-    scale_input=pipeline_config.dataset.scale_input)
-
-  network_output = feature_extractor.build_network(
-    image_batch_preprocessed, is_training=mode == tf.estimator.ModeKeys.TRAIN,
-    num_classes=num_classes,
-    use_batch_norm=pipeline_config.model.use_batch_norm,
-    bn_momentum=pipeline_config.model.batch_norm_momentum,
-    bn_epsilon=pipeline_config.model.batch_norm_epsilon)
 
   if mode == tf.estimator.ModeKeys.TRAIN:
     # Record model variable summaries
@@ -261,8 +268,7 @@ def _general_model_fn(features, pipeline_config, result_folder, dataset_info,
 
 
 def get_model_fn(pipeline_config, result_folder, dataset_folder, dataset_info,
-                 eval_split_name, num_gpu, eval_dir, calc_froc):
-
+                 eval_split_name, eval_dir, calc_froc):
   if dataset_info is None:
     visualization_file_names = None
   else:
@@ -306,8 +312,40 @@ def get_model_fn(pipeline_config, result_folder, dataset_folder, dataset_info,
                              result_folder=result_folder,
                              dataset_info=dataset_info,
                              feature_extractor=feature_extractor,
-                             num_gpu=num_gpu,
                              visualization_file_names=visualization_file_names,
-                             eval_dir=eval_dir, calc_froc=calc_froc)
+                             eval_dir=eval_dir, calc_froc=calc_froc,
+                             as_gan_generator=False)
+  elif model_name == 'gan':
+    generator_name = pipeline_config.model.gan.WhichOneof('generator')
+    discriminator_name = pipeline_config.model.gan.WhichOneof('discriminator')
+
+    if generator_name == 'unetp2p':
+      generator = unet_pix2pix.UNetP2P(
+        conv_bn_first=pipeline_config.model.conv_bn_first)
+    else:
+      assert(False)
+
+    if discriminator_name == 'gan_discriminator':
+      discriminator = gan_discriminator.GANDiscriminator(
+        conv_bn_first=pipeline_config.model.conv_bn_first)
+    else:
+      assert(False)
+
+    generator_model_fn = functools.partial(
+      _general_model_fn,
+      pipeline_config=pipeline_config,
+      result_folder=result_folder,
+      dataset_info=dataset_info,
+      feature_extractor=generator,
+      visualization_file_names=visualization_file_names,
+      eval_dir=eval_dir, calc_froc=calc_froc,
+      as_gan_generator=True)
+    discriminator_model_fn = functools.partial(
+      _gan_discriminator_model_fn, model=discriminator,
+      use_batch_norm=pipeline_config.model.use_batch_norm,
+      bn_momentum=pipeline_config.model.batch_norm_momentum,
+      bn_epsilon=pipeline_config.model.batch_norm_epsilon)
+
+    return generator_model_fn, discriminator_model_fn
   else:
     assert(False)

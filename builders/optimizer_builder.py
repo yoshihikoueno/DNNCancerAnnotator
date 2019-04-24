@@ -44,7 +44,7 @@ def _create_learning_rate(learning_rate_config):
   learning_rate_type = learning_rate_config.WhichOneof('learning_rate')
   if learning_rate_type == 'constant_learning_rate':
     config = learning_rate_config.constant_learning_rate
-    learning_rate = tf.constant(config.learning_rate, dtype=tf.float32)
+    learning_rate = config.learning_rate
 
   if learning_rate_type == 'exponential_decay_learning_rate':
     config = learning_rate_config.exponential_decay_learning_rate

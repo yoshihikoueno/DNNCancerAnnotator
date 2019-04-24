@@ -1,10 +1,12 @@
 import os
 import pickle
+import functools
 
 import tensorflow as tf
 
 from dataset_helpers import prostate_cancer_utils as pc
 from utils import standard_fields
+from utils import preprocessor
 
 
 def _load_existing_tfrecords(directory, split_name, target_dims, dataset_name,
@@ -55,10 +57,16 @@ def prepare_dataset(dataset_config, directory, existing_tfrecords,
   return meta_data
 
 
+def _make_gan_compatible_input(features):
+  return (features[standard_fields.InputDataFields.image_decoded],
+          features[standard_fields.InputDataFields.annotation_mask])
+
+
 def build_dataset(dataset_name, directory,
                   split_name, target_dims, seed, batch_size, shuffle,
                   shuffle_buffer_size, is_training, dataset_info,
-                  dataset_config):
+                  dataset_config, is_gan_model, data_augmentation_options,
+                  num_parallel_iterations):
   assert split_name in standard_fields.SplitNames.available_names
 
   dataset = _load_existing_tfrecords(
@@ -82,6 +90,29 @@ def build_dataset(dataset_name, directory,
 
   # Buffer size of None means autotune
   dataset = dataset.prefetch(None)
+
+  if is_training:
+    # Apply data augmentation
+    augment_fn = functools.partial(
+      preprocessor.apply_data_augmentation,
+      data_augmentation_options=data_augmentation_options,
+      num_parallel_iterations=num_parallel_iterations)
+    dataset = dataset.map(
+      augment_fn, num_parallel_calls=num_parallel_iterations)
+
+  # General Preprocessing
+  preprocess_fn = functools.partial(
+    preprocessor.preprocess, val_range=dataset_config.val_range,
+    scale_input=dataset_config.scale_input)
+  dataset = dataset.map(
+    preprocess_fn, num_parallel_calls=num_parallel_iterations)
+
+  if is_gan_model:
+    # The current GANEstimator expects inputs of the shape (features, labels),
+    # Where features is the generator input, and labels the potential input
+    # for the discriminator
+    dataset = dataset.map(_make_gan_compatible_input,
+                          num_parallel_calls=num_parallel_iterations)
 
   return dataset
 

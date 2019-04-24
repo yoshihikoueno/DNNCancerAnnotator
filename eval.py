@@ -75,6 +75,8 @@ def main(_):
                                       'pipeline.config')
   pipeline_config = setup_utils.load_config(pipeline_config_file)
 
+  num_parallel_iterations = util_ops.get_cpu_count()
+
   np.random.seed(pipeline_config.seed)
   tf.set_random_seed(pipeline_config.seed)
 
@@ -100,14 +102,15 @@ def main(_):
   input_fn, dataset_info = setup_utils.get_input_fn(
     pipeline_config=pipeline_config, directory=FLAGS.checkpoint_dir,
     existing_tfrecords=True,
-    split_name=FLAGS.split_name, is_training=False)
+    split_name=FLAGS.split_name, is_training=False,
+    num_parallel_iterations=num_parallel_iterations)
 
   estimator = estimator_builder.build_estimator(
     pipeline_config=pipeline_config, checkpoint_folder=FLAGS.checkpoint_dir,
     dataset_info=dataset_info,
     dataset_folder=pipeline_config.dataset.dataset_path,
     eval_split_name=FLAGS.split_name, train_distribution=None,
-    eval_distribution=distribution, num_gpu=num_gpu,
+    eval_distribution=distribution,
     eval_dir=result_folder,
     calc_froc=not FLAGS.all_checkpoints and not FLAGS.continuous)
 
@@ -154,7 +157,7 @@ def main(_):
       dataset_info=dataset_info,
       dataset_folder=pipeline_config.dataset.dataset_path,
       eval_split_name=FLAGS.split_name, train_distribution=None,
-      eval_distribution=distribution, num_gpu=num_gpu,
+      eval_distribution=distribution,
       eval_dir=result_folder,
       calc_froc=True)
 

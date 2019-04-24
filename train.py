@@ -68,6 +68,8 @@ def main(_):
   np.random.seed(pipeline_config.seed)
   tf.set_random_seed(pipeline_config.seed)
 
+  num_parallel_iterations = util_ops.get_cpu_count()
+
   if not resume_training:
     if not os.path.exists(FLAGS.result_dir):
       os.mkdir(FLAGS.result_dir)
@@ -93,7 +95,7 @@ def main(_):
     pipeline_config=pipeline_config, directory=FLAGS.result_dir,
     existing_tfrecords=resume_training,
     split_name=standard_fields.SplitNames.train,
-    is_training=True)
+    is_training=True, num_parallel_iterations=num_parallel_iterations)
 
   estimator = estimator_builder.build_estimator(
     pipeline_config=pipeline_config, checkpoint_folder=FLAGS.result_dir,
@@ -101,7 +103,7 @@ def main(_):
     dataset_folder=pipeline_config.dataset.dataset_path,
     eval_split_name=standard_fields.SplitNames.val,
     train_distribution=train_distribution,
-    eval_distribution=eval_distribution, num_gpu=num_gpu,
+    eval_distribution=eval_distribution,
     eval_dir=os.path.join(FLAGS.result_dir,
                           'eval_' + standard_fields.SplitNames.val),
     calc_froc=False)
@@ -126,7 +128,7 @@ def main(_):
   eval_input_fn, _ = setup_utils.get_input_fn(
     pipeline_config=pipeline_config, directory=FLAGS.result_dir,
     existing_tfrecords=True, split_name=standard_fields.SplitNames.val,
-    is_training=False)
+    is_training=False, num_parallel_iterations=num_parallel_iterations)
 
   eval_spec = tf.estimator.EvalSpec(
     input_fn=eval_input_fn,
@@ -145,7 +147,7 @@ def main(_):
     dataset_folder=pipeline_config.dataset.dataset_path,
     eval_split_name=standard_fields.SplitNames.val,
     train_distribution=train_distribution,
-    eval_distribution=eval_distribution, num_gpu=num_gpu,
+    eval_distribution=eval_distribution,
     eval_dir=os.path.join(FLAGS.result_dir,
                           'eval_' + standard_fields.SplitNames.val),
     calc_froc=True)
@@ -158,7 +160,7 @@ def main(_):
     pipeline_config=pipeline_config, directory=FLAGS.result_dir,
     existing_tfrecords=True,
     split_name=standard_fields.SplitNames.train,
-    is_training=False)
+    is_training=False, num_parallel_iterations=num_parallel_iterations)
 
   estimator = estimator_builder.build_estimator(
     pipeline_config=pipeline_config, checkpoint_folder=FLAGS.result_dir,
@@ -166,7 +168,7 @@ def main(_):
     dataset_folder=pipeline_config.dataset.dataset_path,
     eval_split_name=standard_fields.SplitNames.train,
     train_distribution=train_distribution,
-    eval_distribution=eval_distribution, num_gpu=num_gpu,
+    eval_distribution=eval_distribution,
     eval_dir=os.path.join(FLAGS.result_dir,
                           'eval_' + standard_fields.SplitNames.train),
     calc_froc=True)

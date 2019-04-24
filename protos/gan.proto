@@ -1,0 +1,21 @@
+syntax = "proto2";
+
+package netng.protos;
+
+message UNetP2P {
+
+}
+
+message GANDiscriminator {
+
+}
+
+message GAN {
+  oneof generator {
+    UNetP2P unetp2p = 1;
+  }
+  
+  oneof discriminator {
+    GANDiscriminator gan_discriminator = 2;
+  }
+}

@@ -3,9 +3,11 @@ import functools
 import tensorflow as tf
 
 from utils import util_ops
+from utils import standard_fields
 
 
-def preprocess(inputs, val_range, scale_input):
+def preprocess(features, val_range, scale_input):
+  inputs = features[standard_fields.InputDataFields.image_decoded]
   if inputs.dtype is not tf.float32:
     raise ValueError('`preprocess` expects a tf.float32 tensor')
   if len(inputs.get_shape()) != 4:
@@ -24,12 +26,16 @@ def preprocess(inputs, val_range, scale_input):
     elif val_range == 2:
       inputs = (inputs / 255) * 2 - 1
 
-  return inputs
+  features[standard_fields.InputDataFields.image_decoded] = inputs
+
+  return features
 
 
-# Batch size for single GPU
-def apply_data_augmentation(data_augmentation_options, images, gt_masks,
-                            batch_size):
+def apply_data_augmentation(features, data_augmentation_options,
+                            num_parallel_iterations):
+  images = features[standard_fields.InputDataFields.image_decoded]
+  gt_masks = features[standard_fields.InputDataFields.annotation_mask]
+
   if len(images.get_shape()) != 4:
     raise ValueError("Invalid image dimensions!")
   if gt_masks is not None and len(gt_masks.get_shape()) != 4:
@@ -37,7 +43,6 @@ def apply_data_augmentation(data_augmentation_options, images, gt_masks,
 
   applied_augmentations = set()
 
-  num_parallel_iterations = min(batch_size, util_ops.get_cpu_count())
   for step in data_augmentation_options:
     augmentation_type = step.WhichOneof('preprocessing_step')
     if augmentation_type is None:
@@ -90,7 +95,10 @@ def apply_data_augmentation(data_augmentation_options, images, gt_masks,
       raise ValueError("Unknown data augmentation type! {}".format(
         augmentation_type))
 
-  return images, gt_masks
+  features[standard_fields.InputDataFields.image_decoded] = images
+  features[standard_fields.InputDataFields.annotation_mask] = gt_masks
+
+  return features
 
 
 def _random_warp(images, masks):

@@ -16,12 +16,15 @@ class UNetP2P(object):
     with tf.variable_scope('UNetP2P'):
       conv_params_leaky = lu.get_conv_params(functools.partial(
         tf.nn.leaky_relu, alpha=0.2), weight_decay=0.0)
-      conv_tanh_params = lu.get_conv_params(
+      conv_transpose_tanh_params = lu.get_conv_transpose_params(
         activation_fn=tf.nn.tanh, weight_decay=0.0)
       conv_transposed_params = lu.get_conv_transpose_params(
         activation_fn=tf.nn.relu, weight_decay=0.0)
-      batch_norm_params = lu.get_batch_norm_params(
-        momentum=bn_momentum, epsilon=bn_epsilon)
+      if use_batch_norm:
+        batch_norm_params = lu.get_batch_norm_params(
+          momentum=bn_momentum, epsilon=bn_epsilon)
+      else:
+        batch_norm_params = None
 
       c1 = lu.conv(image_batch, filters=64, kernel_size=4, strides=2,
                       padding='same', conv_params=conv_params_leaky,
@@ -76,6 +79,7 @@ class UNetP2P(object):
                      is_training=is_training, name='up1',
                      bn_first=self.conv_bn_first, use_dropout=True,
                      dropout_rate=0.5)
+      u1 = tf.concat([u1, c7], axis=-1)
       print(u1)
       u2 = lu.conv_t(u1, filters=512, kernel_size=4, strides=2, padding='same',
                      conv_params=conv_transposed_params,
@@ -83,7 +87,7 @@ class UNetP2P(object):
                      is_training=is_training, name='up2',
                      bn_first=self.conv_bn_first, use_dropout=True,
                      dropout_rate=0.5)
-      u2 = tf.concat([u2, c7], axis=-1)
+      u2 = tf.concat([u2, c6], axis=-1)
       print(u2)
       u3 = lu.conv_t(u2, filters=512, kernel_size=4, strides=2, padding='same',
                      conv_params=conv_transposed_params,
@@ -91,48 +95,43 @@ class UNetP2P(object):
                      is_training=is_training, name='up3',
                      bn_first=self.conv_bn_first, use_dropout=True,
                      dropout_rate=0.5)
-      u3 = tf.concat([u3, c6], axis=-1)
+      u3 = tf.concat([u3, c5], axis=-1)
       print(u3)
       u4 = lu.conv_t(u3, filters=512, kernel_size=4, strides=2, padding='same',
                      conv_params=conv_transposed_params,
                      batch_norm_params=batch_norm_params,
                      is_training=is_training, name='up4',
                      bn_first=self.conv_bn_first)
-      u4 = tf.concat([u4, c5], axis=-1)
+      u4 = tf.concat([u4, c4], axis=-1)
       print(u4)
-      u5 = lu.conv_t(u4, filters=512, kernel_size=4, strides=2, padding='same',
+      u5 = lu.conv_t(u4, filters=256, kernel_size=4, strides=2, padding='same',
                      conv_params=conv_transposed_params,
                      batch_norm_params=batch_norm_params,
                      is_training=is_training, name='up5',
                      bn_first=self.conv_bn_first)
-      u5 = tf.concat([u5, c4], axis=-1)
+      u5 = tf.concat([u5, c3], axis=-1)
       print(u5)
-      u6 = lu.conv_t(u5, filters=256, kernel_size=4, strides=2, padding='same',
+      u6 = lu.conv_t(u5, filters=128, kernel_size=4, strides=2, padding='same',
                      conv_params=conv_transposed_params,
                      batch_norm_params=batch_norm_params,
                      is_training=is_training, name='up6',
                      bn_first=self.conv_bn_first)
-      u6 = tf.concat([u6, c3], axis=-1)
+      u6 = tf.concat([u6, c2], axis=-1)
       print(u6)
-      u7 = lu.conv_t(u6, filters=128, kernel_size=4, strides=2, padding='same',
+      u7 = lu.conv_t(u6, filters=64, kernel_size=4, strides=2, padding='same',
                      conv_params=conv_transposed_params,
                      batch_norm_params=batch_norm_params,
                      is_training=is_training, name='up7',
                      bn_first=self.conv_bn_first)
-      u7 = tf.concat([u7, c2], axis=-1)
+      u7 = tf.concat([u7, c1], axis=-1)
       print(u7)
-      u8 = lu.conv_t(u7, filters=64, kernel_size=4, strides=2, padding='same',
-                     conv_params=conv_transposed_params,
-                     batch_norm_params=batch_norm_params,
-                     is_training=is_training, name='up8',
-                     bn_first=self.conv_bn_first)
-      u8 = tf.concat([u8, c1], axis=-1)
-      print(u8)
-      final = lu.conv(u8, filters=1, kernel_size=4, strides=1, padding='same',
-                      conv_params=conv_tanh_params,
-                      batch_norm_params=batch_norm_params,
-                      is_training=is_training, name='final',
-                      bn_first=self.conv_bn_first)
+
+      final = lu.conv_t(u7, filters=1, kernel_size=4, strides=2,
+                        padding='same',
+                        conv_params=conv_transpose_tanh_params,
+                        batch_norm_params=batch_norm_params,
+                        is_training=is_training, name='final',
+                        bn_first=self.conv_bn_first)
 
       print(final)
 

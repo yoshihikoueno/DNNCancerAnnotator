@@ -2,7 +2,6 @@ import pdb
 import sys
 import os
 import logging
-import time
 
 from PIL import Image
 import numpy as np
@@ -10,7 +9,6 @@ import tensorflow as tf
 
 from utils import setup_utils
 from utils import util_ops
-from utils import standard_fields
 from builders import estimator_builder
 
 flags = tf.app.flags
@@ -85,7 +83,7 @@ def main(_):
     pipeline_config=pipeline_config, checkpoint_folder=FLAGS.checkpoint_dir,
     dataset_info=None, eval_split_name=None, train_distribution=None,
     dataset_folder=None,
-    eval_distribution=distribution, num_gpu=num_gpu,
+    eval_distribution=distribution,
     eval_dir=result_folder, calc_froc=False)
 
   predictions = estimator.predict(

@@ -4,6 +4,7 @@ package netng.protos;
 
 import "protos/faster_rcnn.proto";
 import "protos/unet.proto";
+import "protos/gan.proto";
 
 message Model {
   optional int32 input_image_size_x = 1[default=0];
@@ -13,6 +14,7 @@ message Model {
   oneof model_type {
     FasterRCNN faster_rcnn = 4;
     UNet unet = 5;
+    GAN gan = 11;
   }
 
   // Should only be used with batch size > 1
