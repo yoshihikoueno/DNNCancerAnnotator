@@ -34,10 +34,8 @@ def build_estimator(pipeline_config, checkpoint_folder,
       dataset_folder=dataset_folder, dataset_info=dataset_info,
       eval_split_name=eval_split_name, eval_dir=eval_dir, calc_froc=calc_froc)
 
-    generator_loss = functools.partial(tfgan.losses.modified_generator_loss,
-                                       add_summaries=True)
-    discriminator_loss = functools.partial(
-      tfgan.losses.modified_discriminator_loss, add_summaries=True)
+    generator_loss = tfgan.losses.modified_generator_loss
+    discriminator_loss = tfgan.losses.modified_discriminator_loss
 
     optimizer = optimizer_builder.build(
       pipeline_config.train_config.optimizer)[0]

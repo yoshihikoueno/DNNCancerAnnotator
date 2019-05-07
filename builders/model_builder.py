@@ -17,11 +17,11 @@ from builders import optimizer_builder
 
 def _extract_patient_id(file_name):
   tokens = file_name.split('/')
-  assert(tokens[-3] == 'healthy_cases' or tokens[-3] == 'cancer_cases')
-  is_healthy = tokens[-3] == 'healthy_cases'
+  assert(tokens[-4] == 'healthy_cases' or tokens[-4] == 'cancer_cases')
+  is_healthy = tokens[-4] == 'healthy_cases'
 
   patient_id_prefix = 'h' if is_healthy else 'c'
-  patient_id = patient_id_prefix + tokens[-2]
+  patient_id = patient_id_prefix + tokens[-3]
 
   return patient_id
 

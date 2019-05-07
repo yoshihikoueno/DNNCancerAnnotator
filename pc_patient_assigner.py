@@ -25,36 +25,44 @@ def load_from_folder(folder, dataset_folder, id_prefix, class_label,
 
   images = dict()
   num_images = 0
-  num_patients = 0
 
-  for (dirpath, _, filenames) in os.walk(folder):
-    if not filenames:
-      continue
+  patient_folders = os.listdir(folder)
+  num_patients = len(patient_folders)
 
-    patient_id = id_prefix + os.path.basename(dirpath)
+  for patient_folder in patient_folders:
+    patient_id = id_prefix + patient_folder
     assert(patient_id not in images)
     images[patient_id] = []
-    num_patients += 1
-    for filename in filenames:
-      if annotation_folder is not None:
-        annotation_file = os.path.join(
-          annotation_folder, os.path.split(dirpath)[1],
-          os.path.splitext(filename)[0]) + '.png'
-        if not os.path.exists(annotation_file):
-          raise ValueError("{} has no annotation file {}".format(
-            os.path.join(dirpath, filename), annotation_file))
-      else:
-        annotation_file = os.path.join(dirpath, filename)
+    patient_folder = os.path.join(folder, patient_folder)
 
-      image_file = os.path.join(dirpath, filename)
+    examination_folders = os.listdir(patient_folder)
 
-      annotation_file = annotation_file[len(dataset_folder) + 1:]
-      image_file = image_file[len(dataset_folder) + 1:]
+    for examination_folder in examination_folders:
+      examination_folder = os.path.join(patient_folder, examination_folder)
+      assert(os.path.isdir(examination_folder))
+      for f in os.listdir(examination_folder):
+        f = os.path.join(examination_folder, f)
+        if annotation_folder is not None:
+          annotation_file = os.path.join(
+            annotation_folder, os.path.basename(patient_folder),
+            os.path.basename(examination_folder),
+            os.path.basename(f).split('.')[0] + '.png')
+          if not os.path.exists(annotation_file):
+            raise ValueError("{} has no annotation file {}".format(
+              f, annotation_file))
+        else:
+          annotation_file = f
 
-      images[patient_id].append([
-        image_file, annotation_file,
-        class_label, patient_id, int(filename.split('.')[0])])
-      num_images += 1
+        # Shorten the file paths, so that they are also valid in docker
+        # environments
+        annotation_file = annotation_file[len(dataset_folder) + 1:]
+        image_file = f[len(dataset_folder) + 1:]
+
+        images[patient_id].append(
+          [image_file, annotation_file, class_label, patient_id,
+           int(os.path.basename(f).split('.')[0]),
+           os.path.basename(examination_folder)])
+        num_images += 1
 
   return images, num_images, num_patients
 
@@ -143,8 +151,8 @@ def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
   train_size = 0
   for _, entries in train_data_dict.items():
     train_size += len(entries)
-    for entry in entries:
-      train_files.append(entry[0])
+    for f in entries:
+      train_files.append(f[0])
 
   assert(len(train_files) == train_size)
 
@@ -155,8 +163,8 @@ def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
   val_size = 0
   for _, entries in val_data_dict.items():
     val_size += len(entries)
-    for entry in entries:
-      val_files.append(entry[0])
+    for f in entries:
+      val_files.append(f[0])
 
   assert(len(val_files) == val_size)
 
@@ -167,9 +175,8 @@ def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
   test_size = 0
   for _, entries in test_data_dict.items():
     test_size += len(entries)
-    for entry in entries:
-      test_files.append(entry[0])
-
+    for f in entries:
+      test_files.append(f[0])
   assert(len(test_files) == test_size)
 
   dataset_size = train_size + val_size + test_size

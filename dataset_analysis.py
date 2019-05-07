@@ -74,10 +74,11 @@ def walk_dir(directory, is_old, id_prefix, result_dict):
       files[os.path.basename(exam_folder)] = exam_files
       num_files += len(exam_files)
 
-      if len(exam_files) < result_dict['min_num_slices'][0]:
-        result_dict['min_num_slices'] = (len(exam_files), patient_id)
-      if len(exam_files) > result_dict['max_num_slices'][0]:
-        result_dict['max_num_slices'] = (len(exam_files), patient_id)
+      if not is_old:
+        if len(exam_files) < result_dict['min_num_slices'][0]:
+          result_dict['min_num_slices'] = (len(exam_files), patient_id)
+        if len(exam_files) > result_dict['max_num_slices'][0]:
+          result_dict['max_num_slices'] = (len(exam_files), patient_id)
 
       for f in exam_files:
         assert(len(f.split('_')) == 1 if is_old else len(f.split('_')) == 2)

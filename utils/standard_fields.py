@@ -10,6 +10,8 @@ class TfExampleFields:
 
   label = 'label'
 
+  examination_name = 'examination_name'
+
 
 class InputDataFields:
   patient_id = 'patient_id'
@@ -22,6 +24,7 @@ class InputDataFields:
   individual_masks = 'individual_masks'
   bounding_boxes = 'bounding_boxes'
   label = 'label'
+  examination_name = 'examination_name'
 
 
 class BoundingBoxFields:

@@ -1,5 +1,4 @@
 import os
-import random
 import functools
 import logging
 import pickle
@@ -96,10 +95,6 @@ def _preprocess_image(image_decoded, target_dims, is_annotation_mask,
 
   with tf.control_dependencies([quadratic_assert_op, size_assert_op]):
     # Resize to common size
-    # Since the prostate area is around 1/3 of the image size, we want to make
-    # Sure that our crop also captures this area. However, we need to be
-    # careful as unet crops off the outer parts of the image, therefore factor
-    # of 2
     common_size = [max(512, int(target_dims[0] * common_size_factor)),
                    max(512, int(target_dims[1] * common_size_factor))]
     image_resized = tf.squeeze(tf.clip_by_value(tf.image.resize_area(
@@ -205,7 +200,9 @@ def _decode_example(example_dict, target_dims, dilate_groundtruth,
     #individual_masks,
     #standard_fields.InputDataFields.bounding_boxes:
     #bounding_boxes,
-    standard_fields.InputDataFields.label: label}
+    standard_fields.InputDataFields.label: label,
+    standard_fields.InputDataFields.examination_name: example_dict[
+      standard_fields.TfExampleFields.examination_name]}
 
   return features
 
@@ -221,6 +218,8 @@ def _serialize_example(keys, example):
   annotation_encoded = example[keys.index(
     standard_fields.TfExampleFields.annotation_encoded)]
   label = example[keys.index(standard_fields.TfExampleFields.label)]
+  examination_name = example[keys.index(
+    standard_fields.TfExampleFields.examination_name)]
 
   feature = {
     standard_fields.TfExampleFields.patient_id: dh.bytes_feature(
@@ -236,7 +235,9 @@ def _serialize_example(keys, example):
     standard_fields.TfExampleFields.annotation_encoded: dh.bytes_feature(
       annotation_encoded),
     standard_fields.TfExampleFields.label: dh.int64_feature(
-      label)}
+      label),
+    standard_fields.TfExampleFields.examination_name: dh.bytes_feature(
+      examination_name)}
   tf_example = tf.train.Example(features=tf.train.Features(feature=feature))
 
   return tf_example.SerializeToString()
@@ -258,7 +259,9 @@ def _deserialize_and_decode_example(example, target_dims, dilate_groundtruth,
     standard_fields.TfExampleFields.annotation_encoded:
     tf.FixedLenFeature((), tf.string, default_value=''),
     standard_fields.TfExampleFields.label: tf.FixedLenFeature(
-      (), tf.int64, default_value=0)}
+      (), tf.int64, default_value=0),
+    standard_fields.TfExampleFields.examination_name: tf.FixedLenFeature(
+      (), tf.string, default_value='')}
 
   example_dict = tf.parse_single_example(example, features)
 
@@ -269,7 +272,7 @@ def _deserialize_and_decode_example(example, target_dims, dilate_groundtruth,
 
 
 def _parse_from_file(image_file, annotation_file, label, patient_id,
-                     slice_id, dataset_folder):
+                     slice_id, examination_name, dataset_folder):
   image_file = tf.strings.join([dataset_folder, '/', image_file])
   image_string = tf.read_file(image_file)
 
@@ -283,7 +286,8 @@ def _parse_from_file(image_file, annotation_file, label, patient_id,
     standard_fields.TfExampleFields.image_encoded: image_string,
     standard_fields.TfExampleFields.annotation_file: annotation_file,
     standard_fields.TfExampleFields.annotation_encoded: annotation_string,
-    standard_fields.TfExampleFields.label: label}
+    standard_fields.TfExampleFields.label: label,
+    standard_fields.TfExampleFields.examination_name: examination_name}
 
 
 def build_tfrecords_from_files(
