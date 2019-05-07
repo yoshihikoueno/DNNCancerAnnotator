@@ -148,8 +148,19 @@ def _decode_example(example_dict, target_dims, dilate_groundtruth,
   annotation_decoded = tf.cast(tf.image.decode_jpeg(
       annotation_string, channels=3), tf.float32)
 
-  annotation_mask = _extract_annotation(
-    annotation_decoded, dilate_groundtruth, dilate_kernel_size)
+  same_size_assert = tf.Assert(
+    tf.reduce_all(tf.equal(tf.shape(annotation_decoded[:2]),
+                           tf.shape(image_decoded[:2]))),
+    data=[tf.shape(annotation_decoded)[:2],
+          tf.shape(image_decoded)[:2],
+          example_dict[standard_fields.TfExampleFields.image_file],
+          [tf.constant(
+            'Annotation and original image not same size.')]])
+
+  with tf.control_dependencies([same_size_assert]):
+    annotation_mask = _extract_annotation(
+      annotation_decoded, dilate_groundtruth, dilate_kernel_size)
+
   annotation_mask_preprocessed = _preprocess_image(
     annotation_mask, target_dims, is_annotation_mask=True,
     common_size_factor=common_size_factor)
