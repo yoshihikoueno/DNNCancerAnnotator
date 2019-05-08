@@ -149,8 +149,8 @@ def _decode_example(example_dict, target_dims, dilate_groundtruth,
       annotation_string, channels=3), tf.float32)
 
   same_size_assert = tf.Assert(
-    tf.reduce_all(tf.equal(tf.shape(annotation_decoded[:2]),
-                           tf.shape(image_decoded[:2]))),
+    tf.reduce_all(tf.equal(tf.shape(annotation_decoded)[:2],
+                           tf.shape(image_decoded)[:2])),
     data=[tf.shape(annotation_decoded)[:2],
           tf.shape(image_decoded)[:2],
           example_dict[standard_fields.TfExampleFields.image_file],

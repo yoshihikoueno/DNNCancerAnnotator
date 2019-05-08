@@ -2,7 +2,7 @@ import os
 
 from PIL import Image
 
-dataset_dir = '/mnt/dataset/patrick/datasets/prostate_images4'
+dataset_dir = '/mnt/dataset/patrick/datasets/prostate_images3'
 
 cancer_folder = os.path.join(dataset_dir, 'cancer_cases')
 cancer_annotations = os.path.join(dataset_dir, 'cancer_annotations')
