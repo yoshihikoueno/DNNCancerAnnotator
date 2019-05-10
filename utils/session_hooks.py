@@ -233,7 +233,9 @@ class PatientMetricHook(tf.train.SessionRunHook):
       y = []
 
       for threshold, cm_values in self.froc_cm_values_total.items():
-        x.append(cm_values['region_fp'] / float(self.num_total_lesions))
+        # Average number of FP per patient
+        x.append(cm_values['region_fp'] / float(len(
+          self.patient_statistics.keys())))
         y.append(cm_values['region_tp'] / float(self.num_total_lesions))
 
       fig = Figure()
