@@ -139,7 +139,8 @@ def main(_):
       for checkpoint in all_checkpoints:
         if checkpoint in evaluated_checkpoints:
           continue
-        elif (FLAGS.eval_checkpoint_steps_interval > 0
+        elif (latest_checkpoint != ''
+              and FLAGS.eval_checkpoint_step_interval > 0
               and int(checkpoint.split('-')[1])
               - int(latest_checkpoint.split('-')[1])
               < FLAGS.eval_checkpoint_step_interval):
