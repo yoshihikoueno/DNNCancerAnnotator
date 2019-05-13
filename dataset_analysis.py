@@ -2,44 +2,34 @@ import os
 
 from PIL import Image
 
-# Information to extract
-# From full sequence dataset
-# - avg / min / max number of slices per patient
-# - Image sizes
-# - Patients not present in previous dataset + Num
-# - Num total patients in new / old
-# - Num total images in new / old
-
 folder = '/mnt/dataset/patrick/datasets'
-old_dataset_folder = os.path.join(folder, 'prostate_images3')
+old_dataset_folder = os.path.join(folder, 'prostate_images4')
 old_dataset_healthy_folder = os.path.join(old_dataset_folder, 'healthy_cases')
 old_dataset_cancer_folder = os.path.join(old_dataset_folder, 'cancer_cases')
 old_dataset_cancer_annotations_folder = os.path.join(old_dataset_folder,
                                                      'cancer_annotations')
-new_dataset_folder = os.path.join(folder, 'prostate_images_full_sequence')
 
 result_dict = dict()
 result_dict['old_num_images'] = 0
-result_dict['new_num_images'] = 0
 result_dict['old_num_patients_healthy'] = 0
 result_dict['old_num_patients_cancer'] = 0
 result_dict['label_min_slice_index'] = (999, None)
 result_dict['label_max_slice_index'] = (0, None)
 result_dict['label_index_max_distance'] = (0, None)
-result_dict['new_num_patients'] = 0
 
 result_dict['old_patient_list'] = []
-result_dict['new_patient_list'] = []
 
 result_dict['old_patients_with_holes'] = []
-result_dict['new_patients_with_holes'] = []
 
 
 result_dict['image_size_tuple_to_num'] = dict()
 result_dict['min_num_slices'] = (999, None)
 result_dict['max_num_slices'] = (0, None)
 
-result_dict['num_patients_with_min_32_slices'] = 0
+result_dict['num_patients_exams_min_16_slices'] = 0
+result_dict['num_patients_exams_min_24_slices'] = 0
+result_dict['num_patients_exams_min_32_slices'] = 0
+result_dict['num_total_patient_exams'] = 0
 
 
 def has_holes(slice_indices):
@@ -74,11 +64,18 @@ def walk_dir(directory, is_old, id_prefix, result_dict):
       files[os.path.basename(exam_folder)] = exam_files
       num_files += len(exam_files)
 
-      if not is_old:
-        if len(exam_files) < result_dict['min_num_slices'][0]:
-          result_dict['min_num_slices'] = (len(exam_files), patient_id)
-        if len(exam_files) > result_dict['max_num_slices'][0]:
-          result_dict['max_num_slices'] = (len(exam_files), patient_id)
+      result_dict['num_total_patient_exams'] += 1
+      if len(exam_files) >= 16:
+        result_dict['num_patients_exams_min_16_slices'] += 1
+      if len(exam_files) >= 24:
+        result_dict['num_patients_exams_min_24_slices'] += 1
+      if len(exam_files) >= 32:
+        result_dict['num_patients_exams_min_32_slices'] += 1
+
+      if len(exam_files) < result_dict['min_num_slices'][0]:
+        result_dict['min_num_slices'] = (len(exam_files), patient_id)
+      if len(exam_files) > result_dict['max_num_slices'][0]:
+        result_dict['max_num_slices'] = (len(exam_files), patient_id)
 
       for f in exam_files:
         assert(len(f.split('_')) == 1 if is_old else len(f.split('_')) == 2)
@@ -133,16 +130,5 @@ walk_dir(old_dataset_healthy_folder, is_old=True, id_prefix='h',
          result_dict=result_dict)
 walk_dir(old_dataset_cancer_folder, is_old=True, id_prefix='c',
          result_dict=result_dict)
-walk_dir(new_dataset_folder, is_old=False, id_prefix='',
-         result_dict=result_dict)
-
-result_dict['unassigned_patient_ids'] = []
-for patient_id in result_dict['new_patient_list']:
-  c_patient_id = 'c' + patient_id
-  h_patient_id = 'h' + patient_id
-
-  if (c_patient_id not in result_dict['old_patient_list']
-      and h_patient_id not in result_dict['old_patient_list']):
-    result_dict['unassigned_patient_ids'].append(patient_id)
 
 print(result_dict)

@@ -25,4 +25,6 @@ message Dataset {
 
   // Should input have zero mean and unit variance?
   optional bool scale_input = 8[default=false];
+
+  optional string tfrecords_type = 9[default='regular'];
 }

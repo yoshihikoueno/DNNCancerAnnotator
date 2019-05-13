@@ -10,7 +10,8 @@ from utils import preprocessor
 
 
 def _load_existing_tfrecords(directory, split_name, target_dims, dataset_name,
-                             dataset_info, is_training, dataset_config):
+                             dataset_info, is_training, model_objective,
+                             dataset_config):
   ids = dataset_info[standard_fields.PickledDatasetInfo.patient_ids][
     split_name]
 
@@ -21,7 +22,8 @@ def _load_existing_tfrecords(directory, split_name, target_dims, dataset_name,
       dilate_groundtruth=dataset_config.prostate_cancer.dilate_groundtruth,
       dilate_kernel_size=dataset_config.
       prostate_cancer.groundtruth_dilation_kernel_size,
-      common_size_factor=dataset_config.prostate_cancer.common_size_factor)
+      common_size_factor=dataset_config.prostate_cancer.common_size_factor,
+      model_objective=model_objective)
   else:
     assert(False)
 
@@ -46,7 +48,8 @@ def prepare_dataset(dataset_config, directory, existing_tfrecords,
         dataset_path=dataset_config.dataset_path,
         dataset_info_file=dataset_config.dataset_info_file,
         only_cancer_images=dataset_config.prostate_cancer.only_cancer_images,
-        input_image_dims=target_dims, seed=seed, output_dir=output_dir)
+        input_image_dims=target_dims, seed=seed, output_dir=output_dir,
+        tfrecords_type=dataset_config.tfrecords_type)
     else:
       assert(False)
 
@@ -66,12 +69,13 @@ def build_dataset(dataset_name, directory,
                   split_name, target_dims, seed, batch_size, shuffle,
                   shuffle_buffer_size, is_training, dataset_info,
                   dataset_config, is_gan_model, data_augmentation_options,
-                  num_parallel_iterations):
+                  num_parallel_iterations, model_objective):
   assert split_name in standard_fields.SplitNames.available_names
 
   dataset = _load_existing_tfrecords(
-      directory, split_name, target_dims, dataset_name,
-      dataset_info, is_training=is_training, dataset_config=dataset_config)
+    directory, split_name, target_dims, dataset_name,
+    dataset_info, is_training=is_training, dataset_config=dataset_config,
+    model_objective=model_objective)
 
   if shuffle and is_training:
     dataset = dataset.apply(tf.data.experimental.shuffle_and_repeat(
@@ -106,7 +110,7 @@ def build_dataset(dataset_name, directory,
   # General Preprocessing
   preprocess_fn = functools.partial(
     preprocessor.preprocess, val_range=dataset_config.val_range,
-    scale_input=dataset_config.scale_input)
+    scale_input=dataset_config.scale_input, model_objective=model_objective)
   dataset = dataset.map(
     preprocess_fn, num_parallel_calls=num_parallel_iterations)
 

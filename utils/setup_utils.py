@@ -57,6 +57,7 @@ def get_input_fn(pipeline_config, directory, existing_tfrecords,
       is_gan_model=pipeline_config.model.WhichOneof('model_type') == 'gan',
       data_augmentation_options=(
         pipeline_config.train_config.data_augmentation_options),
-      num_parallel_iterations=num_parallel_iterations)
+      num_parallel_iterations=num_parallel_iterations,
+      model_objective=pipeline_config.model.model_objective)
 
   return input_fn, meta_info

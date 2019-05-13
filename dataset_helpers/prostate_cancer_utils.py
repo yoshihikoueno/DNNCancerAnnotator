@@ -4,6 +4,7 @@ import logging
 import pickle
 import itertools
 import shutil
+import multiprocessing
 
 import numpy as np
 import tensorflow as tf
@@ -28,7 +29,7 @@ def split_mask(mask, dilate_mask=False):
   components = tf.contrib.image.connected_components(mask)
 
   if dilate_mask:
-    # we need to erode the mask again
+    # we need to shrink the mask again by masking with original
     components = tf.where(tf.equal(mask, tf.constant(0, dtype=tf.int64)),
                           tf.zeros_like(components, dtype=tf.int32),
                           components)
@@ -301,23 +302,79 @@ def _parse_from_file(image_file, annotation_file, label, patient_id,
     standard_fields.TfExampleFields.examination_name: examination_name}
 
 
-def build_tfrecords_from_files(
-    dataset_path, dataset_info_file,
-    only_cancer_images, input_image_dims, seed, output_dir):
-  if os.path.exists(output_dir):
-    # Clean everything inside
-    shutil.rmtree(output_dir)
+def _build_ordered_slices_tfrecords_from_files(
+    pickle_data, output_dir, dataset_path):
+  with tf.Session() as sess:
+    for split, data in pickle_data[
+        standard_fields.PickledDatasetInfo.data_dict].items():
+      os.mkdir(os.path.join(output_dir, split))
 
-  os.mkdir(output_dir)
+      writer_dict = dict()
+      # Create writers
+      for patient_id, patient_data in data.items():
+        # Split into different exams
+        exam_data = dict()
+        for e in patient_data:
+          exam_name = e[5]
+          if exam_name not in exam_data:
+            exam_data[exam_name] = []
 
-  dataset_info_file = os.path.join(dataset_path, dataset_info_file)
-  if not os.path.exists(dataset_info_file):
-    raise ValueError("Pickled dataset info file missing!")
+          exam_data[exam_name].append(e)
 
-  with open(dataset_info_file, 'rb') as f:
-    pickle_data = pickle.load(f)
+        for exam_name in exam_data.keys():
+          writer = tf.python_io.TFRecordWriter(os.path.join(
+            output_dir, split, '{}_{}.tfrecords'.format(
+              patient_id, exam_name)))
+          writer_dict['{}_{}'.format(patient_id, exam_name)] = writer
 
-  logging.info("Creating patient tfrecords.")
+      # Sort the data by slice index
+      sorted_data = []
+      for patient_data in data.values():
+        patient_data.sort(key=lambda e: e[4])
+        sorted_data.append(patient_data)
+
+      dataset = tf.data.Dataset.from_tensor_slices(
+        tuple([list(t) for t in zip(*list(
+          itertools.chain.from_iterable(sorted_data)))]))
+
+      parse_fn = functools.partial(_parse_from_file,
+                                   dataset_folder=dataset_path)
+      dataset = dataset.map(parse_fn,
+                            num_parallel_calls=util_ops.get_cpu_count())
+      dataset = dataset.batch(128)
+
+      it = dataset.make_one_shot_iterator()
+
+      elem_batch = it.get_next()
+
+      while True:
+        try:
+          elem_batch_result = sess.run(elem_batch)
+          keys = list(elem_batch_result.keys())
+          elem_batch_serialized = list(zip(*elem_batch_result.values()))
+
+          # Unfortunately for some reason we cannot use multiprocessing here.
+          # Sometimes the map call will freeze
+          elem_batch_serialized = list(map(
+            lambda v: _serialize_example(keys, v),
+            elem_batch_serialized))
+
+          for i, elem_serialized in enumerate(elem_batch_serialized):
+            writer_dict['{}_{}'.format(
+              elem_batch_result[
+                standard_fields.TfExampleFields.patient_id][i].decode(
+                  'utf-8'),
+              elem_batch_result[
+                standard_fields.TfExampleFields.examination_name][i].decode(
+                  'utf-8'))].write(elem_serialized)
+        except tf.errors.OutOfRangeError:
+          break
+
+      for writer in writer_dict.values():
+        writer.close()
+
+
+def _build_regular_tfrecords_from_files(pickle_data, output_dir, dataset_path):
   with tf.Session() as sess:
     for split, data in pickle_data[
         standard_fields.PickledDatasetInfo.data_dict].items():
@@ -366,14 +423,44 @@ def build_tfrecords_from_files(
       for writer in writer_dict.values():
         writer.close()
 
+
+def build_tfrecords_from_files(
+    dataset_path, dataset_info_file,
+    only_cancer_images, input_image_dims, seed, output_dir,
+    tfrecords_type):
+  if os.path.exists(output_dir):
+    # Clean everything inside
+    shutil.rmtree(output_dir)
+
+  os.mkdir(output_dir)
+
+  dataset_info_file = os.path.join(dataset_path, dataset_info_file)
+  if not os.path.exists(dataset_info_file):
+    raise ValueError("Pickled dataset info file missing!")
+
+  with open(dataset_info_file, 'rb') as f:
+    pickle_data = pickle.load(f)
+
+  logging.info("Creating patient tfrecords.")
+
+  if tfrecords_type == standard_fields.TFRecordsType.regular:
+    _build_regular_tfrecords_from_files(
+      pickle_data=pickle_data, output_dir=output_dir,
+      dataset_path=dataset_path)
+  elif tfrecords_type == standard_fields.TFRecordsType.ordered_slices:
+    _build_ordered_slices_tfrecords_from_files(
+      pickle_data=pickle_data, output_dir=output_dir,
+      dataset_path=dataset_path)
+  else:
+    raise ValueError("Invalid TFRecordsType: {}".format(tfrecords_type))
+
   logging.info("Finished creating patient tfrecords.")
 
 
-# patient_ids are only needed for train mode
 def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
                                     patient_ids, is_training,
                                     dilate_groundtruth, dilate_kernel_size,
-                                    common_size_factor):
+                                    common_size_factor, model_objective):
   tfrecords_folder = os.path.join(directory, 'tfrecords', split_name)
   assert(os.path.exists(tfrecords_folder))
 
@@ -381,30 +468,85 @@ def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
   tfrecords_files = [os.path.join(tfrecords_folder, file_name)
                      for file_name in tfrecords_files]
 
-  dataset = tf.data.Dataset.from_tensor_slices(tfrecords_files)
-  if is_training:
-    # We want to even out patient distribution across one epoch
-    dataset = dataset.interleave(
-      lambda tfrecords_file: tf.data.TFRecordDataset(tfrecords_file).apply(
-        tf.data.experimental.shuffle_and_repeat(32, None)), block_length=1,
-      cycle_length=len(tfrecords_files),
-      num_parallel_calls=util_ops.get_cpu_count())
+  if model_objective == 'segmentation':
+    dataset = tf.data.Dataset.from_tensor_slices(tfrecords_files)
+    if is_training:
+      # We want to even out patient distribution across one epoch
+      dataset = dataset.interleave(
+        lambda tfrecords_file: tf.data.TFRecordDataset(tfrecords_file).apply(
+          tf.data.experimental.shuffle_and_repeat(32, None)), block_length=1,
+        cycle_length=len(tfrecords_files),
+        num_parallel_calls=util_ops.get_cpu_count())
+    else:
+      dataset = dataset.interleave(
+        lambda tfrecords_file: tf.data.TFRecordDataset(tfrecords_file).shuffle(
+          32), block_length=1, cycle_length=len(tfrecords_files),
+        num_parallel_calls=util_ops.get_cpu_count())
+
+    deserialize_and_decode_fn = functools.partial(
+      _deserialize_and_decode_example, target_dims=target_dims,
+      dilate_groundtruth=dilate_groundtruth,
+      dilate_kernel_size=dilate_kernel_size,
+      common_size_factor=common_size_factor)
+
+    dataset = dataset.map(deserialize_and_decode_fn,
+                          num_parallel_calls=util_ops.get_cpu_count())
+
+    return dataset
+
+  elif model_objective == 'interpolation':
+    tfrecords_dict = dict()
+    for tfrecords_file in tfrecords_files:
+      patient_id, exam_name = os.path.splitext(
+        os.path.basename(tfrecords_file))[0].split('_')
+      if patient_id not in tfrecords_dict:
+        tfrecords_dict[patient_id] = []
+      tfrecords_dict[patient_id].append(tfrecords_file)
+
+    tfrecords_files = list(tfrecords_dict.values())
+
+    dataset = tf.data.Dataset.from_tensor_slices(list(zip(*tfrecords_files)))
+
+    deserialize_and_decode_fn = functools.partial(
+        _deserialize_and_decode_example, target_dims=target_dims,
+        dilate_groundtruth=dilate_groundtruth,
+        dilate_kernel_size=dilate_kernel_size,
+        common_size_factor=common_size_factor)
+
+    def make_exam_tfrecords(patient_exam_tfrecords):
+      tfrecords_datasets = []
+      patient_exam_tfrecords = tf.unstack(patient_exam_tfrecords, axis=0)
+      for tfrecords_file in patient_exam_tfrecords:
+        tfrecords_dataset = tf.data.TFRecordDataset(tfrecords_file).map(
+          deserialize_and_decode_fn,
+          num_parallel_calls=util_ops.get_cpu_count())
+        # Make sure the elements are grouped for interpolation, i.e. we want to
+        # have 3 slices in a row at all times
+        tfrecords_dataset = tfrecords_dataset.window(size=3, shift=1).flat_map(
+          lambda x: x.batch(3))
+
+        if is_training:
+          # Add repeat here since otherwise patients with many slices would have
+          # a bias
+          tfrecords_dataset = tfrecords_dataset.repeat(None)
+
+        tfrecords_datasets.append(tfrecords_dataset)
+
+      final_dataset = tf.contrib.data.choose_from_datases
+      # Merge all
+      final_dataset = tfrecords_datasets[0]
+      for i in range(1, len(tfrecords_datasets)):
+        final_dataset = final_dataset.concatenate(tfrecords_datasets[i])
+
+      return final_dataset
+
+    dataset = dataset.interleave(make_exam_tfrecords,
+                                 block_length=1,
+                                 cycle_length=len(tfrecords_files))
+
+    return dataset
   else:
-    dataset = dataset.interleave(
-      lambda tfrecords_file: tf.data.TFRecordDataset(tfrecords_file).shuffle(
-        32), block_length=1, cycle_length=len(tfrecords_files),
-      num_parallel_calls=util_ops.get_cpu_count())
-
-  deserialize_and_decode_fn = functools.partial(
-    _deserialize_and_decode_example, target_dims=target_dims,
-    dilate_groundtruth=dilate_groundtruth,
-    dilate_kernel_size=dilate_kernel_size,
-    common_size_factor=common_size_factor)
-
-  dataset = dataset.map(deserialize_and_decode_fn,
-                        num_parallel_calls=util_ops.get_cpu_count())
-
-  return dataset
+    raise ValueError("Unknown model objective: {}".format(model_objective))
 
 
 def build_predict_tf_dataset(directory, target_dims, common_size_factor):

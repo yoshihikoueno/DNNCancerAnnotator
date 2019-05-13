@@ -1,3 +1,8 @@
+class TFRecordsType:
+  regular = 'regular'
+  ordered_slices = 'ordered_slices'
+
+
 class TfExampleFields:
   patient_id = 'patient_id'
   slice_id = 'slice_id'
@@ -18,6 +23,7 @@ class InputDataFields:
   slice_id = 'slice_id'
   image_file = 'image_file'
   image_decoded = 'image_decoded'
+  image_preprocessed = 'image_preprocessed'
   annotation_file = 'annotation_file'
   annotation_decoded = 'annotation_decoded'
   annotation_mask = 'annotation_mask'

@@ -6,33 +6,45 @@ from utils import util_ops
 from utils import standard_fields
 
 
-def preprocess(features, val_range, scale_input):
-  inputs = features[standard_fields.InputDataFields.image_decoded]
-  if inputs.dtype is not tf.float32:
-    raise ValueError('`preprocess` expects a tf.float32 tensor')
-  if len(inputs.get_shape()) != 4:
-    raise ValueError("Expected tensor of rank 4.")
+def preprocess(features, val_range, scale_input, model_objective):
+  if model_objective == 'segmentation':
+    inputs = features[standard_fields.InputDataFields.image_decoded]
+    if inputs.dtype is not tf.float32:
+      raise ValueError('`preprocess` expects a tf.float32 tensor')
+    if len(inputs.get_shape()) != 4:
+      raise ValueError("Expected tensor of rank 4.")
 
-  assert(val_range in (0, 1, 2))
+    assert(val_range in (0, 1, 2))
 
-  if scale_input:
-    inputs = tf.map_fn(tf.image.per_image_standardization, elems=inputs,
-                       parallel_iterations=util_ops.get_cpu_count())
-  else:
-    # We don't care about the val_range if we scale our input, since it would
-    # be the same anyway
-    if val_range == 1:
-      inputs /= 255
-    elif val_range == 2:
-      inputs = (inputs / 255) * 2 - 1
+    if scale_input:
+      inputs = tf.map_fn(tf.image.per_image_standardization, elems=inputs,
+                         parallel_iterations=util_ops.get_cpu_count())
+    else:
+      # We don't care about the val_range if we scale our input, since it would
+      # be the same anyway
+      if val_range == 1:
+        inputs /= 255
+      elif val_range == 2:
+        inputs = (inputs / 255) * 2 - 1
 
-  features[standard_fields.InputDataFields.image_decoded] = inputs
+    features[standard_fields.InputDataFields.image_preprocessed] = inputs
 
-  return features
+    return features
+  elif model_objective == 'interpolation':
+    # Not yet implemented
+    assert(not scale_input and val_range == 0)
+
+    features[standard_fields.InputDataFields.image_preprocessed] = features[
+      standard_fields.InputDataFields.image_decoded]
+
+    return features
 
 
 def apply_data_augmentation(features, data_augmentation_options,
                             num_parallel_iterations):
+  if not data_augmentation_options:
+    return features
+
   images = features[standard_fields.InputDataFields.image_decoded]
   gt_masks = features[standard_fields.InputDataFields.annotation_mask]
 

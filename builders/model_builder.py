@@ -69,7 +69,7 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
   if as_gan_generator:
     image_batch = features
   else:
-    image_batch = features[standard_fields.InputDataFields.image_decoded]
+    image_batch = features[standard_fields.InputDataFields.image_preprocessed]
 
   network_output = feature_extractor.build_network(
     image_batch, is_training=mode == tf.estimator.ModeKeys.TRAIN,
@@ -220,7 +220,7 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
       result_folder=result_folder,
       visualization_file_names=visualization_file_names,
       file_name=features[standard_fields.InputDataFields.image_file],
-      image_decoded=image_batch,
+      image_decoded=features[standard_fields.InputDataFields.image_decoded],
       annotation_decoded=features[
         standard_fields.InputDataFields.annotation_decoded],
       predicted_mask=scaled_network_output, eval_dir=eval_dir)
@@ -246,7 +246,7 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
       result_folder=result_folder,
       visualization_file_names=None,
       file_name=features[standard_fields.InputDataFields.image_file],
-      image_decoded=image_batch,
+      image_decoded=features[standard_fields.InputDataFields.image_decoded],
       annotation_decoded=None,
       predicted_mask=scaled_network_output, eval_dir=eval_dir)
 
