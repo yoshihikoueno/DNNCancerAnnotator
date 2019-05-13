@@ -33,6 +33,8 @@ flags.DEFINE_integer('num_steps', 0,
                      'For debugging purposes, a possible limit to '
                      'the number of steps. 0 means no limit')
 flags.DEFINE_integer('visible_device_index', -1, 'Index of the visible device')
+flags.DEFINE_integer('eval_checkpoint_step_interval', -1,
+                     'Checkpoints to be evaluated should be at least n steps apart')
 
 FLAGS = flags.FLAGS
 
@@ -136,6 +138,12 @@ def main(_):
       new_checkpoint_evaluated = False
       for checkpoint in all_checkpoints:
         if checkpoint in evaluated_checkpoints:
+          continue
+        elif (FLAGS.eval_checkpoint_steps_interval > 0
+              and int(checkpoint.split('-')[1])
+              - int(latest_checkpoint.split('-')[1])
+              < FLAGS.eval_checkpoint_step_interval):
+          evaluated_checkpoints.append(checkpoint)
           continue
         else:
           new_checkpoint_evaluated = True
