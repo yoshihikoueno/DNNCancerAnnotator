@@ -86,7 +86,7 @@ def walk_dir(directory, is_old, id_prefix, result_dict):
           size = f_pil.size
         if size not in result_dict['image_size_tuple_to_num']:
           result_dict['image_size_tuple_to_num'][size] = 0
-          result_dict['image_size_tuple_to_num'][size] += 1
+        result_dict['image_size_tuple_to_num'][size] += 1
 
       if id_prefix == 'c':
         if min(slice_indices) < result_dict['label_min_slice_index'][0]:
