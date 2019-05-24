@@ -23,7 +23,8 @@ def _load_existing_tfrecords(directory, split_name, target_dims, dataset_name,
       dilate_kernel_size=dataset_config.
       prostate_cancer.groundtruth_dilation_kernel_size,
       common_size_factor=dataset_config.prostate_cancer.common_size_factor,
-      model_objective=model_objective)
+      model_objective=model_objective,
+      tfrecords_type=dataset_config.tfrecords_type)
   else:
     assert(False)
 

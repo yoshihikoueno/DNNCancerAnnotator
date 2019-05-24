@@ -1,6 +1,7 @@
 class TFRecordsType:
   regular = 'regular'
   ordered_slices = 'ordered_slices'
+  input_3d = 'input_3d'
 
 
 class TfExampleFields:
@@ -16,6 +17,12 @@ class TfExampleFields:
   label = 'label'
 
   examination_name = 'examination_name'
+
+  width = 'width'
+  height = 'height'
+  depth = 'depth'
+  image_3d_encoded = 'image_3d_encoded'
+  annotation_3d_encoded = 'annotation_3d_encoded'
 
 
 class InputDataFields:

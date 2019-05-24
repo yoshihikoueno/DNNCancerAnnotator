@@ -4,7 +4,6 @@ import logging
 import pickle
 import itertools
 import shutil
-import multiprocessing
 
 import numpy as np
 import tensorflow as tf
@@ -172,28 +171,6 @@ def _decode_example(example_dict, target_dims, dilate_groundtruth,
     image_decoded, target_dims, is_annotation_mask=False,
     common_size_factor=common_size_factor)
 
-  #individual_masks = split_groundtruth_mask(tf.squeeze(tf.cast(
-  #  annotation_mask_preprocessed, tf.bool), axis=2))
-
-  #bounding_box_coordinates = tf.cond(
-  #  tf.equal(label, 0), lambda: [tf.constant([], dtype=tf.float32),
-  #                               tf.constant([], dtype=tf.float32),
-  #                               tf.constant([], dtype=tf.float32),
-  #                               tf.constant([], dtype=tf.float32)],
-  #  lambda: tf.map_fn(_extract_bounding_box,
-  #                    elems=individual_masks,
-  #                    dtype=[tf.float32, tf.float32, tf.float32, tf.float32]))
-
-  #y_mins = bounding_box_coordinates[0]
-  #y_maxs = bounding_box_coordinates[1]
-  #x_mins = bounding_box_coordinates[2]
-  #x_maxs = bounding_box_coordinates[3]
-
-  #bounding_boxes = {standard_fields.BoundingBoxFields.y_min: y_mins,
-  #                  standard_fields.BoundingBoxFields.y_max: y_maxs,
-  #                  standard_fields.BoundingBoxFields.x_min: x_mins,
-  #                  standard_fields.BoundingBoxFields.x_max: x_maxs}
-
   features = {
     standard_fields.InputDataFields.patient_id:
     example_dict[standard_fields.TfExampleFields.patient_id],
@@ -208,13 +185,56 @@ def _decode_example(example_dict, target_dims, dilate_groundtruth,
     annotation_preprocessed,
     standard_fields.InputDataFields.annotation_mask:
     annotation_mask_preprocessed,
-    #standard_fields.InputDataFields.individual_masks:
-    #individual_masks,
-    #standard_fields.InputDataFields.bounding_boxes:
-    #bounding_boxes,
     standard_fields.InputDataFields.label: label,
     standard_fields.InputDataFields.examination_name: example_dict[
       standard_fields.TfExampleFields.examination_name]}
+
+  return features
+
+
+def _decode_3d_example(example_dict, target_dims, dilate_groundtruth,
+                       dilate_kernel_size, common_size_factor):
+  context_features, sequence_features = example_dict
+
+  patient_id = context_features[standard_fields.TfExampleFields.patient_id]
+  examination_name = context_features[
+    standard_fields.TfExampleFields.examination_name]
+
+  image_3d_encoded = sequence_features[
+    standard_fields.TfExampleFields.image_3d_encoded].values
+  annotation_3d_encoded = sequence_features[
+    standard_fields.TfExampleFields.annotation_3d_encoded].values
+
+  image_decoded = tf.cast(tf.map_fn(
+    lambda e: tf.image.decode_jpeg(e, channels=1), elems=image_3d_encoded,
+    parallel_iterations=util_ops.get_cpu_count()), tf.float32)
+  annotation_decoded = tf.cast(tf.map_fn(
+    lambda e: tf.image.decode_jpeg(e, channels=3), elems=annotation_3d_encoded,
+    parallel_iterations=util_ops.get_cpu_count()), tf.float32)
+
+  annotation_mask = tf.map_fn(
+    lambda e: _extract_annotation(e, dilate_groundtruth=dilate_groundtruth,
+                                  dilate_kernel_size=dilate_kernel_size),
+    elems=annotation_decoded, dtype=tf.int32)
+
+  annotation_mask_preprocessed = tf.map_fn(lambda e: _preprocess_image(
+    e, target_dims, is_annotation_mask=True,
+    common_size_factor=common_size_factor), elems=annotation_mask)
+  annotation_preprocessed = tf.map_fn(lambda e: _preprocess_image(
+    e, target_dims, is_annotation_mask=False,
+    common_size_factor=common_size_factor), elems=annotation_decoded)
+  image_preprocessed = tf.map_fn(lambda e: _preprocess_image(
+    e, target_dims, is_annotation_mask=False,
+    common_size_factor=common_size_factor), elems=image_decoded)
+
+  features = {
+    standard_fields.InputDataFields.patient_id: patient_id,
+    standard_fields.InputDataFields.image_decoded: image_preprocessed,
+    standard_fields.InputDataFields.annotation_decoded:
+    annotation_preprocessed,
+    standard_fields.InputDataFields.annotation_mask:
+    annotation_mask_preprocessed,
+    standard_fields.InputDataFields.examination_name: examination_name}
 
   return features
 
@@ -255,6 +275,60 @@ def _serialize_example(keys, example):
   return tf_example.SerializeToString()
 
 
+def _serialize_3d_example(example_data):
+  default_patient_id = example_data[2][0]
+  default_exam_id = example_data[4][0]
+
+  # Verify data
+  slice_index_counter = None
+
+  for image_file, annotation_file, patient_id, slice_index, exam_id, \
+       image_decoded, annotation_decoded in zip(*example_data):
+    assert(default_patient_id == patient_id)
+    assert(default_exam_id == exam_id)
+    if slice_index_counter is None:
+      slice_index_counter = slice_index
+    else:
+      assert(slice_index_counter + 1 == slice_index)
+      slice_index_counter = slice_index
+
+  context_features = {
+    standard_fields.TfExampleFields.patient_id: dh.bytes_feature(
+      default_patient_id),
+    standard_fields.TfExampleFields.examination_name: dh.bytes_feature(
+      default_exam_id),
+    standard_fields.TfExampleFields.depth: dh.int64_feature(
+      example_data[5].shape[0]),
+  }
+  context_features = tf.train.Features(feature=context_features)
+
+  feature_lists = {
+    standard_fields.TfExampleFields.image_3d_encoded:
+    tf.train.FeatureList(feature=[dh.bytes_list_feature(example_data[5])]),
+    standard_fields.TfExampleFields.annotation_3d_encoded:
+    tf.train.FeatureList(feature=[dh.bytes_list_feature(example_data[6])])
+  }
+  feature_lists = tf.train.FeatureLists(feature_list=feature_lists)
+
+  tf_example = tf.train.SequenceExample(context=context_features,
+                                        feature_lists=feature_lists)
+
+  return tf_example.SerializeToString()
+
+
+def _serialize_and_save_3d_example(elem_tuple, output_dir, split):
+  elem = elem_tuple[0]
+  patient_id = elem_tuple[1]
+  exam_id = elem_tuple[2]
+  elem_serialized = _serialize_3d_example(elem)
+
+  writer = tf.python_io.TFRecordWriter(os.path.join(
+    output_dir, split, '{}_{}.tfrecords'.format(
+      patient_id, exam_id)))
+  writer.write(elem_serialized)
+  writer.close()
+
+
 def _deserialize_and_decode_example(example, target_dims, dilate_groundtruth,
                                     dilate_kernel_size, common_size_factor):
   features = {
@@ -283,6 +357,34 @@ def _deserialize_and_decode_example(example, target_dims, dilate_groundtruth,
                          common_size_factor=common_size_factor)
 
 
+def _deserialize_and_decode_3d_example(
+    example, target_dims, dilate_groundtruth, dilate_kernel_size,
+    common_size_factor):
+  context_features = {
+    standard_fields.TfExampleFields.patient_id: tf.FixedLenFeature(
+      (), tf.string, default_value=''),
+    standard_fields.TfExampleFields.examination_name: tf.FixedLenFeature(
+      (), tf.string, default_value=''),
+    standard_fields.TfExampleFields.depth: tf.FixedLenFeature(
+      (), tf.int64, default_value=0)
+    }
+
+  feature_lists = {
+    standard_fields.TfExampleFields.image_3d_encoded: tf.VarLenFeature(
+      tf.string),
+    standard_fields.TfExampleFields.annotation_3d_encoded: tf.VarLenFeature(
+      tf.string)}
+
+  example_dict = tf.parse_single_sequence_example(
+    example, context_features=context_features,
+    sequence_features=feature_lists)
+
+  return _decode_3d_example(example_dict, target_dims=target_dims,
+                            dilate_groundtruth=dilate_groundtruth,
+                            dilate_kernel_size=dilate_kernel_size,
+                            common_size_factor=common_size_factor)
+
+
 def _parse_from_file(image_file, annotation_file, label, patient_id,
                      slice_id, examination_name, dataset_folder):
   image_file = tf.strings.join([dataset_folder, '/', image_file])
@@ -300,6 +402,21 @@ def _parse_from_file(image_file, annotation_file, label, patient_id,
     standard_fields.TfExampleFields.annotation_encoded: annotation_string,
     standard_fields.TfExampleFields.label: label,
     standard_fields.TfExampleFields.examination_name: examination_name}
+
+
+def _parse_from_exam(image_files, annotation_files,
+                     patient_ids, slice_ids, exam_ids, dataset_folder):
+  image_encoded = tf.map_fn(
+    lambda f: tf.read_file(tf.strings.join(
+      [dataset_folder, '/', f])),
+    elems=image_files, parallel_iterations=util_ops.get_cpu_count())
+  annotation_encoded = tf.map_fn(
+    lambda f: tf.read_file(tf.strings.join(
+      [dataset_folder, '/', f])),
+    elems=annotation_files, parallel_iterations=util_ops.get_cpu_count())
+
+  return (image_files, annotation_files, patient_ids, slice_ids, exam_ids,
+          image_encoded, annotation_encoded)
 
 
 def _build_ordered_slices_tfrecords_from_files(
@@ -372,6 +489,70 @@ def _build_ordered_slices_tfrecords_from_files(
 
       for writer in writer_dict.values():
         writer.close()
+
+
+def _build_3d_tfrecords_from_files(pickle_data, output_dir, dataset_path):
+  with tf.Session() as sess:
+    for split, data in pickle_data[
+        standard_fields.PickledDatasetInfo.data_dict].items():
+      os.mkdir(os.path.join(output_dir, split))
+
+      # Readjust data so that it is easier to create fitting tfrecords
+      # Patient id to exam_id to exam_data
+      # exam_data: slice id to [image, annotation, patient_id, slice_id,
+      # exam_id] dict
+      readjusted_data = dict()
+
+      for patient_id, v in data.items():
+        if patient_id not in readjusted_data:
+          readjusted_data[patient_id] = dict()
+
+        for e in v:
+          if e[5] not in readjusted_data[patient_id]:
+            readjusted_data[patient_id][e[5]] = dict()
+
+          slice_id = e[4]
+          readjusted_data[patient_id][e[5]][slice_id] = [
+            e[0], e[1], patient_id, slice_id, e[5]]
+
+      elem_ops = []
+      patient_ids = []
+      exam_ids = []
+      for patient_id, v in readjusted_data.items():
+        for exam_id, exam_data in v.items():
+          exam_entries = []
+
+          slice_indices = list(exam_data.keys())
+          slice_indices.sort()
+
+          for slice_index in slice_indices:
+            exam_entries.append(exam_data[slice_index])
+
+          dataset = tf.data.Dataset.from_tensor_slices(
+            tuple([list(e) for e in list(zip(*exam_entries))]))
+          dataset = dataset.batch(len(exam_entries))
+
+          parse_fn = functools.partial(
+            _parse_from_exam, dataset_folder=dataset_path)
+
+          dataset = dataset.map(parse_fn,
+                                num_parallel_calls=util_ops.get_cpu_count())
+
+          it = dataset.make_one_shot_iterator()
+
+          elem = it.get_next()
+
+          elem_ops.append(elem)
+          patient_ids.append(patient_id)
+          exam_ids.append(exam_id)
+
+      elem_ops_result = sess.run(elem_ops)
+
+      serialize_and_save_fn = functools.partial(
+        _serialize_and_save_3d_example, output_dir=output_dir, split=split)
+
+      for elem_tuple in zip(*[elem_ops_result, patient_ids, exam_ids]):
+        serialize_and_save_fn(elem_tuple)
 
 
 def _build_regular_tfrecords_from_files(pickle_data, output_dir, dataset_path):
@@ -451,6 +632,10 @@ def build_tfrecords_from_files(
     _build_ordered_slices_tfrecords_from_files(
       pickle_data=pickle_data, output_dir=output_dir,
       dataset_path=dataset_path)
+  elif tfrecords_type == standard_fields.TFRecordsType.input_3d:
+    _build_3d_tfrecords_from_files(
+      pickle_data=pickle_data, output_dir=output_dir,
+      dataset_path=dataset_path)
   else:
     raise ValueError("Invalid TFRecordsType: {}".format(tfrecords_type))
 
@@ -460,7 +645,8 @@ def build_tfrecords_from_files(
 def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
                                     patient_ids, is_training,
                                     dilate_groundtruth, dilate_kernel_size,
-                                    common_size_factor, model_objective):
+                                    common_size_factor, model_objective,
+                                    tfrecords_type):
   tfrecords_folder = os.path.join(directory, 'tfrecords', split_name)
   assert(os.path.exists(tfrecords_folder))
 
@@ -469,30 +655,59 @@ def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
                      for file_name in tfrecords_files]
 
   if model_objective == 'segmentation':
-    dataset = tf.data.Dataset.from_tensor_slices(tfrecords_files)
-    if is_training:
-      # We want to even out patient distribution across one epoch
-      dataset = dataset.interleave(
-        lambda tfrecords_file: tf.data.TFRecordDataset(tfrecords_file).apply(
-          tf.data.experimental.shuffle_and_repeat(32, None)), block_length=1,
-        cycle_length=len(tfrecords_files),
-        num_parallel_calls=util_ops.get_cpu_count())
+    if tfrecords_type == 'regular':
+      dataset = tf.data.Dataset.from_tensor_slices(tfrecords_files)
+      if is_training:
+        # We want to even out patient distribution across one epoch
+        dataset = dataset.interleave(
+          lambda tfrecords_file: tf.data.TFRecordDataset(tfrecords_file).apply(
+            tf.data.experimental.shuffle_and_repeat(32, None)), block_length=1,
+          cycle_length=len(tfrecords_files),
+          num_parallel_calls=util_ops.get_cpu_count())
+      else:
+        dataset = dataset.interleave(
+          lambda tfrecords_file: tf.data.TFRecordDataset(
+            tfrecords_file).shuffle(
+              32), block_length=1, cycle_length=len(tfrecords_files),
+          num_parallel_calls=util_ops.get_cpu_count())
+
+      deserialize_and_decode_fn = functools.partial(
+        _deserialize_and_decode_example, target_dims=target_dims,
+        dilate_groundtruth=dilate_groundtruth,
+        dilate_kernel_size=dilate_kernel_size,
+        common_size_factor=common_size_factor)
+
+      dataset = dataset.map(deserialize_and_decode_fn,
+                            num_parallel_calls=util_ops.get_cpu_count())
+
+      return dataset
+    elif tfrecords_type == 'input_3d':
+      dataset = tf.data.Dataset.from_tensor_slices(tfrecords_files)
+
+      if is_training:
+        dataset = dataset.interleave(
+          lambda tfrecords_file: tf.data.TFRecordDataset(
+            tfrecords_file).repeat(None), block_length=1,
+          cycle_length=1,
+          num_parallel_calls=util_ops.get_cpu_count())
+      else:
+        dataset = dataset.interleave(
+          lambda tfrecords_file: tf.data.TFRecordDataset(
+            tfrecords_file), block_length=1, cycle_length=1,
+          num_parallel_calls=util_ops.get_cpu_count())
+
+      deserialize_and_decode_fn = functools.partial(
+        _deserialize_and_decode_3d_example, target_dims=target_dims,
+        dilate_groundtruth=dilate_groundtruth,
+        dilate_kernel_size=dilate_kernel_size,
+        common_size_factor=common_size_factor)
+
+      dataset = dataset.map(deserialize_and_decode_fn,
+                            num_parallel_calls=util_ops.get_cpu_count())
+
+      return dataset
     else:
-      dataset = dataset.interleave(
-        lambda tfrecords_file: tf.data.TFRecordDataset(tfrecords_file).shuffle(
-          32), block_length=1, cycle_length=len(tfrecords_files),
-        num_parallel_calls=util_ops.get_cpu_count())
-
-    deserialize_and_decode_fn = functools.partial(
-      _deserialize_and_decode_example, target_dims=target_dims,
-      dilate_groundtruth=dilate_groundtruth,
-      dilate_kernel_size=dilate_kernel_size,
-      common_size_factor=common_size_factor)
-
-    dataset = dataset.map(deserialize_and_decode_fn,
-                          num_parallel_calls=util_ops.get_cpu_count())
-
-    return dataset
+      raise ValueError("Invalid tfrecords type.")
 
   elif model_objective == 'interpolation':
     tfrecords_dict = dict()
@@ -532,7 +747,6 @@ def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
 
         tfrecords_datasets.append(tfrecords_dataset)
 
-      final_dataset = tf.contrib.data.choose_from_datases
       # Merge all
       final_dataset = tfrecords_datasets[0]
       for i in range(1, len(tfrecords_datasets)):

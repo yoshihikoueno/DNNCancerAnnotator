@@ -9,6 +9,7 @@ import "protos/gan.proto";
 message Model {
   optional int32 input_image_size_x = 1[default=0];
   optional int32 input_image_size_y = 2[default=0];
+  optional int32 input_image_size_z = 13[default=0];
   optional int32 input_image_channels = 3[default=0];
   
   oneof model_type {

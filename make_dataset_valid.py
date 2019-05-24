@@ -39,3 +39,8 @@ for patient_folder in os.listdir(cancer_folder):
         annotation_pil = annotation_pil.resize(image_size,
                                                resample=Image.BICUBIC)
         annotation_pil.save(annotation_file)
+
+
+
+# TODO:
+# - All images of one patient should be same size

@@ -93,9 +93,14 @@ def _make_dataset_splits(data, train_ratio, val_ratio, test_ratio):
 # Assign patients to a dataset split
 def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
                     only_cancer, seed):
-  output_file = os.path.join(
-    dataset_folder, 'patient_assignment_{}_{}_{}_{}'.format(
-      train_ratio, val_ratio, test_ratio, seed))
+  if only_cancer:
+    output_file = os.path.join(
+      dataset_folder, 'patient_assignment_{}_{}_{}_{}_only_cancer'.format(
+        train_ratio, val_ratio, test_ratio, seed))
+  else:
+    output_file = os.path.join(
+      dataset_folder, 'patient_assignment_{}_{}_{}_{}'.format(
+        train_ratio, val_ratio, test_ratio, seed))
 
   train_ratio = float(train_ratio) / 100.0
   val_ratio = float(val_ratio) / 100.0
