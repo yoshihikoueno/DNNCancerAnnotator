@@ -198,6 +198,10 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
                                       loss=total_loss, train_op=train_op,
                                       scaffold=scaffold)
   elif mode == tf.estimator.ModeKeys.EVAL:
+    image_decoded = features[standard_fields.InputDataFields.image_decoded]
+    annotation_decoded = features[
+      standard_fields.InputDataFields.annotation_decoded]
+    image_file = features[standard_fields.InputDataFields.image_file]
     if pipeline_config.train_config.loss.name == 'sigmoid':
       if pipeline_config.dataset.tfrecords_type == 'input_3d':
         scaled_network_output = tf.nn.sigmoid(network_output)[:, :, :, :, 0]
@@ -218,9 +222,17 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
         # Merge batch and slice dimensions
         output_shape = scaled_network_output.get_shape()
         scaled_network_output = tf.reshape(
-          scaled_network_output, shape=[
-            output_shape[0] * output_shape[1], output_shape[2],
-            output_shape[3], output_shape[4]])
+          scaled_network_output, shape=[output_shape[0] * output_shape[1],
+                                        output_shape[2], output_shape[3]])
+        annotation_mask_batch = tf.reshape(
+          annotation_mask_batch, shape=[output_shape[0] * output_shape[1],
+                                        output_shape[2], output_shape[3]])
+        image_decoded = tf.reshape(
+          image_decoded, shape=[output_shape[0] * output_shape[1],
+                                output_shape[2], output_shape[3]])
+        annotation_decoded = tf.reshape(
+          annotation_decoded, shape=[output_shape[0] * output_shape[1],
+                                     output_shape[2], output_shape[3]])
 
        # Metrics
       (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
@@ -234,10 +246,9 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
       vis_hook = session_hooks.VisualizationHook(
         result_folder=result_folder,
         visualization_file_names=visualization_file_names,
-        file_name=features[standard_fields.InputDataFields.image_file],
-        image_decoded=features[standard_fields.InputDataFields.image_decoded],
-        annotation_decoded=features[
-          standard_fields.InputDataFields.annotation_decoded],
+        file_name=image_file,
+        image_decoded=image_decoded,
+        annotation_decoded=annotation_decoded,
         predicted_mask=scaled_network_output, eval_dir=eval_dir)
       patient_metric_hook = session_hooks.PatientMetricHook(
         statistics_dict=statistics_dict,
@@ -252,6 +263,8 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
         evaluation_hooks=[vis_hook, patient_metric_hook],
         eval_metric_ops=metric_dict)
   elif mode == tf.estimator.ModeKeys.PREDICT:
+    if (pipeline_config.dataset.tfrecords_type == 'input_3d'):
+      assert(False and "Not yet implemented!")
     if pipeline_config.train_config.loss.name == 'sigmoid':
       scaled_network_output = tf.nn.sigmoid(network_output)[:, :, :, 0]
     elif pipeline_config.train_config.loss.name == 'softmax':

@@ -135,33 +135,6 @@ def _preprocess_image(image_decoded, target_dims, is_annotation_mask,
     return image_cropped
 
 
-def _preprocess_3d_image(image_decoded, target_dims, is_annotation_mask,
-                         common_size_factor, target_depth):
-  preprocessed_image = tf.map_fn(lambda s: _preprocess_image(
-    image_decoded=s, target_dims=target_dims,
-    is_annotation_mask=is_annotation_mask,
-    common_size_factor=common_size_factor), elems=image_decoded,
-                                 dtype=tf.float32)
-
-  total_depth = tf.shape(preprocessed_image)[0]
-  depth_assert = tf.Assert(
-    tf.greater_equal(total_depth, target_depth),
-    data=[tf.shape(preprocessed_image), total_depth, tf.constant(target_depth),
-          tf.constant("Not enough image slices.")])
-
-  with tf.control_dependencies([depth_assert]):
-    first_slice_index = tf.random.uniform(
-      shape=[], minval=0, maxval=total_depth - tf.constant(target_depth - 1),
-      dtype=tf.int32)
-    preprocessed_image = preprocessed_image[
-      first_slice_index:first_slice_index + target_depth]
-
-    shape = preprocessed_image.get_shape()
-    preprocessed_image.set_shape([target_depth, shape[1], shape[2], shape[3]])
-
-  return preprocessed_image
-
-
 def _decode_example(example_dict, target_dims, dilate_groundtruth,
                     dilate_kernel_size, common_size_factor):
   image_string = example_dict[standard_fields.TfExampleFields.image_encoded]
@@ -247,15 +220,55 @@ def _decode_3d_example(example_dict, target_dims, dilate_groundtruth,
     parallel_iterations=util_ops.get_cpu_count(),
     elems=annotation_decoded, dtype=tf.int32)
 
-  annotation_mask_preprocessed = _preprocess_3d_image(
-    annotation_mask, target_dims, is_annotation_mask=True,
-    common_size_factor=common_size_factor, target_depth=target_depth)
-  annotation_preprocessed = _preprocess_3d_image(
-    annotation_decoded, target_dims, is_annotation_mask=False,
-    common_size_factor=common_size_factor, target_depth=target_depth)
-  image_preprocessed = _preprocess_3d_image(
-    image_decoded, target_dims, is_annotation_mask=False,
-    common_size_factor=common_size_factor, target_depth=target_depth)
+  # Modify depth dimension
+  total_depth = tf.shape(image_decoded)[0]
+  depth_assert = tf.Assert(
+    tf.greater_equal(total_depth, target_depth),
+    data=[tf.shape(image_decoded), total_depth, tf.constant(target_depth),
+          tf.constant("Not enough image slices.")])
+  with tf.control_dependencies([depth_assert]):
+    first_slice_index = tf.random.uniform(
+      shape=[], minval=0, maxval=total_depth - tf.constant(target_depth - 1),
+      dtype=tf.int32)
+    image_decoded = image_decoded[
+      first_slice_index:first_slice_index + target_depth]
+    annotation_decoded = annotation_decoded[
+      first_slice_index:first_slice_index + target_depth]
+    annotation_mask = annotation_mask[
+      first_slice_index:first_slice_index + target_depth]
+    image_files = sequence_features[
+      standard_fields.TfExampleFields.image_file].values
+    image_files = image_files[
+      first_slice_index:first_slice_index + target_depth]
+    annotation_files = sequence_features[
+      standard_fields.TfExampleFields.annotation_file].values
+    annotation_files = annotation_files[
+      first_slice_index:first_slice_index + target_depth]
+
+    shape = image_decoded.get_shape()
+    image_decoded.set_shape([target_depth, shape[1], shape[2], shape[3]])
+
+    shape = annotation_decoded.get_shape()
+    annotation_decoded.set_shape([target_depth, shape[1], shape[2], shape[3]])
+
+    shape = annotation_mask.get_shape()
+    annotation_mask.set_shape([target_depth, shape[1], shape[2], shape[3]])
+
+  image_preprocessed = tf.map_fn(lambda s: _preprocess_image(
+    image_decoded=s, target_dims=target_dims,
+    is_annotation_mask=False,
+    common_size_factor=common_size_factor), elems=image_decoded,
+                                 dtype=tf.float32)
+  annotation_preprocessed = tf.map_fn(lambda s: _preprocess_image(
+    image_decoded=s, target_dims=target_dims,
+    is_annotation_mask=False,
+    common_size_factor=common_size_factor), elems=annotation_decoded,
+                                 dtype=tf.float32)
+  annotation_mask_preprocessed = tf.map_fn(lambda s: _preprocess_image(
+    image_decoded=s, target_dims=target_dims,
+    is_annotation_mask=True,
+    common_size_factor=common_size_factor), elems=annotation_mask,
+                                           dtype=tf.float32)
 
   features = {
     standard_fields.InputDataFields.patient_id: patient_id,
@@ -264,7 +277,9 @@ def _decode_3d_example(example_dict, target_dims, dilate_groundtruth,
     annotation_preprocessed,
     standard_fields.InputDataFields.annotation_mask:
     annotation_mask_preprocessed,
-    standard_fields.InputDataFields.examination_name: examination_name}
+    standard_fields.InputDataFields.examination_name: examination_name,
+    standard_fields.InputDataFields.image_file: image_files,
+    standard_fields.InputDataFields.annotation_file: annotation_files}
 
   return features
 
@@ -326,17 +341,19 @@ def _serialize_3d_example(example_data):
     standard_fields.TfExampleFields.patient_id: dh.bytes_feature(
       default_patient_id),
     standard_fields.TfExampleFields.examination_name: dh.bytes_feature(
-      default_exam_id),
-    standard_fields.TfExampleFields.depth: dh.int64_feature(
-      example_data[5].shape[0]),
+      default_exam_id)
   }
   context_features = tf.train.Features(feature=context_features)
 
   feature_lists = {
     standard_fields.TfExampleFields.image_3d_encoded:
     tf.train.FeatureList(feature=[dh.bytes_list_feature(example_data[5])]),
+    standard_fields.TfExampleFields.image_file:
+    tf.train.FeatureList(feature=[dh.bytes_list_feature(example_data[0])]),
     standard_fields.TfExampleFields.annotation_3d_encoded:
-    tf.train.FeatureList(feature=[dh.bytes_list_feature(example_data[6])])
+    tf.train.FeatureList(feature=[dh.bytes_list_feature(example_data[6])]),
+    standard_fields.TfExampleFields.annotation_file:
+    tf.train.FeatureList(feature=[dh.bytes_list_feature(example_data[1])])
   }
   feature_lists = tf.train.FeatureLists(feature_list=feature_lists)
 
@@ -394,15 +411,16 @@ def _deserialize_and_decode_3d_example(
     standard_fields.TfExampleFields.patient_id: tf.FixedLenFeature(
       (), tf.string, default_value=''),
     standard_fields.TfExampleFields.examination_name: tf.FixedLenFeature(
-      (), tf.string, default_value=''),
-    standard_fields.TfExampleFields.depth: tf.FixedLenFeature(
-      (), tf.int64, default_value=0)
-    }
+      (), tf.string, default_value='')}
 
   feature_lists = {
+    standard_fields.TfExampleFields.image_file: tf.VarLenFeature(
+      tf.string),
     standard_fields.TfExampleFields.image_3d_encoded: tf.VarLenFeature(
       tf.string),
     standard_fields.TfExampleFields.annotation_3d_encoded: tf.VarLenFeature(
+      tf.string),
+    standard_fields.TfExampleFields.annotation_file: tf.VarLenFeature(
       tf.string)}
 
   example_dict = tf.parse_single_sequence_example(
@@ -773,8 +791,8 @@ def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
           lambda x: x.batch(3))
 
         if is_training:
-          # Add repeat here since otherwise patients with many slices would have
-          # a bias
+          # Add repeat here since otherwise patients with many slices would
+          # have a bias
           tfrecords_dataset = tfrecords_dataset.repeat(None)
 
         tfrecords_datasets.append(tfrecords_dataset)
