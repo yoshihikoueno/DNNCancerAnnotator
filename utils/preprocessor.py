@@ -6,30 +6,40 @@ from utils import util_ops
 from utils import standard_fields
 
 
-def preprocess(features, val_range, scale_input, model_objective):
+def preprocess(features, val_range, scale_input, model_objective,
+               tfrecords_type):
   if model_objective == 'segmentation':
     inputs = features[standard_fields.InputDataFields.image_decoded]
     if inputs.dtype is not tf.float32:
       raise ValueError('`preprocess` expects a tf.float32 tensor')
-    if len(inputs.get_shape()) != 4:
-      raise ValueError("Expected tensor of rank 4.")
 
-    assert(val_range in (0, 1, 2))
+    if tfrecords_type == 'input_3d':
+      if len(inputs.get_shape()) != 5:
+        raise ValueError("Expected tensor of rank 5. Got {}".format(inputs))
 
-    if scale_input:
-      inputs = tf.map_fn(tf.image.per_image_standardization, elems=inputs,
-                         parallel_iterations=util_ops.get_cpu_count())
+      features[standard_fields.InputDataFields.image_preprocessed] = inputs
+
+      return features
     else:
-      # We don't care about the val_range if we scale our input, since it would
-      # be the same anyway
-      if val_range == 1:
-        inputs /= 255
-      elif val_range == 2:
-        inputs = (inputs / 255) * 2 - 1
+      if len(inputs.get_shape()) != 4:
+        raise ValueError("Expected tensor of rank 4. Got {}".format(inputs))
 
-    features[standard_fields.InputDataFields.image_preprocessed] = inputs
+      assert(val_range in (0, 1, 2))
 
-    return features
+      if scale_input:
+        inputs = tf.map_fn(tf.image.per_image_standardization, elems=inputs,
+                           parallel_iterations=util_ops.get_cpu_count())
+      else:
+        # We don't care about the val_range if we scale our input, since it would
+        # be the same anyway
+        if val_range == 1:
+          inputs /= 255
+        elif val_range == 2:
+          inputs = (inputs / 255) * 2 - 1
+
+      features[standard_fields.InputDataFields.image_preprocessed] = inputs
+
+      return features
   elif model_objective == 'interpolation':
     # Not yet implemented
     assert(not scale_input and val_range == 0)

@@ -38,16 +38,22 @@ def get_batch_norm_params(momentum, epsilon):
 
 
 def conv(inputs, filters, kernel_size, strides, padding, conv_params,
-                 batch_norm_params, is_training, name=None, bn_first=False):
+         batch_norm_params, is_training, name=None, bn_first=False,
+         is_3d=False):
   conv_params = conv_params.copy()
 
   if bn_first:
     activation = conv_params['activation']
     conv_params['activation'] = None
 
-  res = tf.layers.conv2d(
-    inputs, filters=filters, kernel_size=kernel_size, strides=strides,
-    padding=padding, name=name, **conv_params)
+  if is_3d:
+    res = tf.layers.conv3d(
+      inputs, filters=filters, kernel_size=kernel_size, strides=strides,
+      padding=padding, name=name, **conv_params)
+  else:
+    res = tf.layers.conv2d(
+      inputs, filters=filters, kernel_size=kernel_size, strides=strides,
+      padding=padding, name=name, **conv_params)
 
   if batch_norm_params is not None:
     axis = -1 if conv_params['data_format'] == 'channels_last' else 1
@@ -64,16 +70,21 @@ def conv(inputs, filters, kernel_size, strides, padding, conv_params,
 def conv_t(inputs, filters, kernel_size, strides, padding,
            conv_params, batch_norm_params,
            is_training, name=None, bn_first=False, use_dropout=False,
-           dropout_rate=0.0):
+           dropout_rate=0.0, is_3d=False):
   conv_params = conv_params.copy()
 
   if bn_first:
     activation = conv_params['activation']
     conv_params['activation'] = None
 
-  res = tf.layers.conv2d_transpose(
-    inputs=inputs, filters=filters, kernel_size=kernel_size, strides=strides,
-    padding=padding, name=name, **conv_params)
+  if is_3d:
+    res = tf.layers.conv3d_transpose(
+      inputs=inputs, filters=filters, kernel_size=kernel_size, strides=strides,
+      padding=padding, name=name, **conv_params)
+  else:
+    res = tf.layers.conv2d_transpose(
+      inputs=inputs, filters=filters, kernel_size=kernel_size, strides=strides,
+      padding=padding, name=name, **conv_params)
 
   if batch_norm_params is not None:
     axis = -1 if conv_params['data_format'] == 'channels_last' else 1
@@ -89,3 +100,14 @@ def conv_t(inputs, filters, kernel_size, strides, padding,
       name + 'Dropout' if name is not None else None))
 
   return res
+
+
+def pool(inputs, pool_size, strides, padding, pool_params, is_3d=False):
+  if is_3d:
+    return tf.layers.max_pooling3d(
+      inputs=inputs, pool_size=pool_size, strides=strides,
+      padding=padding, **pool_params)
+  else:
+    return tf.layers.max_pooling2d(
+      inputs=inputs, pool_size=pool_size, strides=strides,
+      padding=padding, **pool_params)

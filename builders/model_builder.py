@@ -94,26 +94,23 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
 
   network_output_shape = network_output.get_shape().as_list()
   if mode != tf.estimator.ModeKeys.PREDICT:
-    if (network_output_shape[1:3]
-        != annotation_mask_batch.get_shape().as_list()[1:3]):
+    if (network_output_shape[1:-1]
+        != annotation_mask_batch.get_shape().as_list()[1:-1]):
       annotation_mask_batch = image_utils.central_crop(
         annotation_mask_batch,
-        desired_size=network_output.get_shape().as_list()[1:3])
+        desired_size=network_output.get_shape().as_list()[1:-1])
 
     annotation_mask_batch = tf.cast(
       tf.clip_by_value(annotation_mask_batch, 0, 1), dtype=tf.int64)
 
-    assert(len(annotation_mask_batch.get_shape()) == 4)
-    assert(annotation_mask_batch.get_shape().as_list()[:3]
-           == network_output.get_shape().as_list()[:3])
+    assert(annotation_mask_batch.get_shape().as_list()[:-1]
+           == network_output.get_shape().as_list()[:-1])
 
   # We should not apply the loss to evaluation. This would just cause
   # our loss to be minimum for f2 score, but we also get the same
   # optimum if we just optimzie for f1 score
   if (pipeline_config.train_config.loss.use_weighted
       and mode == tf.estimator.ModeKeys.TRAIN):
-    patient_ratio = dataset_info[
-      standard_fields.PickledDatasetInfo.patient_ratio]
     cancer_pixels = tf.reduce_sum(tf.cast(annotation_mask_batch,
                                           dtype=tf.float32))
     healthy_pixels = tf.cast(tf.size(
@@ -122,7 +119,7 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
     batch_pixel_ratio = tf.div(healthy_pixels, cancer_pixels + 1.0)
 
     loss_weight = (
-      ((batch_pixel_ratio * patient_ratio)
+      (batch_pixel_ratio
        + pipeline_config.train_config.loss.weight_constant_add)
       * pipeline_config.train_config.loss.weight_constant_multiply)
   else:
@@ -202,39 +199,58 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
                                       scaffold=scaffold)
   elif mode == tf.estimator.ModeKeys.EVAL:
     if pipeline_config.train_config.loss.name == 'sigmoid':
-      scaled_network_output = tf.nn.sigmoid(network_output)[:, :, :, 0]
+      if pipeline_config.dataset.tfrecords_type == 'input_3d':
+        scaled_network_output = tf.nn.sigmoid(network_output)[:, :, :, :, 0]
+      else:
+        scaled_network_output = tf.nn.sigmoid(network_output)[:, :, :, 0]
     elif pipeline_config.train_config.loss.name == 'softmax':
+      # We dont care about softmax for now
+      assert(False)
       assert(network_output.get_shape().as_list()[-1] == 2)
       scaled_network_output = tf.nn.softmax(network_output)[:, :, :, 1]
 
-      # Metrics
-    (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
-     froc_thresholds) = (
-      metric_utils.get_metrics(
-        scaled_network_output, annotation_mask_batch,
-        parallel_iterations=min(pipeline_config.eval_config.batch_size,
-                                util_ops.get_cpu_count()),
-        calc_froc=calc_froc))
+    if (pipeline_config.dataset.tfrecords_type == 'input_3d'
+        and not pipeline_config.eval_config.eval_3d_as_2d):
+      assert(False and "Not yet implemented!")
+    else:
+      if (pipeline_config.dataset.tfrecords_type == 'input_3d'
+          and pipeline_config.eval_config.eval_3d_as_2d):
+        # Merge batch and slice dimensions
+        output_shape = scaled_network_output.get_shape()
+        scaled_network_output = tf.reshape(
+          scaled_network_output, shape=[
+            output_shape[0] * output_shape[1], output_shape[2],
+            output_shape[3], output_shape[4]])
 
-    vis_hook = session_hooks.VisualizationHook(
-      result_folder=result_folder,
-      visualization_file_names=visualization_file_names,
-      file_name=features[standard_fields.InputDataFields.image_file],
-      image_decoded=features[standard_fields.InputDataFields.image_decoded],
-      annotation_decoded=features[
-        standard_fields.InputDataFields.annotation_decoded],
-      predicted_mask=scaled_network_output, eval_dir=eval_dir)
-    patient_metric_hook = session_hooks.PatientMetricHook(
-      statistics_dict=statistics_dict,
-      patient_id=features[standard_fields.InputDataFields.patient_id],
-      result_folder=result_folder, eval_dir=eval_dir, num_lesions=num_lesions,
-      froc_region_cm_values=froc_region_cm_values,
-      froc_thresholds=froc_thresholds)
+       # Metrics
+      (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
+       froc_thresholds) = (
+         metric_utils.get_metrics(
+           scaled_network_output, annotation_mask_batch,
+           parallel_iterations=min(pipeline_config.eval_config.batch_size,
+                                   util_ops.get_cpu_count()),
+           calc_froc=calc_froc))
 
-    return tf.estimator.EstimatorSpec(
-      mode, loss=total_loss, train_op=train_op,
-      evaluation_hooks=[vis_hook, patient_metric_hook],
-      eval_metric_ops=metric_dict)
+      vis_hook = session_hooks.VisualizationHook(
+        result_folder=result_folder,
+        visualization_file_names=visualization_file_names,
+        file_name=features[standard_fields.InputDataFields.image_file],
+        image_decoded=features[standard_fields.InputDataFields.image_decoded],
+        annotation_decoded=features[
+          standard_fields.InputDataFields.annotation_decoded],
+        predicted_mask=scaled_network_output, eval_dir=eval_dir)
+      patient_metric_hook = session_hooks.PatientMetricHook(
+        statistics_dict=statistics_dict,
+        patient_id=features[standard_fields.InputDataFields.patient_id],
+        result_folder=result_folder, eval_dir=eval_dir,
+        num_lesions=num_lesions,
+        froc_region_cm_values=froc_region_cm_values,
+        froc_thresholds=froc_thresholds)
+
+      return tf.estimator.EstimatorSpec(
+        mode, loss=total_loss, train_op=train_op,
+        evaluation_hooks=[vis_hook, patient_metric_hook],
+        eval_metric_ops=metric_dict)
   elif mode == tf.estimator.ModeKeys.PREDICT:
     if pipeline_config.train_config.loss.name == 'sigmoid':
       scaled_network_output = tf.nn.sigmoid(network_output)[:, :, :, 0]
@@ -306,7 +322,8 @@ def get_model_fn(pipeline_config, result_folder, dataset_folder, dataset_info,
       filter_sizes=pipeline_config.model.unet.filter_sizes,
       down_activation=pipeline_config.model.unet.down_activation,
       up_activation=pipeline_config.model.unet.up_activation,
-      conv_bn_first=pipeline_config.model.conv_bn_first)
+      conv_bn_first=pipeline_config.model.conv_bn_first,
+      is_3d=pipeline_config.dataset.tfrecords_type == 'input_3d')
     return functools.partial(_general_model_fn,
                              pipeline_config=pipeline_config,
                              result_folder=result_folder,

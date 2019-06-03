@@ -9,7 +9,7 @@ from builders import activation_fn_builder as ab
 
 class UNet(object):
   def __init__(self, weight_decay, conv_padding, filter_sizes, down_activation,
-               up_activation, conv_bn_first):
+               up_activation, conv_bn_first, is_3d):
     assert(len(filter_sizes) > 1)
     assert(conv_padding in ['same', 'valid'])
     self.weight_decay = weight_decay
@@ -18,6 +18,7 @@ class UNet(object):
     self.down_activation = ab.build(down_activation)
     self.up_activation = ab.build(up_activation)
     self.conv_bn_first = conv_bn_first
+    self.is_3d = is_3d
 
   def _downsample_block(self, inputs, nb_filters, is_training, use_batch_norm,
                         bn_momentum, bn_epsilon):
@@ -33,18 +34,18 @@ class UNet(object):
       inputs=inputs, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
       batch_norm_params=batch_norm_params, is_training=is_training,
-      bn_first=self.conv_bn_first)
+      bn_first=self.conv_bn_first, is_3d=self.is_3d)
     net = lu.conv(
       inputs=net, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
       batch_norm_params=batch_norm_params, is_training=is_training,
-      bn_first=self.conv_bn_first)
+      bn_first=self.conv_bn_first, is_3d=self.is_3d)
 
     pool_params = lu.get_pooling_params()
 
-    return net, tf.layers.max_pooling2d(inputs=net, pool_size=2, strides=2,
-                                        padding=self.conv_padding,
-                                        **pool_params)
+    return net, lu.pool(inputs=net, pool_size=2, strides=2,
+                        padding=self.conv_padding, pool_params=pool_params,
+                        is_3d=self.is_3d)
 
   def _upsample_block(self, inputs, downsample_reference, nb_filters,
                       is_training, use_batch_norm, bn_momentum, bn_epsilon):
@@ -62,7 +63,7 @@ class UNet(object):
       inputs=inputs, filters=nb_filters, kernel_size=2, strides=2,
       padding=self.conv_padding, conv_params=conv_transposed_params,
       is_training=is_training, batch_norm_params=batch_norm_params,
-      bn_first=self.conv_bn_first)
+      bn_first=self.conv_bn_first, is_3d=self.is_3d)
 
     if self.conv_padding == 'valid':
       downsample_size = downsample_reference[0].get_shape().as_list()[0]
@@ -82,19 +83,17 @@ class UNet(object):
       inputs=net, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
       batch_norm_params=batch_norm_params, is_training=is_training,
-      bn_first=self.conv_bn_first)
+      bn_first=self.conv_bn_first, is_3d=self.is_3d)
     net = lu.conv(
       inputs=net, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
       batch_norm_params=batch_norm_params, is_training=is_training,
-      bn_first=self.conv_bn_first)
+      bn_first=self.conv_bn_first, is_3d=self.is_3d)
 
     return net
 
   def build_network(self, image_batch, is_training, num_classes,
                     use_batch_norm, bn_momentum, bn_epsilon):
-    print(image_batch)
-
     ds_fn = functools.partial(
       self._downsample_block, is_training=is_training,
       use_batch_norm=use_batch_norm, bn_momentum=bn_momentum,
@@ -136,7 +135,8 @@ class UNet(object):
       final = lu.conv(inputs=us, filters=num_classes, kernel_size=1,
                          strides=1, padding=self.conv_padding,
                          is_training=is_training, conv_params=conv_params,
-                         batch_norm_params=None, name='OutputLayer')
+                         batch_norm_params=None, name='OutputLayer',
+                      is_3d=self.is_3d)
       print(final)
 
       return final

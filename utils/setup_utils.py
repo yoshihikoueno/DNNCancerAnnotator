@@ -58,6 +58,7 @@ def get_input_fn(pipeline_config, directory, existing_tfrecords,
       data_augmentation_options=(
         pipeline_config.train_config.data_augmentation_options),
       num_parallel_iterations=num_parallel_iterations,
-      model_objective=pipeline_config.model.model_objective)
+      model_objective=pipeline_config.model.model_objective,
+      target_depth=pipeline_config.model.input_image_size_z)
 
   return input_fn, meta_info

@@ -135,6 +135,33 @@ def _preprocess_image(image_decoded, target_dims, is_annotation_mask,
     return image_cropped
 
 
+def _preprocess_3d_image(image_decoded, target_dims, is_annotation_mask,
+                         common_size_factor, target_depth):
+  preprocessed_image = tf.map_fn(lambda s: _preprocess_image(
+    image_decoded=s, target_dims=target_dims,
+    is_annotation_mask=is_annotation_mask,
+    common_size_factor=common_size_factor), elems=image_decoded,
+                                 dtype=tf.float32)
+
+  total_depth = tf.shape(preprocessed_image)[0]
+  depth_assert = tf.Assert(
+    tf.greater_equal(total_depth, target_depth),
+    data=[tf.shape(preprocessed_image), total_depth, tf.constant(target_depth),
+          tf.constant("Not enough image slices.")])
+
+  with tf.control_dependencies([depth_assert]):
+    first_slice_index = tf.random.uniform(
+      shape=[], minval=0, maxval=total_depth - tf.constant(target_depth - 1),
+      dtype=tf.int32)
+    preprocessed_image = preprocessed_image[
+      first_slice_index:first_slice_index + target_depth]
+
+    shape = preprocessed_image.get_shape()
+    preprocessed_image.set_shape([target_depth, shape[1], shape[2], shape[3]])
+
+  return preprocessed_image
+
+
 def _decode_example(example_dict, target_dims, dilate_groundtruth,
                     dilate_kernel_size, common_size_factor):
   image_string = example_dict[standard_fields.TfExampleFields.image_encoded]
@@ -193,7 +220,7 @@ def _decode_example(example_dict, target_dims, dilate_groundtruth,
 
 
 def _decode_3d_example(example_dict, target_dims, dilate_groundtruth,
-                       dilate_kernel_size, common_size_factor):
+                       dilate_kernel_size, common_size_factor, target_depth):
   context_features, sequence_features = example_dict
 
   patient_id = context_features[standard_fields.TfExampleFields.patient_id]
@@ -206,26 +233,29 @@ def _decode_3d_example(example_dict, target_dims, dilate_groundtruth,
     standard_fields.TfExampleFields.annotation_3d_encoded].values
 
   image_decoded = tf.cast(tf.map_fn(
-    lambda e: tf.image.decode_jpeg(e, channels=1), elems=image_3d_encoded,
-    parallel_iterations=util_ops.get_cpu_count()), tf.float32)
+    lambda e: tf.image.decode_jpeg(e, channels=1),
+    elems=image_3d_encoded,
+    parallel_iterations=util_ops.get_cpu_count(), dtype=tf.uint8), tf.float32)
   annotation_decoded = tf.cast(tf.map_fn(
-    lambda e: tf.image.decode_jpeg(e, channels=3), elems=annotation_3d_encoded,
-    parallel_iterations=util_ops.get_cpu_count()), tf.float32)
+    lambda e: tf.image.decode_jpeg(e, channels=3),
+    elems=annotation_3d_encoded,
+    parallel_iterations=util_ops.get_cpu_count(), dtype=tf.uint8), tf.float32)
 
   annotation_mask = tf.map_fn(
     lambda e: _extract_annotation(e, dilate_groundtruth=dilate_groundtruth,
                                   dilate_kernel_size=dilate_kernel_size),
+    parallel_iterations=util_ops.get_cpu_count(),
     elems=annotation_decoded, dtype=tf.int32)
 
-  annotation_mask_preprocessed = tf.map_fn(lambda e: _preprocess_image(
-    e, target_dims, is_annotation_mask=True,
-    common_size_factor=common_size_factor), elems=annotation_mask)
-  annotation_preprocessed = tf.map_fn(lambda e: _preprocess_image(
-    e, target_dims, is_annotation_mask=False,
-    common_size_factor=common_size_factor), elems=annotation_decoded)
-  image_preprocessed = tf.map_fn(lambda e: _preprocess_image(
-    e, target_dims, is_annotation_mask=False,
-    common_size_factor=common_size_factor), elems=image_decoded)
+  annotation_mask_preprocessed = _preprocess_3d_image(
+    annotation_mask, target_dims, is_annotation_mask=True,
+    common_size_factor=common_size_factor, target_depth=target_depth)
+  annotation_preprocessed = _preprocess_3d_image(
+    annotation_decoded, target_dims, is_annotation_mask=False,
+    common_size_factor=common_size_factor, target_depth=target_depth)
+  image_preprocessed = _preprocess_3d_image(
+    image_decoded, target_dims, is_annotation_mask=False,
+    common_size_factor=common_size_factor, target_depth=target_depth)
 
   features = {
     standard_fields.InputDataFields.patient_id: patient_id,
@@ -359,7 +389,7 @@ def _deserialize_and_decode_example(example, target_dims, dilate_groundtruth,
 
 def _deserialize_and_decode_3d_example(
     example, target_dims, dilate_groundtruth, dilate_kernel_size,
-    common_size_factor):
+    common_size_factor, target_depth):
   context_features = {
     standard_fields.TfExampleFields.patient_id: tf.FixedLenFeature(
       (), tf.string, default_value=''),
@@ -382,7 +412,8 @@ def _deserialize_and_decode_3d_example(
   return _decode_3d_example(example_dict, target_dims=target_dims,
                             dilate_groundtruth=dilate_groundtruth,
                             dilate_kernel_size=dilate_kernel_size,
-                            common_size_factor=common_size_factor)
+                            common_size_factor=common_size_factor,
+                            target_depth=target_depth)
 
 
 def _parse_from_file(image_file, annotation_file, label, patient_id,
@@ -646,7 +677,7 @@ def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
                                     patient_ids, is_training,
                                     dilate_groundtruth, dilate_kernel_size,
                                     common_size_factor, model_objective,
-                                    tfrecords_type):
+                                    tfrecords_type, target_depth):
   tfrecords_folder = os.path.join(directory, 'tfrecords', split_name)
   assert(os.path.exists(tfrecords_folder))
 
@@ -688,7 +719,7 @@ def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
         dataset = dataset.interleave(
           lambda tfrecords_file: tf.data.TFRecordDataset(
             tfrecords_file).repeat(None), block_length=1,
-          cycle_length=1,
+          cycle_length=len(tfrecords_files),
           num_parallel_calls=util_ops.get_cpu_count())
       else:
         dataset = dataset.interleave(
@@ -700,7 +731,8 @@ def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
         _deserialize_and_decode_3d_example, target_dims=target_dims,
         dilate_groundtruth=dilate_groundtruth,
         dilate_kernel_size=dilate_kernel_size,
-        common_size_factor=common_size_factor)
+        common_size_factor=common_size_factor,
+        target_depth=target_depth)
 
       dataset = dataset.map(deserialize_and_decode_fn,
                             num_parallel_calls=util_ops.get_cpu_count())
