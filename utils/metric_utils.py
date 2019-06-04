@@ -6,19 +6,35 @@ from metrics import pc_metrics
 from dataset_helpers import prostate_cancer_utils
 
 
-def get_metrics(prediction_batch, groundtruth_batch,
-                parallel_iterations, calc_froc):
-  assert(len(prediction_batch.get_shape()) == 3)
-  assert(len(groundtruth_batch.get_shape()) == 4)
+def get_3d_metrics(prediction_batch, groundtruth_batch, parallel_iterations,
+                   calc_froc):
+  assert(len(prediction_batch.get_shape()) == 4)
+  assert(len(groundtruth_batch.get_shape()) == 5)
 
-  groundtruth_batch = tf.squeeze(groundtruth_batch, axis=3)
+  groundtruth_batch = tf.squeeze(groundtruth_batch, axis=4)
   prediction_batch = tf.cast(tf.greater_equal(prediction_batch, 0.5), tf.int64)
 
   # Currently only batch size of 1 is supported
   groundtruth = tf.squeeze(groundtruth_batch, axis=0)
   prediction = tf.squeeze(prediction_batch, axis=0)
 
-  split_groundtruth = prostate_cancer_utils.split_mask(groundtruth)
+
+def get_metrics(prediction_groundtruth_stack,
+                parallel_iterations, calc_froc, is_3d):
+  prediction, groundtruth = tf.unstack(prediction_groundtruth_stack, axis=0)
+
+  if is_3d:
+    assert(len(prediction.get_shape()) == 3)
+    assert(len(groundtruth.get_shape()) == 4)
+  else:
+    assert(len(prediction.get_shape()) == 2)
+    assert(len(groundtruth.get_shape()) == 3)
+
+  groundtruth = tf.squeeze(groundtruth, axis=-1)
+  prediction = tf.cast(tf.greater_equal(prediction, 0.5), tf.int64)
+
+  split_groundtruth = prostate_cancer_utils.split_mask(
+      groundtruth, dilate_mask=False, is_3d=is_3d)
   num_lesions = tf.shape(split_groundtruth)[0]
 
   tp = confusion_metrics.true_positives(labels=groundtruth,

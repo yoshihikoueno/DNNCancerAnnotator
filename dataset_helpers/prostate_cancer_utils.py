@@ -13,16 +13,24 @@ from utils import standard_fields
 from dataset_helpers import helpers as dh
 
 
-# mask = [HxW]
-def split_mask(mask, dilate_mask=False):
-  assert(len(mask.get_shape()) == 2)
+def split_mask(mask, dilate_mask=False, is_3d=False):
   assert(mask.dtype == tf.int64)
+  if is_3d:
+    assert(len(mask.get_shape()) == 3)
+    pool_op = tf.keras.layers.MaxPool3D
+  else:
+    assert(len(mask.get_shape()) == 2)
+    pool_op = tf.keras.layers.MaxPool2D
 
   if dilate_mask:
-    mask = tf.squeeze(tf.keras.layers.MaxPool2D(
-      (5, 5), strides=1, padding='same',
+    mask = tf.squeeze(pool_op(
+      5, strides=1, padding='same',
       data_format='channels_last')(
-        tf.expand_dims(tf.expand_dims(mask, axis=0), axis=3)))
+        tf.expand_dims(tf.expand_dims(mask, axis=0), axis=-1)))
+
+    # Does it lose pixels at the borders?
+    print(mask)
+    exit(1)
 
   # Label each area with individual index
   components = tf.contrib.image.connected_components(mask)
@@ -193,7 +201,8 @@ def _decode_example(example_dict, target_dims, dilate_groundtruth,
 
 
 def _decode_3d_example(example_dict, target_dims, dilate_groundtruth,
-                       dilate_kernel_size, common_size_factor, target_depth):
+                       dilate_kernel_size, common_size_factor, target_depth,
+                       is_training):
   context_features, sequence_features = example_dict
 
   patient_id = context_features[standard_fields.TfExampleFields.patient_id]
@@ -220,39 +229,44 @@ def _decode_3d_example(example_dict, target_dims, dilate_groundtruth,
     parallel_iterations=util_ops.get_cpu_count(),
     elems=annotation_decoded, dtype=tf.int32)
 
-  # Modify depth dimension
-  total_depth = tf.shape(image_decoded)[0]
-  depth_assert = tf.Assert(
-    tf.greater_equal(total_depth, target_depth),
-    data=[tf.shape(image_decoded), total_depth, tf.constant(target_depth),
-          tf.constant("Not enough image slices.")])
-  with tf.control_dependencies([depth_assert]):
-    first_slice_index = tf.random.uniform(
-      shape=[], minval=0, maxval=total_depth - tf.constant(target_depth - 1),
-      dtype=tf.int32)
-    image_decoded = image_decoded[
-      first_slice_index:first_slice_index + target_depth]
-    annotation_decoded = annotation_decoded[
-      first_slice_index:first_slice_index + target_depth]
-    annotation_mask = annotation_mask[
-      first_slice_index:first_slice_index + target_depth]
-    image_files = sequence_features[
-      standard_fields.TfExampleFields.image_file].values
-    image_files = image_files[
-      first_slice_index:first_slice_index + target_depth]
-    annotation_files = sequence_features[
-      standard_fields.TfExampleFields.annotation_file].values
-    annotation_files = annotation_files[
-      first_slice_index:first_slice_index + target_depth]
+  image_files = sequence_features[
+    standard_fields.TfExampleFields.image_file].values
+  annotation_files = sequence_features[
+    standard_fields.TfExampleFields.annotation_file].values
+  slice_ids = sequence_features[
+        standard_fields.TfExampleFields.slice_id].values
 
-    shape = image_decoded.get_shape()
-    image_decoded.set_shape([target_depth, shape[1], shape[2], shape[3]])
+  if is_training:
+    # Modify depth dimension
+    total_depth = tf.shape(image_decoded)[0]
+    depth_assert = tf.Assert(
+      tf.greater_equal(total_depth, target_depth),
+      data=[tf.shape(image_decoded), total_depth, tf.constant(target_depth),
+            tf.constant("Not enough image slices.")])
+    with tf.control_dependencies([depth_assert]):
+      first_slice_index = tf.random.uniform(
+        shape=[], minval=0, maxval=total_depth - tf.constant(target_depth - 1),
+        dtype=tf.int32)
+      image_decoded = image_decoded[
+        first_slice_index:first_slice_index + target_depth]
+      annotation_decoded = annotation_decoded[
+        first_slice_index:first_slice_index + target_depth]
+      annotation_mask = annotation_mask[
+        first_slice_index:first_slice_index + target_depth]
+      image_files = image_files[
+        first_slice_index:first_slice_index + target_depth]
+      annotation_files = annotation_files[
+        first_slice_index:first_slice_index + target_depth]
+      slice_ids = slice_ids[first_slice_index:first_slice_index + target_depth]
 
-    shape = annotation_decoded.get_shape()
-    annotation_decoded.set_shape([target_depth, shape[1], shape[2], shape[3]])
+      shape = image_decoded.get_shape()
+      image_decoded.set_shape([target_depth, shape[1], shape[2], shape[3]])
 
-    shape = annotation_mask.get_shape()
-    annotation_mask.set_shape([target_depth, shape[1], shape[2], shape[3]])
+      shape = annotation_decoded.get_shape()
+      annotation_decoded.set_shape([target_depth, shape[1], shape[2], shape[3]])
+
+      shape = annotation_mask.get_shape()
+      annotation_mask.set_shape([target_depth, shape[1], shape[2], shape[3]])
 
   image_preprocessed = tf.map_fn(lambda s: _preprocess_image(
     image_decoded=s, target_dims=target_dims,
@@ -279,7 +293,8 @@ def _decode_3d_example(example_dict, target_dims, dilate_groundtruth,
     annotation_mask_preprocessed,
     standard_fields.InputDataFields.examination_name: examination_name,
     standard_fields.InputDataFields.image_file: image_files,
-    standard_fields.InputDataFields.annotation_file: annotation_files}
+    standard_fields.InputDataFields.annotation_file: annotation_files,
+    standard_fields.InputDataFields.slice_id: slice_ids}
 
   return features
 
@@ -353,7 +368,9 @@ def _serialize_3d_example(example_data):
     standard_fields.TfExampleFields.annotation_3d_encoded:
     tf.train.FeatureList(feature=[dh.bytes_list_feature(example_data[6])]),
     standard_fields.TfExampleFields.annotation_file:
-    tf.train.FeatureList(feature=[dh.bytes_list_feature(example_data[1])])
+    tf.train.FeatureList(feature=[dh.bytes_list_feature(example_data[1])]),
+    standard_fields.TfExampleFields.slice_id:
+    tf.train.FeatureList(feature=[dh.int64_list_feature(example_data[3])])
   }
   feature_lists = tf.train.FeatureLists(feature_list=feature_lists)
 
@@ -406,7 +423,7 @@ def _deserialize_and_decode_example(example, target_dims, dilate_groundtruth,
 
 def _deserialize_and_decode_3d_example(
     example, target_dims, dilate_groundtruth, dilate_kernel_size,
-    common_size_factor, target_depth):
+    common_size_factor, target_depth, is_training):
   context_features = {
     standard_fields.TfExampleFields.patient_id: tf.FixedLenFeature(
       (), tf.string, default_value=''),
@@ -421,7 +438,8 @@ def _deserialize_and_decode_3d_example(
     standard_fields.TfExampleFields.annotation_3d_encoded: tf.VarLenFeature(
       tf.string),
     standard_fields.TfExampleFields.annotation_file: tf.VarLenFeature(
-      tf.string)}
+      tf.string),
+    standard_fields.TfExampleFields.slice_id: tf.VarLenFeature(tf.int64)}
 
   example_dict = tf.parse_single_sequence_example(
     example, context_features=context_features,
@@ -431,7 +449,7 @@ def _deserialize_and_decode_3d_example(
                             dilate_groundtruth=dilate_groundtruth,
                             dilate_kernel_size=dilate_kernel_size,
                             common_size_factor=common_size_factor,
-                            target_depth=target_depth)
+                            target_depth=target_depth, is_training=is_training)
 
 
 def _parse_from_file(image_file, annotation_file, label, patient_id,
@@ -691,6 +709,95 @@ def build_tfrecords_from_files(
   logging.info("Finished creating patient tfrecords.")
 
 
+def _create_sliding_window_eval_dataset(element, target_dims, target_depth):
+  # Pad image by n / 2, where n is the number of slices in input
+  pad_size = int(target_depth / 2)
+
+  element[
+    standard_fields.InputDataFields.image_decoded] = tf.pad(
+      element[standard_fields.InputDataFields.image_decoded],
+      paddings=[[pad_size, pad_size], [0, 0], [0, 0], [0, 0]], mode='CONSTANT')
+  element[
+    standard_fields.InputDataFields.annotation_decoded] = tf.pad(
+      element[standard_fields.InputDataFields.annotation_decoded],
+      paddings=[[pad_size, pad_size], [0, 0], [0, 0], [0, 0]], mode='CONSTANT')
+  element[
+    standard_fields.InputDataFields.annotation_mask] = tf.pad(
+      element[standard_fields.InputDataFields.annotation_mask],
+      paddings=[[pad_size, pad_size], [0, 0], [0, 0], [0, 0]], mode='CONSTANT')
+
+  image_decoded = tf.extract_volume_patches(
+    tf.expand_dims(
+      element[standard_fields.InputDataFields.image_decoded], axis=0),
+    ksizes=[1, target_depth, target_dims[0], target_dims[1], 1],
+    strides=[1, 1, 1, 1, 1], padding='VALID')
+  image_decoded = tf.squeeze(tf.squeeze(image_decoded, axis=2), axis=0)
+  image_decoded = tf.reshape(image_decoded, shape=[
+    -1, target_depth, target_dims[0], target_dims[1], target_dims[2]])
+
+  annotation_decoded = tf.extract_volume_patches(
+    tf.expand_dims(
+      element[standard_fields.InputDataFields.annotation_decoded], axis=0),
+    ksizes=[1, target_depth, target_dims[0], target_dims[1], 1],
+    strides=[1, 1, 1, 1, 1], padding='VALID')
+  annotation_decoded = tf.squeeze(tf.squeeze(annotation_decoded, axis=2),
+                                  axis=0)
+  annotation_decoded = tf.reshape(annotation_decoded, shape=[
+    -1, target_depth, target_dims[0], target_dims[1], 3])
+
+  annotation_mask = tf.extract_volume_patches(
+    tf.expand_dims(
+      element[standard_fields.InputDataFields.annotation_mask], axis=0),
+    ksizes=[1, target_depth, target_dims[0], target_dims[1], 1],
+    strides=[1, 1, 1, 1, 1], padding='VALID')
+  annotation_mask = tf.squeeze(tf.squeeze(annotation_mask, axis=2), axis=0)
+  annotation_mask = tf.reshape(annotation_mask, shape=[
+    -1, target_depth, target_dims[0], target_dims[1], 1])
+
+  def sliding_window_1d(e):
+    # Adjust slice ids
+    e = element[standard_fields.InputDataFields.slice_id]
+    e = tf.pad(e, [[3, 3]], constant_values=-1)
+    e = tf.expand_dims(
+      tf.expand_dims(tf.expand_dims(e, axis=0), 0), -1)
+    e = tf.image.extract_image_patches(
+      e, ksizes=[1, 1, 8, 1], strides=[1, 1, 1, 1], rates=[1, 1, 1, 1],
+      padding='VALID')
+    e = tf.squeeze(tf.squeeze(e, axis=0), axis=0)
+
+    return e
+
+  slice_ids = sliding_window_1d(
+    element[standard_fields.InputDataFields.slice_id])
+  image_files = sliding_window_1d(
+    element[standard_fields.InputDataFields.image_file])
+  annotation_files = sliding_window_1d(
+    element[standard_fields.InputDataFields.annotation_file])
+
+  patient_id = tf.tile(
+    tf.expand_dims(element[standard_fields.InputDataFields.patient_id], axis=0),
+    multiples=[tf.shape(slice_ids)[0]])
+  exam_name = tf.tile(tf.expand_dims(element[
+    standard_fields.InputDataFields.examination_name], axis=0),
+                      multiples=[tf.shape(slice_ids)[0]])
+
+  result_dict = {
+    standard_fields.InputDataFields.patient_id: patient_id,
+    standard_fields.InputDataFields.image_decoded: image_decoded,
+    standard_fields.InputDataFields.annotation_decoded:
+    annotation_decoded,
+    standard_fields.InputDataFields.annotation_mask:
+    annotation_mask,
+    standard_fields.InputDataFields.examination_name: exam_name,
+    standard_fields.InputDataFields.image_file: image_files,
+    standard_fields.InputDataFields.annotation_file: annotation_files,
+    standard_fields.InputDataFields.slice_id: slice_ids}
+
+  dataset = tf.data.Dataset.from_tensor_slices(result_dict)
+
+  return dataset
+
+
 def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
                                     patient_ids, is_training,
                                     dilate_groundtruth, dilate_kernel_size,
@@ -750,10 +857,18 @@ def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
         dilate_groundtruth=dilate_groundtruth,
         dilate_kernel_size=dilate_kernel_size,
         common_size_factor=common_size_factor,
-        target_depth=target_depth)
+        target_depth=target_depth, is_training=is_training)
 
       dataset = dataset.map(deserialize_and_decode_fn,
                             num_parallel_calls=util_ops.get_cpu_count())
+
+      if not is_training:
+        dataset = dataset.interleave(
+          lambda e: _create_sliding_window_eval_dataset(
+            e, target_dims=target_dims, target_depth=target_depth),
+          block_length=1,
+          cycle_length=len(tfrecords_files),
+          num_parallel_calls=util_ops.get_cpu_count())
 
       return dataset
     else:

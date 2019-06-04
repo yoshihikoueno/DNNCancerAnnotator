@@ -14,19 +14,19 @@ class VisualizationHook(tf.train.SessionRunHook):
   def __init__(self, result_folder, visualization_file_names,
                file_name, image_decoded, annotation_decoded,
                predicted_mask, eval_dir):
-    assert(len(predicted_mask.get_shape()) == 3)
+    assert(len(predicted_mask.get_shape()) == 2)
     self.visualization_file_names = visualization_file_names
     self.result_folder = result_folder
     self.file_name = file_name
     self.eval_dir = eval_dir
 
-    target_size = predicted_mask.get_shape().as_list()[1:3]
+    target_size = predicted_mask.get_shape().as_list()
 
     image_decoded = image_utils.central_crop(image_decoded, target_size)
     image_decoded = tf.image.grayscale_to_rgb(image_decoded)
     predicted_mask = tf.stack([predicted_mask * 255,
                                tf.zeros_like(predicted_mask),
-                              tf.zeros_like(predicted_mask)], axis=3)
+                               tf.zeros_like(predicted_mask)], axis=2)
 
     predicted_mask_overlay = tf.clip_by_value(
       image_decoded * 0.5 + predicted_mask, 0, 255)
@@ -34,13 +34,13 @@ class VisualizationHook(tf.train.SessionRunHook):
     if annotation_decoded is None:
       # Predict Mode
       self.combined_image = tf.concat([
-        image_decoded, predicted_mask_overlay, predicted_mask], axis=2)
+        image_decoded, predicted_mask_overlay, predicted_mask], axis=1)
     else:
       annotation_decoded = image_utils.central_crop(
         annotation_decoded, target_size)
       self.combined_image = tf.concat([
         image_decoded, annotation_decoded, predicted_mask_overlay,
-        predicted_mask], axis=2)
+        predicted_mask], axis=1)
 
   def before_run(self, run_context):
     return tf.train.SessionRunArgs(fetches=[

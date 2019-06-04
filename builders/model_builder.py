@@ -87,6 +87,8 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
     annotation_mask_batch = features[
       standard_fields.InputDataFields.annotation_mask]
 
+  print(annotation_mask_batch)
+
   if mode == tf.estimator.ModeKeys.TRAIN:
     # Record model variable summaries
     for var in tf.trainable_variables():
@@ -213,55 +215,62 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
       assert(network_output.get_shape().as_list()[-1] == 2)
       scaled_network_output = tf.nn.softmax(network_output)[:, :, :, 1]
 
-    if (pipeline_config.dataset.tfrecords_type == 'input_3d'
-        and not pipeline_config.eval_config.eval_3d_as_2d):
-      assert(False and "Not yet implemented!")
+    scaled_network_output = tf.squeeze(scaled_network_output, axis=0)
+    annotation_mask = tf.squeeze(annotation_mask_batch, axis=0)
+    annotation_decoded = tf.squeeze(annotation_decoded, axis=0)
+    image_decoded = tf.squeeze(image_decoded, axis=0)
+
+    prediction_groundtruth_stack = tf.stack(
+      [scaled_network_output, tf.cast(annotation_mask, dtype=tf.float32)],
+      axis=1 if pipeline_config.eval_config.eval_3d_as_2d
+      and pipeline_config.dataset.tfrecords_type == 'input_3d' else 0)
+
+    if pipeline_config.dataset.tfrecords_type == 'input_3d':
+      if pipeline_config.eval_config.eval_3d_as_2d:
+        # Metrics
+        (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
+         froc_thresholds) = (
+           tf.map_fn(lambda e: metric_utils.get_metrics(
+             e,
+             parallel_iterations=min(pipeline_config.eval_config.batch_size,
+                                     util_ops.get_cpu_count()),
+             calc_froc=calc_froc, is_3d=False),
+                     elems=prediction_groundtruth_stack, dtype=[
+                       dict, dict, tf.int32, dict, list]))
+      else:
+        (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
+         froc_thresholds) = (metric_utils.get_metrics(
+           prediction_groundtruth_stack, parallel_iterations=min(
+             pipeline_config.eval_config.batch_size,
+             util_ops.get_cpu_count()),
+           calc_froc=calc_froc, is_3d=True))
     else:
-      if (pipeline_config.dataset.tfrecords_type == 'input_3d'
-          and pipeline_config.eval_config.eval_3d_as_2d):
-        # Merge batch and slice dimensions
-        output_shape = scaled_network_output.get_shape()
-        scaled_network_output = tf.reshape(
-          scaled_network_output, shape=[output_shape[0] * output_shape[1],
-                                        output_shape[2], output_shape[3]])
-        annotation_mask_batch = tf.reshape(
-          annotation_mask_batch, shape=[output_shape[0] * output_shape[1],
-                                        output_shape[2], output_shape[3]])
-        image_decoded = tf.reshape(
-          image_decoded, shape=[output_shape[0] * output_shape[1],
-                                output_shape[2], output_shape[3]])
-        annotation_decoded = tf.reshape(
-          annotation_decoded, shape=[output_shape[0] * output_shape[1],
-                                     output_shape[2], output_shape[3]])
-
-       # Metrics
       (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
-       froc_thresholds) = (
-         metric_utils.get_metrics(
-           scaled_network_output, annotation_mask_batch,
-           parallel_iterations=min(pipeline_config.eval_config.batch_size,
-                                   util_ops.get_cpu_count()),
-           calc_froc=calc_froc))
+       froc_thresholds) = (metric_utils.get_metrics(
+         prediction_groundtruth_stack, parallel_iterations=min(
+           pipeline_config.eval_config.batch_size,
+           util_ops.get_cpu_count()),
+         calc_froc=calc_froc, is_3d=False))
 
-      vis_hook = session_hooks.VisualizationHook(
-        result_folder=result_folder,
-        visualization_file_names=visualization_file_names,
-        file_name=image_file,
-        image_decoded=image_decoded,
-        annotation_decoded=annotation_decoded,
-        predicted_mask=scaled_network_output, eval_dir=eval_dir)
-      patient_metric_hook = session_hooks.PatientMetricHook(
-        statistics_dict=statistics_dict,
-        patient_id=features[standard_fields.InputDataFields.patient_id],
-        result_folder=result_folder, eval_dir=eval_dir,
-        num_lesions=num_lesions,
-        froc_region_cm_values=froc_region_cm_values,
-        froc_thresholds=froc_thresholds)
+    vis_hook = session_hooks.VisualizationHook(
+      result_folder=result_folder,
+      visualization_file_names=visualization_file_names,
+      file_name=image_file,
+      image_decoded=image_decoded,
+      annotation_decoded=annotation_decoded,
+      predicted_mask=scaled_network_output, eval_dir=eval_dir)
+    patient_metric_hook = session_hooks.PatientMetricHook(
+      statistics_dict=statistics_dict,
+      patient_id=features[standard_fields.InputDataFields.patient_id],
+      result_folder=result_folder, eval_dir=eval_dir,
+      num_lesions=num_lesions,
+      froc_region_cm_values=froc_region_cm_values,
+      froc_thresholds=froc_thresholds)
 
-      return tf.estimator.EstimatorSpec(
-        mode, loss=total_loss, train_op=train_op,
-        evaluation_hooks=[vis_hook, patient_metric_hook],
-        eval_metric_ops=metric_dict)
+    return tf.estimator.EstimatorSpec(
+      mode, loss=total_loss, train_op=train_op,
+      evaluation_hooks=[vis_hook, patient_metric_hook],
+      eval_metric_ops=metric_dict)
   elif mode == tf.estimator.ModeKeys.PREDICT:
     if (pipeline_config.dataset.tfrecords_type == 'input_3d'):
       assert(False and "Not yet implemented!")
