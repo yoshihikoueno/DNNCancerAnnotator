@@ -24,6 +24,8 @@ flags.DEFINE_bool('no_gpu', False, 'Whether to use GPU')
 flags.DEFINE_integer('num_train_steps', -1, 'Number of max training steps')
 flags.DEFINE_integer('num_eval_steps', -1, 'Number of max eval steps'
                      '-1 for evaluating whole data split.')
+flags.DEFINE_bool('no_eval', False,
+                  'Whether to disable evaluation during training')
 
 FLAGS = flags.FLAGS
 
@@ -108,73 +110,76 @@ def main(_):
                           'eval_' + standard_fields.SplitNames.val),
     calc_froc=False)
 
-  if pipeline_config.train_config.early_stopping:
-    early_stop_hook = tf.contrib.estimator.stop_if_no_decrease_hook(
-      estimator=estimator, metric_name='loss',
-      max_steps_without_decrease=pipeline_config.
-      train_config.early_stopping_max_steps_without_decrease,
-      min_steps=pipeline_config.train_config.early_stopping_min_steps,
-      run_every_secs=pipeline_config.train_config.
-      early_stopping_run_every_secs,
-      eval_dir=os.path.join(FLAGS.result_dir,
-                            'eval_' + standard_fields.SplitNames.val))
+  if FLAGS.no_eval:
+    estimator.train(train_input_fn, max_steps=FLAGS.num_train_steps)
   else:
-    early_stop_hook = None
+    if pipeline_config.train_config.early_stopping:
+      early_stop_hook = tf.contrib.estimator.stop_if_no_decrease_hook(
+        estimator=estimator, metric_name='loss',
+        max_steps_without_decrease=pipeline_config.
+        train_config.early_stopping_max_steps_without_decrease,
+        min_steps=pipeline_config.train_config.early_stopping_min_steps,
+        run_every_secs=pipeline_config.train_config.
+        early_stopping_run_every_secs,
+        eval_dir=os.path.join(FLAGS.result_dir,
+                              'eval_' + standard_fields.SplitNames.val))
+    else:
+      early_stop_hook = None
 
-  train_spec = tf.estimator.TrainSpec(
-    input_fn=train_input_fn, max_steps=FLAGS.num_train_steps,
-    hooks=early_stop_hook if early_stop_hook is None else [early_stop_hook])
+    train_spec = tf.estimator.TrainSpec(
+      input_fn=train_input_fn, max_steps=FLAGS.num_train_steps,
+      hooks=early_stop_hook if early_stop_hook is None else [early_stop_hook])
 
-  eval_input_fn, _ = setup_utils.get_input_fn(
-    pipeline_config=pipeline_config, directory=FLAGS.result_dir,
-    existing_tfrecords=True, split_name=standard_fields.SplitNames.val,
-    is_training=False, num_parallel_iterations=num_parallel_iterations)
+    eval_input_fn, _ = setup_utils.get_input_fn(
+      pipeline_config=pipeline_config, directory=FLAGS.result_dir,
+      existing_tfrecords=True, split_name=standard_fields.SplitNames.val,
+      is_training=False, num_parallel_iterations=num_parallel_iterations)
 
-  eval_spec = tf.estimator.EvalSpec(
-    input_fn=eval_input_fn,
-    steps=None if FLAGS.num_eval_steps <= 0 else FLAGS.num_eval_steps,
-    start_delay_secs=0,
-    throttle_secs=pipeline_config.eval_config.eval_interval_secs,
-    name=standard_fields.SplitNames.val)
+    eval_spec = tf.estimator.EvalSpec(
+      input_fn=eval_input_fn,
+      steps=None if FLAGS.num_eval_steps <= 0 else FLAGS.num_eval_steps,
+      start_delay_secs=0,
+      throttle_secs=pipeline_config.eval_config.eval_interval_secs,
+      name=standard_fields.SplitNames.val)
 
-  tf.estimator.train_and_evaluate(estimator=estimator,
-                                  train_spec=train_spec, eval_spec=eval_spec)
+    tf.estimator.train_and_evaluate(estimator=estimator,
+                                    train_spec=train_spec, eval_spec=eval_spec)
 
-  # Reevaluate last checkpoint in order to calculate froc
-  estimator = estimator_builder.build_estimator(
-    pipeline_config=pipeline_config, checkpoint_folder=FLAGS.result_dir,
-    dataset_info=dataset_info,
-    dataset_folder=pipeline_config.dataset.dataset_path,
-    eval_split_name=standard_fields.SplitNames.val,
-    train_distribution=train_distribution,
-    eval_distribution=eval_distribution,
-    eval_dir=os.path.join(FLAGS.result_dir,
-                          'eval_' + standard_fields.SplitNames.val),
-    calc_froc=True)
+    # Reevaluate last checkpoint in order to calculate froc
+    estimator = estimator_builder.build_estimator(
+      pipeline_config=pipeline_config, checkpoint_folder=FLAGS.result_dir,
+      dataset_info=dataset_info,
+      dataset_folder=pipeline_config.dataset.dataset_path,
+      eval_split_name=standard_fields.SplitNames.val,
+      train_distribution=train_distribution,
+      eval_distribution=eval_distribution,
+      eval_dir=os.path.join(FLAGS.result_dir,
+                            'eval_' + standard_fields.SplitNames.val),
+      calc_froc=True)
 
-  estimator.evaluate(input_fn=eval_input_fn, steps=None,
-                     name=standard_fields.SplitNames.val)
+    estimator.evaluate(input_fn=eval_input_fn, steps=None,
+                       name=standard_fields.SplitNames.val)
 
-  # Evaluate train set
-  train_eval_input_fn, _ = setup_utils.get_input_fn(
-    pipeline_config=pipeline_config, directory=FLAGS.result_dir,
-    existing_tfrecords=True,
-    split_name=standard_fields.SplitNames.train,
-    is_training=False, num_parallel_iterations=num_parallel_iterations)
+    # Evaluate train set
+    train_eval_input_fn, _ = setup_utils.get_input_fn(
+      pipeline_config=pipeline_config, directory=FLAGS.result_dir,
+      existing_tfrecords=True,
+      split_name=standard_fields.SplitNames.train,
+      is_training=False, num_parallel_iterations=num_parallel_iterations)
 
-  estimator = estimator_builder.build_estimator(
-    pipeline_config=pipeline_config, checkpoint_folder=FLAGS.result_dir,
-    dataset_info=dataset_info,
-    dataset_folder=pipeline_config.dataset.dataset_path,
-    eval_split_name=standard_fields.SplitNames.train,
-    train_distribution=train_distribution,
-    eval_distribution=eval_distribution,
-    eval_dir=os.path.join(FLAGS.result_dir,
-                          'eval_' + standard_fields.SplitNames.train),
-    calc_froc=True)
+    estimator = estimator_builder.build_estimator(
+      pipeline_config=pipeline_config, checkpoint_folder=FLAGS.result_dir,
+      dataset_info=dataset_info,
+      dataset_folder=pipeline_config.dataset.dataset_path,
+      eval_split_name=standard_fields.SplitNames.train,
+      train_distribution=train_distribution,
+      eval_distribution=eval_distribution,
+      eval_dir=os.path.join(FLAGS.result_dir,
+                            'eval_' + standard_fields.SplitNames.train),
+      calc_froc=True)
 
-  estimator.evaluate(input_fn=train_eval_input_fn, steps=None,
-                     name=standard_fields.SplitNames.train)
+    estimator.evaluate(input_fn=train_eval_input_fn, steps=None,
+                       name=standard_fields.SplitNames.train)
 
 
 if __name__ == '__main__':
