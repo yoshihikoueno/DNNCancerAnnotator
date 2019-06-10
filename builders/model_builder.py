@@ -59,7 +59,7 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
                       result_folder,
                       dataset_info, feature_extractor,
                       visualization_file_names, eval_dir,
-                      as_gan_generator):
+                      as_gan_generator, eval_split_name):
   num_classes = pipeline_config.dataset.num_classes
   add_background_class = pipeline_config.train_config.loss.name == 'softmax'
   if add_background_class:
@@ -219,31 +219,46 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
     annotation_mask = tf.squeeze(annotation_mask_batch, axis=0)
     annotation_decoded = tf.squeeze(annotation_decoded, axis=0)
     image_decoded = tf.squeeze(image_decoded, axis=0)
+    slice_ids = tf.squeeze(
+      features[standard_fields.InputDataFields.slice_id], axis=0)
+    patient_id = tf.squeeze(
+      features[standard_fields.InputDataFields.patient_id], axis=0)
+    exam_id = tf.squeeze(
+      features[standard_fields.InputDataFields.examination_name], axis=0)
+
+    if pipeline_config.dataset.tfrecords_type == 'input_3d':
+      # We are only interested in the center two slices
+      num_slices = scaled_network_output.get_shape().as_list()[0]
+      first_slice_index = int(num_slices / 2 - 1)
+      scaled_network_output = scaled_network_output[
+        first_slice_index:first_slice_index + 2]
+      annotation_mask = tf.cast(tf.squeeze(annotation_mask[
+        first_slice_index:first_slice_index + 2], axis=-1), tf.float32)
+      annotation_decoded = annotation_decoded[
+        first_slice_index:first_slice_index + 2]
+      image_decoded = image_decoded[
+        first_slice_index:first_slice_index + 2]
+      slice_ids = slice_ids[first_slice_index: first_slice_index + 2]
 
     prediction_groundtruth_stack = tf.stack(
-      [scaled_network_output, tf.cast(annotation_mask, dtype=tf.float32)],
+      [scaled_network_output, annotation_mask],
       axis=1 if pipeline_config.eval_config.eval_3d_as_2d
       and pipeline_config.dataset.tfrecords_type == 'input_3d' else 0)
 
+    hooks = []
+    metric_dict = {}
     if pipeline_config.dataset.tfrecords_type == 'input_3d':
-      if pipeline_config.eval_config.eval_3d_as_2d:
-        # Metrics
-        (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
-         froc_thresholds) = (
-           tf.map_fn(lambda e: metric_utils.get_metrics(
-             e,
-             parallel_iterations=min(pipeline_config.eval_config.batch_size,
-                                     util_ops.get_cpu_count()),
-             calc_froc=calc_froc, is_3d=False),
-                     elems=prediction_groundtruth_stack, dtype=[
-                       dict, dict, tf.int32, dict, list]))
-      else:
-        (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
-         froc_thresholds) = (metric_utils.get_metrics(
-           prediction_groundtruth_stack, parallel_iterations=min(
-             pipeline_config.eval_config.batch_size,
-             util_ops.get_cpu_count()),
-           calc_froc=calc_froc, is_3d=True))
+      eval_3d_hook = session_hooks.Eval3DHook(
+        groundtruth=annotation_mask, prediction=scaled_network_output,
+        slice_ids=slice_ids, patient_id=patient_id,
+        eval_3d_as_2d=pipeline_config.eval_config.eval_3d_as_2d,
+        exam_id=exam_id,
+        patient_exam_id_to_num_slices=dataset_info[
+          standard_fields.PickledDatasetInfo.patient_exam_id_to_num_slices][
+            eval_split_name], calc_froc=calc_froc,
+        target_size=(pipeline_config.model.input_image_size_y,
+                     pipeline_config.model.input_image_size_x))
+      hooks.append(eval_3d_hook)
     else:
       (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
        froc_thresholds) = (metric_utils.get_metrics(
@@ -252,24 +267,27 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
            util_ops.get_cpu_count()),
          calc_froc=calc_froc, is_3d=False))
 
-    vis_hook = session_hooks.VisualizationHook(
-      result_folder=result_folder,
-      visualization_file_names=visualization_file_names,
-      file_name=image_file,
-      image_decoded=image_decoded,
-      annotation_decoded=annotation_decoded,
-      predicted_mask=scaled_network_output, eval_dir=eval_dir)
-    patient_metric_hook = session_hooks.PatientMetricHook(
-      statistics_dict=statistics_dict,
-      patient_id=features[standard_fields.InputDataFields.patient_id],
-      result_folder=result_folder, eval_dir=eval_dir,
-      num_lesions=num_lesions,
-      froc_region_cm_values=froc_region_cm_values,
-      froc_thresholds=froc_thresholds)
+      vis_hook = session_hooks.VisualizationHook(
+        result_folder=result_folder,
+        visualization_file_names=visualization_file_names,
+        file_name=image_file,
+        image_decoded=image_decoded,
+        annotation_decoded=annotation_decoded,
+        predicted_mask=scaled_network_output, eval_dir=eval_dir)
+      patient_metric_hook = session_hooks.PatientMetricHook(
+        statistics_dict=statistics_dict,
+        patient_id=features[standard_fields.InputDataFields.patient_id],
+        result_folder=result_folder, eval_dir=eval_dir,
+        num_lesions=num_lesions,
+        froc_region_cm_values=froc_region_cm_values,
+        froc_thresholds=froc_thresholds)
+
+      hooks.append(vis_hook)
+      hooks.append(patient_metric_hook)
 
     return tf.estimator.EstimatorSpec(
       mode, loss=total_loss, train_op=train_op,
-      evaluation_hooks=[vis_hook, patient_metric_hook],
+      evaluation_hooks=hooks,
       eval_metric_ops=metric_dict)
   elif mode == tf.estimator.ModeKeys.PREDICT:
     if (pipeline_config.dataset.tfrecords_type == 'input_3d'):
@@ -353,7 +371,8 @@ def get_model_fn(pipeline_config, result_folder, dataset_folder, dataset_info,
                              feature_extractor=feature_extractor,
                              visualization_file_names=visualization_file_names,
                              eval_dir=eval_dir, calc_froc=calc_froc,
-                             as_gan_generator=False)
+                             as_gan_generator=False,
+                             eval_split_name=eval_split_name)
   elif model_name == 'gan':
     generator_name = pipeline_config.model.gan.WhichOneof('generator')
     discriminator_name = pipeline_config.model.gan.WhichOneof('discriminator')
@@ -378,7 +397,7 @@ def get_model_fn(pipeline_config, result_folder, dataset_folder, dataset_info,
       feature_extractor=generator,
       visualization_file_names=visualization_file_names,
       eval_dir=eval_dir, calc_froc=calc_froc,
-      as_gan_generator=True)
+      as_gan_generator=True, eval_split_name=eval_split_name)
     discriminator_model_fn = functools.partial(
       _gan_discriminator_model_fn, model=discriminator,
       use_batch_norm=pipeline_config.model.use_batch_norm,

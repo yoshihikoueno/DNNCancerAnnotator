@@ -32,12 +32,13 @@ def load_from_folder(folder, dataset_folder, id_prefix, class_label,
   for patient_folder in patient_folders:
     patient_id = id_prefix + patient_folder
     assert(patient_id not in images)
-    images[patient_id] = []
+    images[patient_id] = dict()
     patient_folder = os.path.join(folder, patient_folder)
 
     examination_folders = os.listdir(patient_folder)
 
     for examination_folder in examination_folders:
+      images[patient_id][examination_folder] = []
       examination_folder = os.path.join(patient_folder, examination_folder)
       assert(os.path.isdir(examination_folder))
       for f in os.listdir(examination_folder):
@@ -58,7 +59,7 @@ def load_from_folder(folder, dataset_folder, id_prefix, class_label,
         annotation_file = annotation_file[len(dataset_folder) + 1:]
         image_file = f[len(dataset_folder) + 1:]
 
-        images[patient_id].append(
+        images[patient_id][os.path.basename(examination_folder)].append(
           [image_file, annotation_file, class_label, patient_id,
            int(os.path.basename(f).split('.')[0]),
            os.path.basename(examination_folder)])
@@ -152,41 +153,56 @@ def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
   train_data_dict = {**healthy_train, **cancer_train}
 
   train_patient_ids = list(train_data_dict.keys())
+  train_patient_exam_id_to_num_slices = dict()
   train_files = []
   train_size = 0
-  for _, entries in train_data_dict.items():
-    train_size += len(entries)
-    for f in entries:
-      train_files.append(f[0])
+  for patient_id, exam in train_data_dict.items():
+    train_patient_exam_id_to_num_slices[patient_id] = dict()
+    for exam_id, entries in exam.items():
+      train_patient_exam_id_to_num_slices[patient_id][exam_id] = len(entries)
+      train_size += len(entries)
+      for f in entries:
+        train_files.append(f[0])
 
   assert(len(train_files) == train_size)
 
   val_data_dict = {**healthy_val, **cancer_val}
 
   val_patient_ids = list(val_data_dict.keys())
+  val_patient_exam_id_to_num_slices = dict()
   val_files = []
   val_size = 0
-  for _, entries in val_data_dict.items():
-    val_size += len(entries)
-    for f in entries:
-      val_files.append(f[0])
+  for patient_id, exam in val_data_dict.items():
+    val_patient_exam_id_to_num_slices[patient_id] = dict()
+    for exam_id, entries in exam.items():
+      val_patient_exam_id_to_num_slices[patient_id][exam_id] = len(entries)
+      val_size += len(entries)
+      for f in entries:
+        val_files.append(f[0])
 
   assert(len(val_files) == val_size)
 
   test_data_dict = {**healthy_test, **cancer_test}
 
   test_patient_ids = list(test_data_dict.keys())
+  test_patient_exam_id_to_num_slices = dict()
   test_files = []
   test_size = 0
-  for _, entries in test_data_dict.items():
-    test_size += len(entries)
-    for f in entries:
-      test_files.append(f[0])
+  for patient_id, exam in test_data_dict.items():
+    test_patient_exam_id_to_num_slices[patient_id] = dict()
+    for exam_id, entries in exam.items():
+      test_patient_exam_id_to_num_slices[patient_id][exam_id] = len(entries)
+      test_size += len(entries)
+      for f in entries:
+        test_files.append(f[0])
   assert(len(test_files) == test_size)
 
   dataset_size = train_size + val_size + test_size
 
-  assert(dataset_size == num_healthy_images + num_cancer_images)
+  if dataset_size != num_healthy_images + num_cancer_images:
+    print(dataset_size)
+    print(num_healthy_images + num_cancer_images)
+    assert(dataset_size == num_healthy_images + num_cancer_images)
 
   print("Total dataset size: {}".format(dataset_size))
 
@@ -210,6 +226,11 @@ def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
     standard_fields.SplitNames.test: test_files}
   result_dict[standard_fields.PickledDatasetInfo.patient_ratio] = patient_ratio
   result_dict[standard_fields.PickledDatasetInfo.seed] = seed
+  result_dict[
+    standard_fields.PickledDatasetInfo.patient_exam_id_to_num_slices] = {
+      standard_fields.SplitNames.train: train_patient_exam_id_to_num_slices,
+      standard_fields.SplitNames.val: val_patient_exam_id_to_num_slices,
+      standard_fields.SplitNames.test: test_patient_exam_id_to_num_slices}
 
   with open(output_file, 'wb') as f:
     pickle.dump(result_dict, f)

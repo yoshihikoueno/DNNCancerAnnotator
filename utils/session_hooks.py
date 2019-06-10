@@ -8,6 +8,138 @@ from matplotlib.figure import Figure
 import numpy as np
 
 from utils import image_utils
+from utils import metric_utils
+from utils import util_ops
+
+
+class Eval3DHook(tf.train.SessionRunHook):
+  def __init__(
+      self, groundtruth, prediction, slice_ids, patient_id, exam_id,
+      eval_3d_as_2d, patient_exam_id_to_num_slices, calc_froc, target_size):
+    self.groundtruth = groundtruth
+    self.prediction = prediction
+    self.slice_ids = slice_ids
+    self.patient_id = patient_id
+    self.exam_id = exam_id
+    self.eval_3d_as_2d = eval_3d_as_2d
+    self.patient_exam_id_to_num_slices = patient_exam_id_to_num_slices
+    self.calc_froc = calc_froc
+    self.target_size = target_size
+
+    self.current_patient_id = None
+    self.current_exam_id = None
+    self.full_groundtruth = None
+    self.full_prediction = None
+    self.first_slice_id = None
+    self.last_slice_id = None
+
+    self.groundtruth_op = tf.placeholder(
+      shape=[None, self.target_size[0],
+             self.target_size[1]], dtype=tf.float32)
+    self.prediction_op = tf.placeholder(
+      shape=[None, self.target_size[0],
+             self.target_size[1]], dtype=tf.float32)
+
+    self.eval_op = self._make_eval_op()
+
+  def before_run(self, run_context):
+    return tf.train.SessionRunArgs(fetches=[
+      self.groundtruth, self.prediction, self.slice_ids, self.patient_id,
+      self.exam_id])
+
+  def after_run(self, run_context, run_values):
+    groundtruth_res = run_values.results[0]
+    prediction_res = run_values.results[1]
+    slice_ids_res = run_values.results[2]
+    patient_id_res = run_values.results[3].decode('utf-8')
+    exam_id_res = run_values.results[4].decode('utf-8')
+
+    print(patient_id_res)
+    print(exam_id_res)
+
+    print('{}/{}'.format(
+      slice_ids_res, self.patient_exam_id_to_num_slices[patient_id_res][
+        exam_id_res]))
+
+    for i, slice_id in enumerate(slice_ids_res):
+      if self.current_patient_id is None:
+        if slice_id == -1:
+          continue
+        self.current_patient_id = patient_id_res
+        self.current_exam_id = exam_id_res
+        self.first_slice_id = slice_id
+        self.full_groundtruth = [None] * self.patient_exam_id_to_num_slices[
+          self.current_patient_id][self.current_exam_id]
+        self.full_prediction = [None] * self.patient_exam_id_to_num_slices[
+          self.current_patient_id][self.current_exam_id]
+      assert(slice_id is not None)
+
+      assert(patient_id_res == self.current_patient_id)
+      assert(exam_id_res == self.current_exam_id)
+
+      assert(self.full_groundtruth[slice_id - self.first_slice_id] is None)
+      assert(self.full_prediction[slice_id - self.first_slice_id] is None)
+
+      if self.last_slice_id is not None:
+        assert(self.last_slice_id + 1 == slice_id)
+
+      self.last_slice_id = slice_id
+
+      self.full_groundtruth[slice_id - self.first_slice_id] = groundtruth_res[
+        i]
+      self.full_prediction[slice_id - self.first_slice_id] = prediction_res[i]
+
+      if (slice_id - self.first_slice_id + 1 == len(self.full_groundtruth)):
+        # We have all slices
+        self._evaluate_current_patient_exam(run_context.session)
+
+        self.current_patient_id = None
+        self.current_exam_id = None
+        self.last_slice_id = None
+
+  def _make_eval_op(self):
+    prediction_groundtruth_stack = tf.stack(
+      [self.prediction_op, tf.cast(self.groundtruth_op, tf.float32)],
+      axis=1 if self.eval_3d_as_2d else 0)
+
+    if self.eval_3d_as_2d:
+      # Metrics
+      (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
+       froc_thresholds) = (
+         tf.map_fn(lambda e: metric_utils.get_metrics(
+           e,
+           parallel_iterations=util_ops.get_cpu_count(),
+           calc_froc=self.calc_froc, is_3d=False),
+                   elems=prediction_groundtruth_stack, dtype=(
+                     {}, {'tp': tf.int64, 'fp': tf.int64, 'fn': tf.int64,
+                          'region_tp': tf.int64, 'region_fp': tf.int64,
+                          'region_fn': tf.int64}, tf.int64, [], [])))
+
+      # Reduce sum for each element in dict
+      for k, v in statistics_dict.items():
+        statistics_dict[k] = tf.reduce_sum(statistics_dict[k])
+
+    else:
+      (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
+       froc_thresholds) = (metric_utils.get_metrics(
+         prediction_groundtruth_stack,
+         parallel_iterations=util_ops.get_cpu_count(),
+         calc_froc=self.calc_froc, is_3d=True))
+
+    return statistics_dict
+
+  def _evaluate_current_patient_exam(self, sess):
+    # Make sure all elements are not None
+    for g, p in zip(self.full_groundtruth, self.full_prediction):
+      assert(g is not None)
+      assert(p is not None)
+
+    full_eval_res = sess.run(
+      [self.eval_op], feed_dict={self.groundtruth_op: self.full_groundtruth,
+                                 self.prediction_op: self.full_prediction})
+
+    print(full_eval_res)
+    exit(1)
 
 
 class VisualizationHook(tf.train.SessionRunHook):
@@ -83,7 +215,8 @@ class PatientMetricHook(tf.train.SessionRunHook):
     self.result_folder = result_folder
     self.eval_dir = eval_dir
     self.num_lesions = num_lesions
-    self.froc_region_cm_values = froc_region_cm_values
+    self.froc_region_cm_values = (froc_region_cm_values
+                                  if len(froc_region_cm_values) != 0 else None)
     self.froc_thresholds = froc_thresholds
 
     self.patient_statistics = dict()

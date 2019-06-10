@@ -6,31 +6,18 @@ from metrics import pc_metrics
 from dataset_helpers import prostate_cancer_utils
 
 
-def get_3d_metrics(prediction_batch, groundtruth_batch, parallel_iterations,
-                   calc_froc):
-  assert(len(prediction_batch.get_shape()) == 4)
-  assert(len(groundtruth_batch.get_shape()) == 5)
-
-  groundtruth_batch = tf.squeeze(groundtruth_batch, axis=4)
-  prediction_batch = tf.cast(tf.greater_equal(prediction_batch, 0.5), tf.int64)
-
-  # Currently only batch size of 1 is supported
-  groundtruth = tf.squeeze(groundtruth_batch, axis=0)
-  prediction = tf.squeeze(prediction_batch, axis=0)
-
-
 def get_metrics(prediction_groundtruth_stack,
                 parallel_iterations, calc_froc, is_3d):
   prediction, groundtruth = tf.unstack(prediction_groundtruth_stack, axis=0)
+  groundtruth = tf.cast(groundtruth, tf.int64)
 
   if is_3d:
     assert(len(prediction.get_shape()) == 3)
-    assert(len(groundtruth.get_shape()) == 4)
+    assert(len(groundtruth.get_shape()) == 3)
   else:
     assert(len(prediction.get_shape()) == 2)
-    assert(len(groundtruth.get_shape()) == 3)
+    assert(len(groundtruth.get_shape()) == 2)
 
-  groundtruth = tf.squeeze(groundtruth, axis=-1)
   prediction = tf.cast(tf.greater_equal(prediction, 0.5), tf.int64)
 
   split_groundtruth = prostate_cancer_utils.split_mask(
@@ -46,7 +33,7 @@ def get_metrics(prediction_groundtruth_stack,
 
   region_cm_values = pc_metrics.get_region_cm_values(
     prediction=prediction, split_groundtruth=split_groundtruth,
-    parallel_iterations=parallel_iterations)
+    parallel_iterations=parallel_iterations, is_3d=is_3d)
 
   if calc_froc:
     # Get FROC values
@@ -56,7 +43,7 @@ def get_metrics(prediction_groundtruth_stack,
       prediction=prediction, split_groundtruth=split_groundtruth,
       thresholds=thresholds, parallel_iterations=parallel_iterations)
   else:
-    froc_region_cm_values = None
+    froc_region_cm_values = []
     thresholds = []
 
   metric_dict = {}

@@ -28,10 +28,6 @@ def split_mask(mask, dilate_mask=False, is_3d=False):
       data_format='channels_last')(
         tf.expand_dims(tf.expand_dims(mask, axis=0), axis=-1)))
 
-    # Does it lose pixels at the borders?
-    print(mask)
-    exit(1)
-
   # Label each area with individual index
   components = tf.contrib.image.connected_components(mask)
 
@@ -486,78 +482,6 @@ def _parse_from_exam(image_files, annotation_files,
           image_encoded, annotation_encoded)
 
 
-def _build_ordered_slices_tfrecords_from_files(
-    pickle_data, output_dir, dataset_path):
-  with tf.Session() as sess:
-    for split, data in pickle_data[
-        standard_fields.PickledDatasetInfo.data_dict].items():
-      os.mkdir(os.path.join(output_dir, split))
-
-      writer_dict = dict()
-      # Create writers
-      for patient_id, patient_data in data.items():
-        # Split into different exams
-        exam_data = dict()
-        for e in patient_data:
-          exam_name = e[5]
-          if exam_name not in exam_data:
-            exam_data[exam_name] = []
-
-          exam_data[exam_name].append(e)
-
-        for exam_name in exam_data.keys():
-          writer = tf.python_io.TFRecordWriter(os.path.join(
-            output_dir, split, '{}_{}.tfrecords'.format(
-              patient_id, exam_name)))
-          writer_dict['{}_{}'.format(patient_id, exam_name)] = writer
-
-      # Sort the data by slice index
-      sorted_data = []
-      for patient_data in data.values():
-        patient_data.sort(key=lambda e: e[4])
-        sorted_data.append(patient_data)
-
-      dataset = tf.data.Dataset.from_tensor_slices(
-        tuple([list(t) for t in zip(*list(
-          itertools.chain.from_iterable(sorted_data)))]))
-
-      parse_fn = functools.partial(_parse_from_file,
-                                   dataset_folder=dataset_path)
-      dataset = dataset.map(parse_fn,
-                            num_parallel_calls=util_ops.get_cpu_count())
-      dataset = dataset.batch(128)
-
-      it = dataset.make_one_shot_iterator()
-
-      elem_batch = it.get_next()
-
-      while True:
-        try:
-          elem_batch_result = sess.run(elem_batch)
-          keys = list(elem_batch_result.keys())
-          elem_batch_serialized = list(zip(*elem_batch_result.values()))
-
-          # Unfortunately for some reason we cannot use multiprocessing here.
-          # Sometimes the map call will freeze
-          elem_batch_serialized = list(map(
-            lambda v: _serialize_example(keys, v),
-            elem_batch_serialized))
-
-          for i, elem_serialized in enumerate(elem_batch_serialized):
-            writer_dict['{}_{}'.format(
-              elem_batch_result[
-                standard_fields.TfExampleFields.patient_id][i].decode(
-                  'utf-8'),
-              elem_batch_result[
-                standard_fields.TfExampleFields.examination_name][i].decode(
-                  'utf-8'))].write(elem_serialized)
-        except tf.errors.OutOfRangeError:
-          break
-
-      for writer in writer_dict.values():
-        writer.close()
-
-
 def _build_3d_tfrecords_from_files(pickle_data, output_dir, dataset_path):
   with tf.Session() as sess:
     for split, data in pickle_data[
@@ -570,17 +494,17 @@ def _build_3d_tfrecords_from_files(pickle_data, output_dir, dataset_path):
       # exam_id] dict
       readjusted_data = dict()
 
-      for patient_id, v in data.items():
+      for patient_id, exam in data.items():
         if patient_id not in readjusted_data:
           readjusted_data[patient_id] = dict()
 
-        for e in v:
-          if e[5] not in readjusted_data[patient_id]:
-            readjusted_data[patient_id][e[5]] = dict()
+        for exam_id, elem in exam.items():
+          if exam_id not in readjusted_data[patient_id]:
+            readjusted_data[patient_id][exam_id] = dict()
 
-          slice_id = e[4]
-          readjusted_data[patient_id][e[5]][slice_id] = [
-            e[0], e[1], patient_id, slice_id, e[5]]
+          slice_id = elem[4]
+          readjusted_data[patient_id][exam_id][slice_id] = [
+            elem[0], elem[1], patient_id, slice_id, elem[5]]
 
       elem_ops = []
       patient_ids = []
@@ -630,14 +554,19 @@ def _build_regular_tfrecords_from_files(pickle_data, output_dir, dataset_path):
 
       writer_dict = dict()
       # Create writers
-      for patient_id in data.keys():
-        writer = tf.python_io.TFRecordWriter(os.path.join(
-          output_dir, split, patient_id + '.tfrecords'))
-        writer_dict[patient_id] = writer
+      for patient_id, exam in data.items():
+        for exam_id, exam_data in exam.items():
+          writer = tf.python_io.TFRecordWriter(os.path.join(
+            output_dir, split, '{}_{}.tfrecords'.format(patient_id, exam_id)))
+          writer_dict['{}_{}'.format(patient_id, exam_id)] = writer
+
+      concatenated_elems = [
+        elems for exam_id, elems in exam.items()
+        for patient_id, exam in data.items()]
 
       dataset = tf.data.Dataset.from_tensor_slices(
         tuple([list(t) for t in zip(*list(
-          itertools.chain.from_iterable(data.values())))]))
+          itertools.chain.from_iterable(concatenated_elems)))]))
 
       parse_fn = functools.partial(_parse_from_file,
                                    dataset_folder=dataset_path)
@@ -662,9 +591,11 @@ def _build_regular_tfrecords_from_files(pickle_data, output_dir, dataset_path):
             elem_batch_serialized))
 
           for i, elem_serialized in enumerate(elem_batch_serialized):
-            writer_dict[elem_batch_result[
+            writer_dict['{}_{}'.format(elem_batch_result[
               standard_fields.TfExampleFields.patient_id][i].decode(
-                'utf-8')].write(elem_serialized)
+                'utf-8'), elem_batch_result[
+                  standard_fields.TfExampleFields.examination_name][i].decode(
+                    'utf-8'))].write(elem_serialized)
         except tf.errors.OutOfRangeError:
           break
 
@@ -695,10 +626,6 @@ def build_tfrecords_from_files(
     _build_regular_tfrecords_from_files(
       pickle_data=pickle_data, output_dir=output_dir,
       dataset_path=dataset_path)
-  elif tfrecords_type == standard_fields.TFRecordsType.ordered_slices:
-    _build_ordered_slices_tfrecords_from_files(
-      pickle_data=pickle_data, output_dir=output_dir,
-      dataset_path=dataset_path)
   elif tfrecords_type == standard_fields.TFRecordsType.input_3d:
     _build_3d_tfrecords_from_files(
       pickle_data=pickle_data, output_dir=output_dir,
@@ -710,27 +637,32 @@ def build_tfrecords_from_files(
 
 
 def _create_sliding_window_eval_dataset(element, target_dims, target_depth):
-  # Pad image by n / 2, where n is the number of slices in input
-  pad_size = int(target_depth / 2)
+  # Pad image by n / 2 - 1, where n is the number of slices in input
+  # Right padding needs to be + 1, since for uneven number of slices we would
+  # lose the last real slice for eval
+  pad_size = int(target_depth / 2 - 1)
 
   element[
     standard_fields.InputDataFields.image_decoded] = tf.pad(
       element[standard_fields.InputDataFields.image_decoded],
-      paddings=[[pad_size, pad_size], [0, 0], [0, 0], [0, 0]], mode='CONSTANT')
+      paddings=[[pad_size, pad_size + 1], [0, 0], [0, 0], [0, 0]],
+      mode='CONSTANT')
   element[
     standard_fields.InputDataFields.annotation_decoded] = tf.pad(
       element[standard_fields.InputDataFields.annotation_decoded],
-      paddings=[[pad_size, pad_size], [0, 0], [0, 0], [0, 0]], mode='CONSTANT')
+      paddings=[[pad_size, pad_size + 1], [0, 0], [0, 0], [0, 0]],
+      mode='CONSTANT')
   element[
     standard_fields.InputDataFields.annotation_mask] = tf.pad(
       element[standard_fields.InputDataFields.annotation_mask],
-      paddings=[[pad_size, pad_size], [0, 0], [0, 0], [0, 0]], mode='CONSTANT')
+      paddings=[[pad_size, pad_size + 1], [0, 0], [0, 0], [0, 0]],
+      mode='CONSTANT')
 
   image_decoded = tf.extract_volume_patches(
     tf.expand_dims(
       element[standard_fields.InputDataFields.image_decoded], axis=0),
     ksizes=[1, target_depth, target_dims[0], target_dims[1], 1],
-    strides=[1, 1, 1, 1, 1], padding='VALID')
+    strides=[1, 2, 1, 1, 1], padding='VALID')
   image_decoded = tf.squeeze(tf.squeeze(image_decoded, axis=2), axis=0)
   image_decoded = tf.reshape(image_decoded, shape=[
     -1, target_depth, target_dims[0], target_dims[1], target_dims[2]])
@@ -739,7 +671,7 @@ def _create_sliding_window_eval_dataset(element, target_dims, target_depth):
     tf.expand_dims(
       element[standard_fields.InputDataFields.annotation_decoded], axis=0),
     ksizes=[1, target_depth, target_dims[0], target_dims[1], 1],
-    strides=[1, 1, 1, 1, 1], padding='VALID')
+    strides=[1, 2, 1, 1, 1], padding='VALID')
   annotation_decoded = tf.squeeze(tf.squeeze(annotation_decoded, axis=2),
                                   axis=0)
   annotation_decoded = tf.reshape(annotation_decoded, shape=[
@@ -749,7 +681,7 @@ def _create_sliding_window_eval_dataset(element, target_dims, target_depth):
     tf.expand_dims(
       element[standard_fields.InputDataFields.annotation_mask], axis=0),
     ksizes=[1, target_depth, target_dims[0], target_dims[1], 1],
-    strides=[1, 1, 1, 1, 1], padding='VALID')
+    strides=[1, 2, 1, 1, 1], padding='VALID')
   annotation_mask = tf.squeeze(tf.squeeze(annotation_mask, axis=2), axis=0)
   annotation_mask = tf.reshape(annotation_mask, shape=[
     -1, target_depth, target_dims[0], target_dims[1], 1])
@@ -757,12 +689,12 @@ def _create_sliding_window_eval_dataset(element, target_dims, target_depth):
   def sliding_window_1d(e):
     # Adjust slice ids
     e = element[standard_fields.InputDataFields.slice_id]
-    e = tf.pad(e, [[3, 3]], constant_values=-1)
+    e = tf.pad(e, [[pad_size, pad_size + 1]], constant_values=-1)
     e = tf.expand_dims(
       tf.expand_dims(tf.expand_dims(e, axis=0), 0), -1)
     e = tf.image.extract_image_patches(
-      e, ksizes=[1, 1, 8, 1], strides=[1, 1, 1, 1], rates=[1, 1, 1, 1],
-      padding='VALID')
+      e, ksizes=[1, 1, target_depth, 1], strides=[1, 1, 2, 1],
+      rates=[1, 1, 1, 1], padding='VALID')
     e = tf.squeeze(tf.squeeze(e, axis=0), axis=0)
 
     return e
@@ -775,8 +707,8 @@ def _create_sliding_window_eval_dataset(element, target_dims, target_depth):
     element[standard_fields.InputDataFields.annotation_file])
 
   patient_id = tf.tile(
-    tf.expand_dims(element[standard_fields.InputDataFields.patient_id], axis=0),
-    multiples=[tf.shape(slice_ids)[0]])
+    tf.expand_dims(element[standard_fields.InputDataFields.patient_id],
+                   axis=0), multiples=[tf.shape(slice_ids)[0]])
   exam_name = tf.tile(tf.expand_dims(element[
     standard_fields.InputDataFields.examination_name], axis=0),
                       multiples=[tf.shape(slice_ids)[0]])
@@ -849,7 +781,7 @@ def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
       else:
         dataset = dataset.interleave(
           lambda tfrecords_file: tf.data.TFRecordDataset(
-            tfrecords_file), block_length=1, cycle_length=1,
+            tfrecords_file), block_length=1, cycle_length=len(tfrecords_files),
           num_parallel_calls=util_ops.get_cpu_count())
 
       deserialize_and_decode_fn = functools.partial(
@@ -863,12 +795,9 @@ def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
                             num_parallel_calls=util_ops.get_cpu_count())
 
       if not is_training:
-        dataset = dataset.interleave(
+        dataset = dataset.flat_map(
           lambda e: _create_sliding_window_eval_dataset(
-            e, target_dims=target_dims, target_depth=target_depth),
-          block_length=1,
-          cycle_length=len(tfrecords_files),
-          num_parallel_calls=util_ops.get_cpu_count())
+            e, target_dims=target_dims, target_depth=target_depth))
 
       return dataset
     else:

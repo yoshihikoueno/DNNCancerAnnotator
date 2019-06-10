@@ -53,6 +53,7 @@ class PickledDatasetInfo:
   file_names = 'file_names'
   patient_ratio = 'patient_ratio'
   data_dict = 'data_dict'
+  patient_exam_id_to_num_slices = 'patient_exam_id_to_num_slices'
 
 
 class SplitNames:

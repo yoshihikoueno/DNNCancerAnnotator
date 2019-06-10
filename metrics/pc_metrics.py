@@ -21,13 +21,19 @@ def get_region_cm_values_at_thresholds(prediction, split_groundtruth,
   return v_dict
 
 
-def get_region_cm_values(prediction, split_groundtruth, parallel_iterations):
-  assert(len(prediction.get_shape()) == 2)
-  assert(len(split_groundtruth.get_shape()) == 3)
+def get_region_cm_values(prediction, split_groundtruth, parallel_iterations,
+                         is_3d):
+  if is_3d:
+    assert(len(prediction.get_shape()) == 3)
+    assert(len(split_groundtruth.get_shape()) == 4)
+  else:
+    assert(len(prediction.get_shape()) == 2)
+    assert(len(split_groundtruth.get_shape()) == 3)
+
   assert(prediction.dtype == tf.int64)
 
-  split_prediction = prostate_cancer_utils.split_mask(prediction,
-                                                      dilate_mask=True)
+  split_prediction = prostate_cancer_utils.split_mask(
+    prediction, dilate_mask=True, is_3d=is_3d)
 
   def calc_without_groundtruth():
     return (tf.constant(0, dtype=tf.int64),
