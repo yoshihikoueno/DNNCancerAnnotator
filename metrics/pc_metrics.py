@@ -4,15 +4,16 @@ from dataset_helpers import prostate_cancer_utils
 
 
 def get_region_cm_values_at_thresholds(prediction, split_groundtruth,
-                                       thresholds, parallel_iterations):
+                                       thresholds, parallel_iterations,
+                                       is_3d):
   assert(len(prediction.get_shape()) == 2)
   assert(len(split_groundtruth.get_shape()) == 3)
 
   v = tf.map_fn(lambda threshold: get_region_cm_values(
     tf.cast(tf.greater_equal(
-      tf.cast(prediction, tf.float64), threshold), tf.int64),
+      tf.cast(prediction, tf.float32), threshold), tf.int64),
     split_groundtruth=split_groundtruth,
-    parallel_iterations=parallel_iterations), elems=thresholds,
+    parallel_iterations=parallel_iterations, is_3d=is_3d), elems=thresholds,
                 parallel_iterations=parallel_iterations,
                 dtype=(tf.int64, tf.int64, tf.int64))
 

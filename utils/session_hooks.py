@@ -10,12 +10,14 @@ import numpy as np
 from utils import image_utils
 from utils import metric_utils
 from utils import util_ops
+from metrics import patient_3d_metric_handler
 
 
 class Eval3DHook(tf.train.SessionRunHook):
   def __init__(
       self, groundtruth, prediction, slice_ids, patient_id, exam_id,
-      eval_3d_as_2d, patient_exam_id_to_num_slices, calc_froc, target_size):
+      eval_3d_as_2d, patient_exam_id_to_num_slices, calc_froc, target_size,
+      result_folder, eval_dir):
     self.groundtruth = groundtruth
     self.prediction = prediction
     self.slice_ids = slice_ids
@@ -40,7 +42,13 @@ class Eval3DHook(tf.train.SessionRunHook):
       shape=[None, self.target_size[0],
              self.target_size[1]], dtype=tf.float32)
 
-    self.eval_op = self._make_eval_op()
+    self.patient_metric_handler = (
+      patient_3d_metric_handler.Patient3DMetricHandler(
+        eval_3d_as_2d=self.eval_3d_as_2d, calc_froc=self.calc_froc,
+        result_folder=result_folder, eval_dir=eval_dir))
+
+    self.eval_ops = list(self._make_eval_op())
+    self.eval_ops.append(self.groundtruth_op)
 
   def before_run(self, run_context):
     return tf.train.SessionRunArgs(fetches=[
@@ -97,36 +105,32 @@ class Eval3DHook(tf.train.SessionRunHook):
         self.current_exam_id = None
         self.last_slice_id = None
 
+  def end(self, session):
+    self.patient_metric_handler.evaluate(
+      tf.train.get_global_step().eval(session=session))
+
   def _make_eval_op(self):
     prediction_groundtruth_stack = tf.stack(
       [self.prediction_op, tf.cast(self.groundtruth_op, tf.float32)],
       axis=1 if self.eval_3d_as_2d else 0)
 
     if self.eval_3d_as_2d:
-      # Metrics
-      (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
-       froc_thresholds) = (
-         tf.map_fn(lambda e: metric_utils.get_metrics(
-           e,
-           parallel_iterations=util_ops.get_cpu_count(),
-           calc_froc=self.calc_froc, is_3d=False),
-                   elems=prediction_groundtruth_stack, dtype=(
-                     {}, {'tp': tf.int64, 'fp': tf.int64, 'fn': tf.int64,
-                          'region_tp': tf.int64, 'region_fp': tf.int64,
-                          'region_fn': tf.int64}, tf.int64, [], [])))
-
-      # Reduce sum for each element in dict
-      for k, v in statistics_dict.items():
-        statistics_dict[k] = tf.reduce_sum(statistics_dict[k])
-
+      return tf.map_fn(lambda e: metric_utils.get_metrics(
+        e,
+        parallel_iterations=util_ops.get_cpu_count(),
+        calc_froc=self.calc_froc, is_3d=False),
+                       elems=prediction_groundtruth_stack, dtype=(
+                         {}, {'tp': tf.int64, 'fp': tf.int64, 'fn': tf.int64,
+                              'region_tp': tf.int64, 'region_fp': tf.int64,
+                              'region_fn': tf.int64}, tf.int64, {
+                                'region_tp': tf.int64, 'region_fp': tf.int64,
+                                'region_fn': tf.int64},
+                         tf.float32))
     else:
-      (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
-       froc_thresholds) = (metric_utils.get_metrics(
-         prediction_groundtruth_stack,
-         parallel_iterations=util_ops.get_cpu_count(),
-         calc_froc=self.calc_froc, is_3d=True))
-
-    return statistics_dict
+      return metric_utils.get_metrics(
+        prediction_groundtruth_stack,
+        parallel_iterations=util_ops.get_cpu_count(),
+        calc_froc=self.calc_froc, is_3d=True)
 
   def _evaluate_current_patient_exam(self, sess):
     # Make sure all elements are not None
@@ -134,12 +138,19 @@ class Eval3DHook(tf.train.SessionRunHook):
       assert(g is not None)
       assert(p is not None)
 
-    full_eval_res = sess.run(
-      [self.eval_op], feed_dict={self.groundtruth_op: self.full_groundtruth,
-                                 self.prediction_op: self.full_prediction})
+    (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
+       froc_thresholds, groundtruth) = sess.run(
+         self.eval_ops, feed_dict={self.groundtruth_op: self.full_groundtruth,
+                                    self.prediction_op: self.full_prediction})
 
-    print(full_eval_res)
-    exit(1)
+    num_slices = groundtruth.shape[0]
+
+    print(num_slices)
+
+    self.patient_metric_handler.set_exam(
+      patient_id=self.current_patient_id, exam_id=self.current_exam_id,
+      statistics=statistics_dict, num_lesions=num_lesions,
+      froc_region_cm_values=froc_region_cm_values, num_slices=num_slices)
 
 
 class VisualizationHook(tf.train.SessionRunHook):
@@ -209,14 +220,15 @@ class VisualizationHook(tf.train.SessionRunHook):
 
 class PatientMetricHook(tf.train.SessionRunHook):
   def __init__(self, statistics_dict, patient_id, result_folder,
-               eval_dir, num_lesions, froc_region_cm_values, froc_thresholds):
+               eval_dir, num_lesions, froc_region_cm_values, froc_thresholds,
+               calc_froc):
     self.statistics_dict = statistics_dict
     self.patient_id = patient_id
     self.result_folder = result_folder
     self.eval_dir = eval_dir
     self.num_lesions = num_lesions
-    self.froc_region_cm_values = (froc_region_cm_values
-                                  if len(froc_region_cm_values) != 0 else None)
+    self.calc_froc = calc_froc
+    self.froc_region_cm_values = froc_region_cm_values
     self.froc_thresholds = froc_thresholds
 
     self.patient_statistics = dict()
@@ -237,28 +249,26 @@ class PatientMetricHook(tf.train.SessionRunHook):
     statistics_dict_res = run_values.results[0]
     patient_id_res = run_values.results[1]
     num_lesions_res = run_values.results[2]
-    if self.froc_region_cm_values is None:
+    if self.calc_froc:
       froc_region_cm_values_res = None
     else:
       froc_region_cm_values_res = run_values.results[3]
 
     self.num_total_lesions += num_lesions_res
 
-    for patient_id in patient_id_res:
-      if patient_id not in self.patient_statistics:
-        self.patient_statistics[patient_id] = dict()
-        self.patient_statistics[patient_id]['num_slices'] = 0
+    if patient_id_res not in self.patient_statistics:
+      self.patient_statistics[patient_id_res] = dict()
+      self.patient_statistics[patient_id_res]['num_slices'] = 0
 
-      self.patient_statistics[patient_id]['num_slices'] += 1
+    self.patient_statistics[patient_id_res]['num_slices'] += 1
 
-    for confusion_key, batch_values in statistics_dict_res.items():
-      for i, val in enumerate(batch_values):
-        if confusion_key not in self.patient_statistics[patient_id_res[i]]:
-          self.patient_statistics[patient_id_res[i]][confusion_key] = 0
+    for confusion_key, val in statistics_dict_res.items():
+      if confusion_key not in self.patient_statistics[patient_id_res]:
+        self.patient_statistics[patient_id_res][confusion_key] = 0
 
-        self.patient_statistics[patient_id_res[i]][confusion_key] += val
+      self.patient_statistics[patient_id_res][confusion_key] += val
 
-    if froc_region_cm_values_res:
+    if self.calc_froc:
       for i, threshold in enumerate(self.froc_thresholds):
         if threshold not in self.froc_cm_values_total:
           self.froc_cm_values_total[threshold] = dict()
@@ -358,7 +368,7 @@ class PatientMetricHook(tf.train.SessionRunHook):
       simple_value=region_f2_score)
     summary_writer.add_summary(summary, global_step=global_step)
 
-    if self.froc_region_cm_values and self.num_total_lesions > 0:
+    if self.calc_froc and self.num_total_lesions > 0:
       # Plot FROC Curve
       # FP / Num Lesions
       x = []

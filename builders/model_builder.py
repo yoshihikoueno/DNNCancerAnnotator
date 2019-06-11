@@ -247,6 +247,8 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
 
     hooks = []
     metric_dict = {}
+    # TMP
+    calc_froc = True
     if pipeline_config.dataset.tfrecords_type == 'input_3d':
       eval_3d_hook = session_hooks.Eval3DHook(
         groundtruth=annotation_mask, prediction=scaled_network_output,
@@ -257,7 +259,8 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
           standard_fields.PickledDatasetInfo.patient_exam_id_to_num_slices][
             eval_split_name], calc_froc=calc_froc,
         target_size=(pipeline_config.model.input_image_size_y,
-                     pipeline_config.model.input_image_size_x))
+                     pipeline_config.model.input_image_size_x),
+        result_folder=result_folder, eval_dir=eval_dir)
       hooks.append(eval_3d_hook)
     else:
       (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
