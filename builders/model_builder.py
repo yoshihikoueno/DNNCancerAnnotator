@@ -17,11 +17,11 @@ from builders import optimizer_builder
 
 def _extract_patient_id(file_name):
   tokens = file_name.split('/')
-  assert(tokens[-4] == 'healthy_cases' or tokens[-4] == 'cancer_cases')
-  is_healthy = tokens[-4] == 'healthy_cases'
+  assert(tokens[0] == 'healthy_cases' or tokens[0] == 'cancer_cases')
+  is_healthy = tokens[0] == 'healthy_cases'
 
   patient_id_prefix = 'h' if is_healthy else 'c'
-  patient_id = patient_id_prefix + tokens[-3]
+  patient_id = patient_id_prefix + tokens[1]
 
   return patient_id
 
@@ -203,7 +203,6 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
     image_decoded = features[standard_fields.InputDataFields.image_decoded]
     annotation_decoded = features[
       standard_fields.InputDataFields.annotation_decoded]
-    image_file = features[standard_fields.InputDataFields.image_file]
     if pipeline_config.train_config.loss.name == 'sigmoid':
       if pipeline_config.dataset.tfrecords_type == 'input_3d':
         scaled_network_output = tf.nn.sigmoid(network_output)[:, :, :, :, 0]
@@ -225,6 +224,8 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
       features[standard_fields.InputDataFields.patient_id], axis=0)
     exam_id = tf.squeeze(
       features[standard_fields.InputDataFields.examination_name], axis=0)
+    image_file = tf.squeeze(
+      features[standard_fields.InputDataFields.image_file], axis=0)
 
     if pipeline_config.dataset.tfrecords_type == 'input_3d':
       # We are only interested in the center two slices
@@ -239,6 +240,7 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
       image_decoded = image_decoded[
         first_slice_index:first_slice_index + 2]
       slice_ids = slice_ids[first_slice_index: first_slice_index + 2]
+      image_file = image_file[first_slice_index: first_slice_index + 2]
 
     prediction_groundtruth_stack = tf.stack(
       [scaled_network_output, annotation_mask],
@@ -247,8 +249,6 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
 
     hooks = []
     metric_dict = {}
-    # TMP
-    calc_froc = True
     if pipeline_config.dataset.tfrecords_type == 'input_3d':
       eval_3d_hook = session_hooks.Eval3DHook(
         groundtruth=annotation_mask, prediction=scaled_network_output,
@@ -261,7 +261,18 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
         target_size=(pipeline_config.model.input_image_size_y,
                      pipeline_config.model.input_image_size_x),
         result_folder=result_folder, eval_dir=eval_dir)
+
+      vis_hook = session_hooks.VisualizationHook(
+        result_folder=result_folder,
+        visualization_file_names=visualization_file_names,
+        file_name=image_file,
+        image_decoded=image_decoded,
+        annotation_decoded=annotation_decoded,
+        predicted_mask=scaled_network_output, eval_dir=eval_dir,
+        is_3d=True)
+
       hooks.append(eval_3d_hook)
+      hooks.append(vis_hook)
     else:
       (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
        froc_thresholds) = (metric_utils.get_metrics(
@@ -276,7 +287,8 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
         file_name=image_file,
         image_decoded=image_decoded,
         annotation_decoded=annotation_decoded,
-        predicted_mask=scaled_network_output, eval_dir=eval_dir)
+        predicted_mask=scaled_network_output, eval_dir=eval_dir,
+        is_3d=False)
       patient_metric_hook = session_hooks.PatientMetricHook(
         statistics_dict=statistics_dict,
         patient_id=features[standard_fields.InputDataFields.patient_id],
@@ -333,7 +345,6 @@ def get_model_fn(pipeline_config, result_folder, dataset_folder, dataset_info,
   else:
     file_names = dataset_info[
       standard_fields.PickledDatasetInfo.file_names][eval_split_name]
-    file_names = [os.path.join(dataset_folder, f) for f in file_names]
     np.random.shuffle(file_names)
 
     patient_ids = dataset_info[

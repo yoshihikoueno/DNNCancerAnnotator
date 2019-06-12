@@ -62,6 +62,8 @@ class Patient3DMetricHandler():
 
     if self.eval_3d_as_2d:
       num_lesions = np.sum(num_lesions)
+      for k, v in statistics.items():
+        statistics[k] = np.sum(v)
 
       if self.calc_froc:
         for k, v in froc_region_cm_values.items():
@@ -71,35 +73,40 @@ class Patient3DMetricHandler():
       exam_id=exam_id, statistics=statistics,
       num_lesions=num_lesions,
       froc_region_cm_values=froc_region_cm_values, num_slices=num_slices)
+    logging.info("Patient {} exam {} finished.".format(patient_id, exam_id))
 
   def evaluate(self, global_step):
-    region_tp = 0
-    region_fn = 0
-    region_fp = 0
-    tp = 0
-    fn = 0
-    fp = 0
+    logging.info("Starting final evaluation.")
+    region_tp = 0.0
+    region_fn = 0.0
+    region_fp = 0.0
+    tp = 0.0
+    fn = 0.0
+    fp = 0.0
     froc_total_cm_values = dict()
     num_total_lesions = 0
 
     for patient_id, patient in self.patients.items():
-      patient_region_tp = 0
-      patient_region_fn = 0
-      patient_region_fp = 0
-      patient_tp = 0
-      patient_fn = 0
-      patient_fp = 0
+      patient_region_tp = 0.0
+      patient_region_fn = 0.0
+      patient_region_fp = 0.0
+      patient_tp = 0.0
+      patient_fn = 0.0
+      patient_fp = 0.0
       froc_patient_cm_values = dict()
-      num_patient_lesions = 0
+      num_patient_lesions = 0.0
       for exam_id, exam in patient.exams.items():
-        patient_tp += exam.statistics['tp'] / exam.num_slices
-        patient_fn += exam.statistics['fn'] / exam.num_slices
-        patient_fp += exam.statistics['fp'] / exam.num_slices
+        patient_tp += float(exam.statistics['tp']) / exam.num_slices
+        patient_fn += float(exam.statistics['fn']) / exam.num_slices
+        patient_fp += float(exam.statistics['fp']) / exam.num_slices
         if self.eval_3d_as_2d:
-          patient_region_tp += exam.statistics['region_tp'] / exam.num_slices
-          patient_region_fn += exam.statistics['region_fn'] / exam.num_slices
-          patient_region_fp += exam.statistics['region_fp'] / exam.num_slices
-          num_patient_lesions += exam.num_lesions / exam.num_slices
+          patient_region_tp += float(
+            exam.statistics['region_tp']) / exam.num_slices
+          patient_region_fn += float(
+            exam.statistics['region_fn']) / exam.num_slices
+          patient_region_fp += float(
+            exam.statistics['region_fp']) / exam.num_slices
+          num_patient_lesions += float(exam.num_lesions) / exam.num_slices
         else:
           patient_region_tp += exam.statistics['region_tp']
           patient_region_fn += exam.statistics['region_fn']
@@ -107,9 +114,9 @@ class Patient3DMetricHandler():
           num_patient_lesions += exam.num_lesions
         for k, threshold_values in exam.froc_region_cm_values.items():
           if k not in froc_patient_cm_values:
-            froc_patient_cm_values[k] = [0] * len(threshold_values)
+            froc_patient_cm_values[k] = [0.0] * len(threshold_values)
           for i, v in enumerate(threshold_values):
-            froc_patient_cm_values[k][i] += (v / exam.num_slices
+            froc_patient_cm_values[k][i] += (float(v) / exam.num_slices
                                              if self.eval_3d_as_2d else v)
 
       assert(len(patient.exams.keys()) > 0)
@@ -122,9 +129,9 @@ class Patient3DMetricHandler():
       num_total_lesions += num_patient_lesions / len(patient.exams.keys())
       for k, threshold_values in froc_patient_cm_values.items():
         if k not in froc_total_cm_values:
-          froc_total_cm_values[k] = [0] * len(threshold_values)
+          froc_total_cm_values[k] = [0.0] * len(threshold_values)
         for i, v in enumerate(threshold_values):
-          froc_total_cm_values[k][i] += v / len(patient.exams.keys())
+          froc_total_cm_values[k][i] += float(v) / len(patient.exams.keys())
 
     summary_writer = tf.summary.FileWriterCache.get(
       os.path.join(self.result_folder, self.eval_dir))

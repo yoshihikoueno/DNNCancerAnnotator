@@ -45,7 +45,10 @@ def get_metrics(prediction_groundtruth_stack,
       thresholds=thresholds, parallel_iterations=parallel_iterations,
       is_3d=is_3d)
   else:
-    froc_region_cm_values = {'region_tp': 0, 'region_fp': 0, 'region_fn': 0}
+    froc_region_cm_values = {
+      'region_tp': tf.constant(0, dtype=tf.int64),
+      'region_fp': tf.constant(0, dtype=tf.int64),
+      'region_fn': tf.constant(0, dtype=tf.int64)}
 
   metric_dict = {}
   # We want to collect the statistics for the regions so that we can calculate

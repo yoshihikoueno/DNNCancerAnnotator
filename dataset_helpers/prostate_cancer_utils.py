@@ -498,13 +498,14 @@ def _build_3d_tfrecords_from_files(pickle_data, output_dir, dataset_path):
         if patient_id not in readjusted_data:
           readjusted_data[patient_id] = dict()
 
-        for exam_id, elem in exam.items():
+        for exam_id, exam_data in exam.items():
           if exam_id not in readjusted_data[patient_id]:
             readjusted_data[patient_id][exam_id] = dict()
 
-          slice_id = elem[4]
-          readjusted_data[patient_id][exam_id][slice_id] = [
-            elem[0], elem[1], patient_id, slice_id, elem[5]]
+          for elem in exam_data:
+            slice_id = elem[4]
+            readjusted_data[patient_id][exam_id][slice_id] = [
+              elem[0], elem[1], patient_id, slice_id, elem[5]]
 
       elem_ops = []
       patient_ids = []
@@ -686,25 +687,51 @@ def _create_sliding_window_eval_dataset(element, target_dims, target_depth):
   annotation_mask = tf.reshape(annotation_mask, shape=[
     -1, target_depth, target_dims[0], target_dims[1], 1])
 
-  def sliding_window_1d(e):
-    # Adjust slice ids
-    e = element[standard_fields.InputDataFields.slice_id]
-    e = tf.pad(e, [[pad_size, pad_size + 1]], constant_values=-1)
-    e = tf.expand_dims(
-      tf.expand_dims(tf.expand_dims(e, axis=0), 0), -1)
-    e = tf.image.extract_image_patches(
-      e, ksizes=[1, 1, target_depth, 1], strides=[1, 1, 2, 1],
-      rates=[1, 1, 1, 1], padding='VALID')
-    e = tf.squeeze(tf.squeeze(e, axis=0), axis=0)
+  def sliding_window_1d(e, is_string):
+    if is_string:
+      indices = tf.range(0, tf.shape(e)[0])
+      indices = tf.pad(indices, [[pad_size, pad_size + 1]],
+                       constant_values=-1)
+      indices = tf.expand_dims(
+        tf.expand_dims(tf.expand_dims(indices, axis=0), 0), -1)
+      indices = tf.image.extract_image_patches(
+        indices, ksizes=[1, 1, target_depth, 1], strides=[1, 1, 2, 1],
+        rates=[1, 1, 1, 1], padding='VALID')
+      indices = tf.squeeze(tf.squeeze(indices, axis=0), axis=0)
 
-    return e
+      indices = tf.expand_dims(indices, axis=-1)
+
+      valid_indices = tf.where(tf.equal(indices, -1),
+                               tf.zeros_like(indices), indices)
+      e = tf.gather_nd(e, valid_indices)
+
+      indices = tf.squeeze(indices, axis=-1)
+
+      e = tf.where(
+        tf.equal(indices, -1), tf.tile(
+          tf.expand_dims(tf.constant(['']), axis=0),
+          multiples=tf.shape(e)), e)
+
+      return e
+
+    else:
+      e = tf.pad(e, [[pad_size, pad_size + 1]],
+                 constant_values='' if is_string else -1)
+      e = tf.expand_dims(
+        tf.expand_dims(tf.expand_dims(e, axis=0), 0), -1)
+      e = tf.image.extract_image_patches(
+        e, ksizes=[1, 1, target_depth, 1], strides=[1, 1, 2, 1],
+        rates=[1, 1, 1, 1], padding='VALID')
+      e = tf.squeeze(tf.squeeze(e, axis=0), axis=0)
+
+      return e
 
   slice_ids = sliding_window_1d(
-    element[standard_fields.InputDataFields.slice_id])
+    element[standard_fields.InputDataFields.slice_id], is_string=False)
   image_files = sliding_window_1d(
-    element[standard_fields.InputDataFields.image_file])
+    element[standard_fields.InputDataFields.image_file], is_string=True)
   annotation_files = sliding_window_1d(
-    element[standard_fields.InputDataFields.annotation_file])
+    element[standard_fields.InputDataFields.annotation_file], is_string=True)
 
   patient_id = tf.tile(
     tf.expand_dims(element[standard_fields.InputDataFields.patient_id],

@@ -62,13 +62,6 @@ class Eval3DHook(tf.train.SessionRunHook):
     patient_id_res = run_values.results[3].decode('utf-8')
     exam_id_res = run_values.results[4].decode('utf-8')
 
-    print(patient_id_res)
-    print(exam_id_res)
-
-    print('{}/{}'.format(
-      slice_ids_res, self.patient_exam_id_to_num_slices[patient_id_res][
-        exam_id_res]))
-
     for i, slice_id in enumerate(slice_ids_res):
       if self.current_patient_id is None:
         if slice_id == -1:
@@ -145,8 +138,6 @@ class Eval3DHook(tf.train.SessionRunHook):
 
     num_slices = groundtruth.shape[0]
 
-    print(num_slices)
-
     self.patient_metric_handler.set_exam(
       patient_id=self.current_patient_id, exam_id=self.current_exam_id,
       statistics=statistics_dict, num_lesions=num_lesions,
@@ -156,20 +147,29 @@ class Eval3DHook(tf.train.SessionRunHook):
 class VisualizationHook(tf.train.SessionRunHook):
   def __init__(self, result_folder, visualization_file_names,
                file_name, image_decoded, annotation_decoded,
-               predicted_mask, eval_dir):
-    assert(len(predicted_mask.get_shape()) == 2)
+               predicted_mask, eval_dir, is_3d):
     self.visualization_file_names = visualization_file_names
     self.result_folder = result_folder
     self.file_name = file_name
     self.eval_dir = eval_dir
+    self.is_3d = is_3d
+    if is_3d:
+      assert(len(predicted_mask.get_shape()) == 3)
+    else:
+      assert(len(predicted_mask.get_shape()) == 2)
+      self.file_name = tf.expand_dims(self.file_name, axis=0)
+      self.image_decoded = tf.expand_dims(self.image_decoded, axis=0)
+      self.annotation_decoded = tf.expand_dims(self.annotation_decoded, axis=0)
+      self.predicted_mask = tf.expand_dims(self.predicted_mask, axis=0)
+      self.is_3d
 
-    target_size = predicted_mask.get_shape().as_list()
+    target_size = predicted_mask.get_shape().as_list()[1:]
 
     image_decoded = image_utils.central_crop(image_decoded, target_size)
     image_decoded = tf.image.grayscale_to_rgb(image_decoded)
     predicted_mask = tf.stack([predicted_mask * 255,
                                tf.zeros_like(predicted_mask),
-                               tf.zeros_like(predicted_mask)], axis=2)
+                               tf.zeros_like(predicted_mask)], axis=3)
 
     predicted_mask_overlay = tf.clip_by_value(
       image_decoded * 0.5 + predicted_mask, 0, 255)
@@ -177,13 +177,13 @@ class VisualizationHook(tf.train.SessionRunHook):
     if annotation_decoded is None:
       # Predict Mode
       self.combined_image = tf.concat([
-        image_decoded, predicted_mask_overlay, predicted_mask], axis=1)
+        image_decoded, predicted_mask_overlay, predicted_mask], axis=2)
     else:
       annotation_decoded = image_utils.central_crop(
         annotation_decoded, target_size)
       self.combined_image = tf.concat([
         image_decoded, annotation_decoded, predicted_mask_overlay,
-        predicted_mask], axis=1)
+        predicted_mask], axis=2)
 
   def before_run(self, run_context):
     return tf.train.SessionRunArgs(fetches=[
@@ -198,8 +198,12 @@ class VisualizationHook(tf.train.SessionRunHook):
     summary_writer = tf.summary.FileWriterCache.get(
       self.eval_dir)
 
+    print(file_name_res)
     for batch_index in range(len(combined_image_res)):
       file_name = file_name_res[batch_index].decode('utf-8')
+
+      if file_name == '':
+        continue
 
       # In prediction mode we want to visualize in any case
       if (self.visualization_file_names is None
