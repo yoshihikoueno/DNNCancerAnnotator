@@ -14,6 +14,8 @@ parser.add_argument('train_ratio', help='Should be integer between 1 and 100.')
 parser.add_argument('val_ratio', help='Should be integer between 1 and 100.')
 parser.add_argument('test_ratio', help='Should be integer between 1 and 100.')
 parser.add_argument('--only_cancer', action='store_true')
+parser.add_argument('--only_in_train', action='store_true',
+                    help='Only cancer only for train set')
 parser.add_argument('--seed', required=True, type=int)
 
 args = parser.parse_args()
@@ -104,10 +106,15 @@ def _make_dataset_splits(data, train_ratio, val_ratio, test_ratio):
 
 # Assign patients to a dataset split
 def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
-                    only_cancer, seed):
-  if only_cancer:
+                    only_cancer, seed, only_in_train):
+  if only_cancer and not only_in_train:
     output_file = os.path.join(
       dataset_folder, 'patient_assignment_{}_{}_{}_{}_only_cancer'.format(
+        train_ratio, val_ratio, test_ratio, seed))
+  elif only_cancer and only_in_train:
+    output_file = os.path.join(
+      dataset_folder,
+      'patient_assignment_{}_{}_{}_{}_only_cancer_in_train'.format(
         train_ratio, val_ratio, test_ratio, seed))
   else:
     output_file = os.path.join(
@@ -127,7 +134,7 @@ def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
   assert(os.path.exists(cancer_cases_folder))
   assert(os.path.exists(cancer_annotations_folder))
 
-  if only_cancer:
+  if only_cancer and not only_in_train:
     healthy_images = dict()
     num_healthy_images = 0
     num_healthy_patients = 0
@@ -161,7 +168,10 @@ def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
   print("Cancer Patient Train/Val/Test: {}/{}/{}".format(
     len(cancer_train), len(cancer_val), len(cancer_test)))
 
-  train_data_dict = {**healthy_train, **cancer_train}
+  if only_cancer and only_in_train:
+    train_data_dict = cancer_train
+  else:
+    train_data_dict = {**healthy_train, **cancer_train}
 
   train_patient_ids = list(train_data_dict.keys())
   train_patient_exam_id_to_num_slices = dict()
@@ -219,7 +229,8 @@ def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
 
   dataset_size = train_size + val_size + test_size
 
-  if dataset_size != num_healthy_images + num_cancer_images:
+  if dataset_size != num_healthy_images + num_cancer_images and not (
+      only_cancer and only_in_train):
     print(dataset_size)
     print(num_healthy_images + num_cancer_images)
     assert(dataset_size == num_healthy_images + num_cancer_images)
@@ -276,4 +287,5 @@ if __name__ == '__main__':
 
   assign_patients(args.dataset_dir, train_ratio=train_ratio,
                   val_ratio=val_ratio, test_ratio=test_ratio,
-                  only_cancer=args.only_cancer, seed=args.seed)
+                  only_cancer=args.only_cancer, seed=args.seed,
+                  only_in_train=args.only_in_train)
