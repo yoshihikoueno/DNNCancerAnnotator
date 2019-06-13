@@ -249,6 +249,10 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
 
     hooks = []
     metric_dict = {}
+    lesion_slice_ratio = float(dataset_info[
+      standard_fields.PickledDatasetInfo.split_to_num_slices_with_lesion][
+        eval_split_name]) / len(dataset_info[
+          standard_fields.PickledDatasetInfo.file_names][eval_split_name])
     if pipeline_config.dataset.tfrecords_type == 'input_3d':
       eval_3d_hook = session_hooks.Eval3DHook(
         groundtruth=annotation_mask, prediction=scaled_network_output,
@@ -260,7 +264,8 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
             eval_split_name], calc_froc=calc_froc,
         target_size=(pipeline_config.model.input_image_size_y,
                      pipeline_config.model.input_image_size_x),
-        result_folder=result_folder, eval_dir=eval_dir)
+        result_folder=result_folder, eval_dir=eval_dir,
+        lesion_slice_ratio=lesion_slice_ratio)
 
       vis_hook = session_hooks.VisualizationHook(
         result_folder=result_folder,
@@ -295,7 +300,8 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
         result_folder=result_folder, eval_dir=eval_dir,
         num_lesions=num_lesions,
         froc_region_cm_values=froc_region_cm_values,
-        froc_thresholds=froc_thresholds)
+        froc_thresholds=froc_thresholds, calc_froc=calc_froc,
+        lesion_slice_ratio=lesion_slice_ratio)
 
       hooks.append(vis_hook)
       hooks.append(patient_metric_hook)

@@ -2,7 +2,6 @@ import logging
 import os
 
 import tensorflow as tf
-import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 import numpy as np
@@ -10,14 +9,14 @@ import numpy as np
 from utils import image_utils
 from utils import metric_utils
 from utils import util_ops
-from metrics import patient_3d_metric_handler
+from metrics import patient_metric_handler
 
 
 class Eval3DHook(tf.train.SessionRunHook):
   def __init__(
       self, groundtruth, prediction, slice_ids, patient_id, exam_id,
       eval_3d_as_2d, patient_exam_id_to_num_slices, calc_froc, target_size,
-      result_folder, eval_dir):
+      result_folder, eval_dir, lesion_slice_ratio):
     self.groundtruth = groundtruth
     self.prediction = prediction
     self.slice_ids = slice_ids
@@ -43,9 +42,10 @@ class Eval3DHook(tf.train.SessionRunHook):
              self.target_size[1]], dtype=tf.float32)
 
     self.patient_metric_handler = (
-      patient_3d_metric_handler.Patient3DMetricHandler(
+      patient_metric_handler.PatientMetricHandler(
         eval_3d_as_2d=self.eval_3d_as_2d, calc_froc=self.calc_froc,
-        result_folder=result_folder, eval_dir=eval_dir))
+        result_folder=result_folder, eval_dir=eval_dir, is_3d=True,
+        lesion_slice_ratio=lesion_slice_ratio))
 
     self.eval_ops = list(self._make_eval_op())
     self.eval_ops.append(self.groundtruth_op)
@@ -225,7 +225,7 @@ class VisualizationHook(tf.train.SessionRunHook):
 class PatientMetricHook(tf.train.SessionRunHook):
   def __init__(self, statistics_dict, patient_id, result_folder,
                eval_dir, num_lesions, froc_region_cm_values, froc_thresholds,
-               calc_froc):
+               calc_froc, lesion_slice_ratio):
     self.statistics_dict = statistics_dict
     self.patient_id = patient_id
     self.result_folder = result_folder
@@ -235,16 +235,16 @@ class PatientMetricHook(tf.train.SessionRunHook):
     self.froc_region_cm_values = froc_region_cm_values
     self.froc_thresholds = froc_thresholds
 
-    self.patient_statistics = dict()
-    self.num_total_lesions = 0
-    # Threshold to cm values
-    self.froc_cm_values_total = dict()
+    self.patient_metric_handler = patient_metric_handler.PatientMetricHandler(
+      eval_3d_as_2d=False, calc_froc=calc_froc, result_folder=result_folder,
+      eval_dir=eval_dir, is_3d=False, lesion_slice_ratio=lesion_slice_ratio)
 
   def before_run(self, run_context):
     fetch_list = [self.statistics_dict,
                   self.patient_id,
+                  self.exam_id,
                   self.num_lesions]
-    if self.froc_region_cm_values is not None:
+    if self.calc_froc:
       fetch_list.append(self.froc_region_cm_values)
 
     return tf.train.SessionRunArgs(fetches=fetch_list)
@@ -252,168 +252,22 @@ class PatientMetricHook(tf.train.SessionRunHook):
   def after_run(self, run_context, run_values):
     statistics_dict_res = run_values.results[0]
     patient_id_res = run_values.results[1]
-    num_lesions_res = run_values.results[2]
+    exam_id_res = run_values.results[2]
+    num_lesions_res = run_values.results[3]
+
     if self.calc_froc:
       froc_region_cm_values_res = None
     else:
-      froc_region_cm_values_res = run_values.results[3]
+      froc_region_cm_values_res = run_values.results[4]
 
-    self.num_total_lesions += num_lesions_res
-
-    if patient_id_res not in self.patient_statistics:
-      self.patient_statistics[patient_id_res] = dict()
-      self.patient_statistics[patient_id_res]['num_slices'] = 0
-
-    self.patient_statistics[patient_id_res]['num_slices'] += 1
-
-    for confusion_key, val in statistics_dict_res.items():
-      if confusion_key not in self.patient_statistics[patient_id_res]:
-        self.patient_statistics[patient_id_res][confusion_key] = 0
-
-      self.patient_statistics[patient_id_res][confusion_key] += val
-
-    if self.calc_froc:
-      for i, threshold in enumerate(self.froc_thresholds):
-        if threshold not in self.froc_cm_values_total:
-          self.froc_cm_values_total[threshold] = dict()
-          for k in froc_region_cm_values_res.keys():
-            self.froc_cm_values_total[threshold][k] = 0
-
-        for k, v in froc_region_cm_values_res.items():
-          self.froc_cm_values_total[threshold][k] += v[i]
+    self.patient_metric_handler.set_sample(
+      patient_id=patient_id_res, exam_id=exam_id_res,
+      statistics=statistics_dict_res, num_lesions=num_lesions_res,
+      froc_region_cm_values=froc_region_cm_values_res)
 
   def end(self, session):
-    # Collect all normalized confusion values
-    region_tp = 0
-    region_fn = 0
-    region_fp = 0
-    tp = 0
-    fp = 0
-    fn = 0
-
-    summary_writer = tf.summary.FileWriterCache.get(
-      os.path.join(self.result_folder, self.eval_dir))
-    global_step = tf.train.get_global_step().eval(session=session)
-
-    for patient_id, statistics in self.patient_statistics.items():
-      num_slices = statistics['num_slices']
-      assert(num_slices > 0)
-
-      region_tp += (statistics['region_tp']
-                               / float(num_slices))
-      region_fn += (statistics['region_fn']
-                               / float(num_slices))
-      region_fp += (statistics['region_fp']
-                               / float(num_slices))
-      tp += (statistics['tp'] / float(num_slices))
-      fp += (statistics['fp'] / float(num_slices))
-      fn += (statistics['fn'] / float(num_slices))
-
-    recall = tp / (tp + fn) if (tp + fn > 0) else 0
-    summary = tf.Summary()
-    summary.value.add(
-      tag='metrics/patient_adjusted/population_recall', simple_value=recall)
-    summary_writer.add_summary(summary, global_step=global_step)
-
-    precision = tp / (tp + fp) if (tp + fp > 0) else 0
-    summary = tf.Summary()
-    summary.value.add(
-      tag='metrics/patient_adjusted/population_precision',
-      simple_value=precision)
-    summary_writer.add_summary(summary, global_step=global_step)
-
-    f1_score = (2 * precision * recall / (precision + recall)) if (
-        precision + recall) > 0 else 0
-    summary = tf.Summary()
-    summary.value.add(
-      tag='metrics/patient_adjusted/population_f1_score',
-      simple_value=f1_score)
-    summary_writer.add_summary(summary, global_step=global_step)
-
-    f2_score = (5 * precision * recall / (4 * precision + recall)) if (
-      (4 * precision + recall)) > 0 else 0
-    summary = tf.Summary()
-    summary.value.add(
-      tag='metrics/patient_adjusted/population_f2_score',
-      simple_value=f2_score)
-    summary_writer.add_summary(summary, global_step=global_step)
-
-    region_recall = region_tp / (region_tp + region_fn) if (
-      region_tp + region_fn > 0) else 0
-    summary = tf.Summary()
-    summary.value.add(
-      tag='metrics/patient_adjusted/population_region_recall',
-      simple_value=region_recall)
-    summary_writer.add_summary(summary, global_step=global_step)
-
-    region_precision = region_tp / (region_tp + region_fp) if (
-      region_tp + region_fp > 0) else 0
-    summary = tf.Summary()
-    summary.value.add(
-      tag='metrics/patient_adjusted/population_region_precision',
-      simple_value=region_precision)
-    summary_writer.add_summary(summary, global_step=global_step)
-
-    region_f1_score = (2 * region_precision * region_recall / (
-      region_precision + region_recall)) if (
-        region_precision + region_recall) > 0 else 0
-    summary = tf.Summary()
-    summary.value.add(
-      tag='metrics/patient_adjusted/population_region_f1_score',
-      simple_value=region_f1_score)
-    summary_writer.add_summary(summary, global_step=global_step)
-
-    region_f2_score = (5 * region_precision * region_recall / (
-      4 * region_precision + region_recall)) if (
-        (4 * region_precision + region_recall)) > 0 else 0
-    summary = tf.Summary()
-    summary.value.add(
-      tag='metrics/patient_adjusted/population_region_f2_score',
-      simple_value=region_f2_score)
-    summary_writer.add_summary(summary, global_step=global_step)
-
-    if self.calc_froc and self.num_total_lesions > 0:
-      # Plot FROC Curve
-      # FP / Num Lesions
-      x = []
-      # TP / Num Lesions
-      y = []
-
-      for threshold, cm_values in self.froc_cm_values_total.items():
-        # Average number of FP per patient
-        x.append(cm_values['region_fp'] / float(len(
-          self.patient_statistics.keys())))
-        y.append(cm_values['region_tp'] / float(self.num_total_lesions))
-
-      fig = Figure()
-      canvas = FigureCanvas(fig)
-      ax = fig.gca(ylim=(0, 1),
-                   yticks=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
-                           1.0],
-                   xlabel='Average number of FP', ylabel='True Positive Rate')
-      ax.grid(True)
-
-      ax.plot(x, y)
-
-      canvas.draw()
-
-      width, height = fig.get_size_inches() * fig.get_dpi()
-
-      plot_img = np.fromstring(canvas.tostring_rgb(), dtype=np.uint8).reshape(
-        (int(height), int(width), 3))
-
-      logging.info("Visualizing FROC Curve.")
-      summary = tf.Summary(value=[
-        tf.Summary.Value(
-          tag='FROC_Curve',
-          image=tf.Summary.Image(
-            encoded_image_string=image_utils.encode_image_array_as_png_str(
-              plot_img)))])
-
-      summary_writer.add_summary(summary, global_step=global_step)
-
-    else:
-      logging.warn('Number of total lesions is 0. No FROC Curve plotted.')
+    self.patient_metric_handler.evaluate(
+      tf.train.get_global_step().eval(session=session))
 
 
 class PrintHook(tf.train.SessionRunHook):

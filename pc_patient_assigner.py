@@ -3,6 +3,7 @@ import os
 import pickle
 
 import numpy as np
+from PIL import Image
 
 from utils import standard_fields
 
@@ -18,11 +19,17 @@ parser.add_argument('--seed', required=True, type=int)
 args = parser.parse_args()
 
 
-def load_from_folder(folder, dataset_folder, id_prefix, class_label,
-                     annotation_folder=None):
-  assert ((class_label == 0 and annotation_folder is None) or (class_label == 1
-          and annotation_folder is not None))
+def _check_for_lesion(annotation_file):
+  img = Image.open(annotation_file)
+  np_img = np.array(img)
 
+  bool_mask = np.greater(np_img[:, :, 0] - np_img[:, :, 1], 200)
+
+  return np.any(bool_mask)
+
+
+def load_from_folder(folder, dataset_folder, id_prefix,
+                     annotation_folder=None):
   images = dict()
   num_images = 0
 
@@ -31,6 +38,7 @@ def load_from_folder(folder, dataset_folder, id_prefix, class_label,
 
   for patient_folder in patient_folders:
     patient_id = id_prefix + patient_folder
+    print(patient_id)
     assert(patient_id not in images)
     images[patient_id] = dict()
     patient_folder = os.path.join(folder, patient_folder)
@@ -51,8 +59,11 @@ def load_from_folder(folder, dataset_folder, id_prefix, class_label,
           if not os.path.exists(annotation_file):
             raise ValueError("{} has no annotation file {}".format(
               f, annotation_file))
+
+          contains_lesion = _check_for_lesion(annotation_file)
         else:
           annotation_file = f
+          contains_lesion = False
 
         # Shorten the file paths, so that they are also valid in docker
         # environments
@@ -60,7 +71,7 @@ def load_from_folder(folder, dataset_folder, id_prefix, class_label,
         image_file = f[len(dataset_folder) + 1:]
 
         images[patient_id][os.path.basename(examination_folder)].append(
-          [image_file, annotation_file, class_label, patient_id,
+          [image_file, annotation_file, int(contains_lesion), patient_id,
            int(os.path.basename(f).split('.')[0]),
            os.path.basename(examination_folder)])
         num_images += 1
@@ -123,11 +134,11 @@ def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
   else:
     healthy_images, num_healthy_images, num_healthy_patients = (
       load_from_folder(healthy_cases_folder, dataset_folder=dataset_folder,
-                       id_prefix='h', class_label=0))
+                       id_prefix='h'))
 
   cancer_images, num_cancer_images, num_cancer_patients = (
     load_from_folder(cancer_cases_folder, dataset_folder=dataset_folder,
-                     id_prefix='c', class_label=1,
+                     id_prefix='c',
                      annotation_folder=cancer_annotations_folder))
 
   print("Healthy patients (images): {} ({})".format(
@@ -156,12 +167,15 @@ def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
   train_patient_exam_id_to_num_slices = dict()
   train_files = []
   train_size = 0
+  train_num_slices_with_lesion = 0
   for patient_id, exam in train_data_dict.items():
     train_patient_exam_id_to_num_slices[patient_id] = dict()
     for exam_id, entries in exam.items():
       train_patient_exam_id_to_num_slices[patient_id][exam_id] = len(entries)
       train_size += len(entries)
       for f in entries:
+        if f[2] == 1:
+          train_num_slices_with_lesion += 1
         train_files.append(f[0])
 
   assert(len(train_files) == train_size)
@@ -172,12 +186,15 @@ def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
   val_patient_exam_id_to_num_slices = dict()
   val_files = []
   val_size = 0
+  val_num_slices_with_lesion = 0
   for patient_id, exam in val_data_dict.items():
     val_patient_exam_id_to_num_slices[patient_id] = dict()
     for exam_id, entries in exam.items():
       val_patient_exam_id_to_num_slices[patient_id][exam_id] = len(entries)
       val_size += len(entries)
       for f in entries:
+        if f[2] == 1:
+          val_num_slices_with_lesion += 1
         val_files.append(f[0])
 
   assert(len(val_files) == val_size)
@@ -188,12 +205,15 @@ def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
   test_patient_exam_id_to_num_slices = dict()
   test_files = []
   test_size = 0
+  test_num_slices_with_lesion = 0
   for patient_id, exam in test_data_dict.items():
     test_patient_exam_id_to_num_slices[patient_id] = dict()
     for exam_id, entries in exam.items():
       test_patient_exam_id_to_num_slices[patient_id][exam_id] = len(entries)
       test_size += len(entries)
       for f in entries:
+        if f[2] == 1:
+          test_num_slices_with_lesion += 1
         test_files.append(f[0])
   assert(len(test_files) == test_size)
 
@@ -231,6 +251,11 @@ def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
       standard_fields.SplitNames.train: train_patient_exam_id_to_num_slices,
       standard_fields.SplitNames.val: val_patient_exam_id_to_num_slices,
       standard_fields.SplitNames.test: test_patient_exam_id_to_num_slices}
+  result_dict[
+    standard_fields.PickledDatasetInfo.split_to_num_slices_with_lesion] = {
+      standard_fields.SplitNames.train: train_num_slices_with_lesion,
+      standard_fields.SplitNames.val: val_num_slices_with_lesion,
+      standard_fields.SplitNames.test: test_num_slices_with_lesion}
 
   with open(output_file, 'wb') as f:
     pickle.dump(result_dict, f)

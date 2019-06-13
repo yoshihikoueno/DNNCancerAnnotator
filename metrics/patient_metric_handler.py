@@ -11,13 +11,28 @@ from utils import image_utils
 
 class Exam():
   def __init__(self, exam_id, statistics, num_lesions, froc_region_cm_values,
-               num_slices):
+               num_slices, calc_froc):
     self.exam_id = exam_id
     self.statistics = statistics
     self.num_lesions = num_lesions
     self.num_slices = num_slices
     assert(self.num_slices > 0)
     self.froc_region_cm_values = froc_region_cm_values
+    self.calc_froc = calc_froc
+
+  def add_sample(self, statistics, num_lesions, froc_region_cm_values):
+    for k, v in statistics.items():
+      assert(k in self.statistics)
+      self.statistics[k] += v
+
+    self.num_lesions += num_lesions
+    self.num_slices += 1
+
+    if self.calc_froc:
+      for k, threshold_values in froc_region_cm_values.items():
+        assert(k in self.froc_region_cm_values)
+        for i, v in enumerate(threshold_values):
+          self.froc_region_cm_values[k][i] += v
 
   def get_normalized_num_lesions(self):
     return float(self.num_lesions) / float(self.num_slices)
@@ -33,9 +48,22 @@ class Exam():
 
 
 class Patient():
-  def __init__(self, patient_id):
+  def __init__(self, patient_id, calc_froc):
     self.patient_id = patient_id
+    self.calc_froc = calc_froc
     self.exams = dict()
+
+  def set_sample(self, exam_id, statistics, num_lesions,
+                 froc_region_cm_values):
+    if exam_id not in self.exams:
+      self.exams[exam_id] = Exam(
+        exam_id=exam_id, statistics=statistics, num_lesions=num_lesions,
+        froc_region_cm_values=froc_region_cm_values, num_slices=1,
+        calc_froc=self.calc_froc)
+    else:
+      self.exams[exam_id].set_sample(
+        statistics=statistics, num_lesions=num_lesions,
+        froc_region_cm_values=froc_region_cm_values)
 
   def set_exam(self, exam_id, statistics, num_lesions, froc_region_cm_values,
                num_slices):
@@ -43,24 +71,36 @@ class Patient():
 
     self.exams[exam_id] = Exam(
       exam_id=exam_id, statistics=statistics, num_lesions=num_lesions,
-      froc_region_cm_values=froc_region_cm_values, num_slices=num_slices)
+      froc_region_cm_values=froc_region_cm_values, num_slices=num_slices,
+      calc_froc=self.calc_froc)
 
 
-class Patient3DMetricHandler():
-  def __init__(self, eval_3d_as_2d, calc_froc, result_folder, eval_dir):
+class PatientMetricHandler():
+  def __init__(self, eval_3d_as_2d, calc_froc, result_folder, eval_dir, is_3d,
+               lesion_slice_ratio):
     self.eval_3d_as_2d = eval_3d_as_2d
     self.calc_froc = calc_froc
-    self.froc_cm_values_total = dict()
     self.patients = dict()
     self.result_folder = result_folder
     self.eval_dir = eval_dir
+    self.is_3d = is_3d
+    self.lesion_slice_ratio = lesion_slice_ratio
+
+  def set_sample(self, patient_id, exam_id, statistics, num_lesions,
+                 froc_region_cm_values):
+    if (patient_id not in self.patients):
+      self.patients[patient_id] = Patient(patient_id, calc_froc=self.calc_froc)
+
+    self.patients[patient_id].set_sample(
+      exam_id=exam_id, statistics=statistics, num_lesions=num_lesions,
+      froc_region_cm_values=froc_region_cm_values)
 
   def set_exam(self, patient_id, exam_id, statistics, num_lesions,
                froc_region_cm_values, num_slices):
     if (patient_id not in self.patients):
-      self.patients[patient_id] = Patient(patient_id)
+      self.patients[patient_id] = Patient(patient_id, calc_froc=self.calc_froc)
 
-    if self.eval_3d_as_2d:
+    if self.is_3d and self.eval_3d_as_2d:
       num_lesions = np.sum(num_lesions)
       for k, v in statistics.items():
         statistics[k] = np.sum(v)
@@ -99,26 +139,19 @@ class Patient3DMetricHandler():
         patient_tp += float(exam.statistics['tp']) / exam.num_slices
         patient_fn += float(exam.statistics['fn']) / exam.num_slices
         patient_fp += float(exam.statistics['fp']) / exam.num_slices
-        if self.eval_3d_as_2d:
-          patient_region_tp += float(
-            exam.statistics['region_tp']) / exam.num_slices
-          patient_region_fn += float(
-            exam.statistics['region_fn']) / exam.num_slices
-          patient_region_fp += float(
-            exam.statistics['region_fp']) / exam.num_slices
-          num_patient_lesions += float(exam.num_lesions) / exam.num_slices
-        else:
-          patient_region_tp += exam.statistics['region_tp']
-          patient_region_fn += exam.statistics['region_fn']
-          patient_region_fp += exam.statistics['region_fp']
-          num_patient_lesions += exam.num_lesions
+        patient_region_tp += float(
+          exam.statistics['region_tp']) / exam.num_slices
+        patient_region_fn += float(
+          exam.statistics['region_fn']) / exam.num_slices
+        patient_region_fp += float(
+          exam.statistics['region_fp']) / exam.num_slices
+        num_patient_lesions += float(exam.num_lesions) / exam.num_slices
         if self.calc_froc:
           for k, threshold_values in exam.froc_region_cm_values.items():
             if k not in froc_patient_cm_values:
               froc_patient_cm_values[k] = [0.0] * len(threshold_values)
             for i, v in enumerate(threshold_values):
-              froc_patient_cm_values[k][i] += (float(v) / exam.num_slices
-                                               if self.eval_3d_as_2d else v)
+              froc_patient_cm_values[k][i] += float(v) / exam.num_slices
 
       assert(len(patient.exams.keys()) > 0)
       region_tp += patient_region_tp / len(patient.exams.keys())
@@ -135,19 +168,23 @@ class Patient3DMetricHandler():
           for i, v in enumerate(threshold_values):
             froc_total_cm_values[k][i] += float(v) / len(patient.exams.keys())
 
+
+    adjusted_fp = 2 * fp * self.lesion_slice_ratio
+    adjusted_region_fp = 2 * region_fp * self.lesion_slice_ratio
+
     summary_writer = tf.summary.FileWriterCache.get(
       os.path.join(self.result_folder, self.eval_dir))
 
     recall = tp / (tp + fn) if (tp + fn > 0) else 0
     summary = tf.Summary()
     summary.value.add(
-      tag='metrics/patient_adjusted/population_recall', simple_value=recall)
+      tag='metrics/recall', simple_value=recall)
     summary_writer.add_summary(summary, global_step=global_step)
 
     precision = tp / (tp + fp) if (tp + fp > 0) else 0
     summary = tf.Summary()
     summary.value.add(
-      tag='metrics/patient_adjusted/population_precision',
+      tag='metrics/precision',
       simple_value=precision)
     summary_writer.add_summary(summary, global_step=global_step)
 
@@ -155,7 +192,7 @@ class Patient3DMetricHandler():
         precision + recall) > 0 else 0
     summary = tf.Summary()
     summary.value.add(
-      tag='metrics/patient_adjusted/population_f1_score',
+      tag='metrics/f1_score',
       simple_value=f1_score)
     summary_writer.add_summary(summary, global_step=global_step)
 
@@ -163,7 +200,7 @@ class Patient3DMetricHandler():
       (4 * precision + recall)) > 0 else 0
     summary = tf.Summary()
     summary.value.add(
-      tag='metrics/patient_adjusted/population_f2_score',
+      tag='metrics/f2_score',
       simple_value=f2_score)
     summary_writer.add_summary(summary, global_step=global_step)
 
@@ -171,7 +208,7 @@ class Patient3DMetricHandler():
       region_tp + region_fn > 0) else 0
     summary = tf.Summary()
     summary.value.add(
-      tag='metrics/patient_adjusted/population_region_recall',
+      tag='metrics/region_recall',
       simple_value=region_recall)
     summary_writer.add_summary(summary, global_step=global_step)
 
@@ -179,7 +216,7 @@ class Patient3DMetricHandler():
       region_tp + region_fp > 0) else 0
     summary = tf.Summary()
     summary.value.add(
-      tag='metrics/patient_adjusted/population_region_precision',
+      tag='metrics/region_precision',
       simple_value=region_precision)
     summary_writer.add_summary(summary, global_step=global_step)
 
@@ -188,7 +225,7 @@ class Patient3DMetricHandler():
         region_precision + region_recall) > 0 else 0
     summary = tf.Summary()
     summary.value.add(
-      tag='metrics/patient_adjusted/population_region_f1_score',
+      tag='metrics/region_f1_score',
       simple_value=region_f1_score)
     summary_writer.add_summary(summary, global_step=global_step)
 
@@ -197,8 +234,64 @@ class Patient3DMetricHandler():
         (4 * region_precision + region_recall)) > 0 else 0
     summary = tf.Summary()
     summary.value.add(
-      tag='metrics/patient_adjusted/population_region_f2_score',
+      tag='metrics/region_f2_score',
       simple_value=region_f2_score)
+    summary_writer.add_summary(summary, global_step=global_step)
+
+    # Adjusted for lesion ratio metrics
+    adjusted_precision = tp / (tp + adjusted_fp) if (
+      tp + adjusted_fp > 0) else 0
+    summary = tf.Summary()
+    summary.value.add(
+      tag='adjusted_precision',
+      simple_value=adjusted_precision)
+    summary_writer.add_summary(summary, global_step=global_step)
+
+    adjusted_f1_score = (2 * adjusted_precision * recall / (
+      adjusted_precision + recall)) if (
+        adjusted_precision + recall) > 0 else 0
+    summary = tf.Summary()
+    summary.value.add(
+      tag='metrics/adjusted_f1_score',
+      simple_value=adjusted_f1_score)
+    summary_writer.add_summary(summary, global_step=global_step)
+
+    adjusted_f2_score = (5 * adjusted_precision * recall / (
+      4 * adjusted_precision + recall)) if (
+      (4 * adjusted_precision + recall)) > 0 else 0
+    summary = tf.Summary()
+    summary.value.add(
+      tag='metrics/adjusted_f2_score',
+      simple_value=adjusted_f2_score)
+    summary_writer.add_summary(summary, global_step=global_step)
+
+    adjusted_region_precision = region_tp / (
+      region_tp + adjusted_region_fp) if (
+        region_tp + adjusted_region_fp > 0) else 0
+    summary = tf.Summary()
+    summary.value.add(
+      tag='metrics/adjusted_region_precision',
+      simple_value=adjusted_region_precision)
+    summary_writer.add_summary(summary, global_step=global_step)
+
+    adjusted_region_f1_score = (
+      2 * adjusted_region_precision * region_recall / (
+        adjusted_region_precision + region_recall)) if (
+          adjusted_region_precision + region_recall) > 0 else 0
+    summary = tf.Summary()
+    summary.value.add(
+      tag='metrics/adjusted_region_f1_score',
+      simple_value=adjusted_region_f1_score)
+    summary_writer.add_summary(summary, global_step=global_step)
+
+    adjusted_region_f2_score = (
+      5 * adjusted_region_precision * region_recall / (
+        4 * adjusted_region_precision + region_recall)) if (
+          (4 * adjusted_region_precision + region_recall)) > 0 else 0
+    summary = tf.Summary()
+    summary.value.add(
+      tag='metrics/adjusted_region_f2_score',
+      simple_value=adjusted_region_f2_score)
     summary_writer.add_summary(summary, global_step=global_step)
 
     if self.calc_froc and num_total_lesions > 0:
@@ -208,7 +301,7 @@ class Patient3DMetricHandler():
       # TP / Num Lesions
       y = []
 
-      for threshold, cm_values in self.froc_cm_values_total.items():
+      for threshold, cm_values in froc_total_cm_values.items():
         # Average number of FP per patient
         x.append(cm_values['region_fp'] / float(len(
           self.patient_statistics.keys())))
