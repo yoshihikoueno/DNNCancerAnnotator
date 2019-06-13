@@ -4,6 +4,7 @@ import tensorflow as tf
 
 from utils import util_ops
 from utils import standard_fields
+from utils import sparse_image_warp
 
 
 def preprocess(features, val_range, scale_input, model_objective,
@@ -51,7 +52,7 @@ def preprocess(features, val_range, scale_input, model_objective,
 
 
 def apply_data_augmentation(features, data_augmentation_options,
-                            num_parallel_iterations):
+                            num_parallel_iterations, is_3d):
   if not data_augmentation_options:
     return features
 
@@ -111,7 +112,7 @@ def apply_data_augmentation(features, data_augmentation_options,
 
     elif augmentation_type == 'random_warp':
       images, gt_masks = _random_warp(
-        images, masks=gt_masks)
+        images, masks=gt_masks, is_3d=is_3d)
 
     else:
       raise ValueError("Unknown data augmentation type! {}".format(
@@ -123,39 +124,87 @@ def apply_data_augmentation(features, data_augmentation_options,
   return features
 
 
-def _random_warp(images, masks):
+def _random_warp(images, masks, is_3d):
+  if is_3d:
+    dims = 3
+  else:
+    dims = 2
+
   if masks is not None:
     equal_shape_assert = tf.Assert(tf.reduce_all(tf.equal(
-      images.get_shape()[:3], masks.get_shape()[:3])), data=[
+      images.get_shape()[:dims + 1], masks.get_shape()[:dims + 1])), data=[
         images.get_shape(), masks.get_shape()])
   else:
     equal_shape_assert = tf.Assert(True, data=[])
 
   with tf.control_dependencies([equal_shape_assert]):
-    warp_pts = tf.cast(tf.divide(tf.reduce_min(images.get_shape()[1:3]), 2),
-                       tf.int32)
-    src_control_pts = tf.stack([
-      tf.random_uniform([images.get_shape()[0], warp_pts], minval=0,
-                        maxval=images.get_shape().as_list()[1]),
-      tf.random_uniform([images.get_shape()[0], warp_pts], minval=0,
-                        maxval=images.get_shape().as_list()[2])], axis=2)
-    target_control_pts = tf.add(
-      src_control_pts, tf.random_uniform([images.get_shape()[0], warp_pts, 2],
-                                         minval=-5, maxval=5))
+    if is_3d:
+      warp_pts_z = tf.cast(tf.divide(tf.shape(images)[1], 2), tf.int32)
+      warp_pts_y = tf.cast(tf.divide(tf.shape(images)[2], 2), tf.int32)
+      warp_pts_x = tf.cast(tf.divide(tf.shape(images)[3], 2), tf.int32)
 
-    images, _ = tf.contrib.image.sparse_image_warp(
-      images, source_control_point_locations=src_control_pts,
-      dest_control_point_locations=target_control_pts,
-      num_boundary_points=2)
+      src_control_pts = tf.stack([
+        tf.random_uniform([images.get_shape()[0], warp_pts_z], minval=0,
+                          maxval=images.get_shape().as_list()[1]),
+        tf.random_uniform([images.get_shape()[0], warp_pts_y], minval=0,
+                          maxval=images.get_shape().as_list()[1]),
+        tf.random_uniform([images.get_shape()[0], warp_pts_x], minval=0,
+                          maxval=images.get_shape().as_list()[2])], axis=2)
 
-    if masks is not None:
-      masks, _ = tf.contrib.image.sparse_image_warp(
-        masks, source_control_point_locations=src_control_pts,
+      target_control_pts = tf.stack([
+        tf.random_uniform([images.get_shape()[0], warp_pts_z],
+                          minval=-5, maxval=5),
+        tf.random_uniform([images.get_shape()[0], warp_pts_y],
+                          minval=-5, maxval=5),
+        tf.random_uniform([images.get_shape()[0], warp_pts_x],
+                          minval=-5, maxval=5)
+      ])
+      target_control_pts = tf.add(src_control_pts, target_control_pts)
+
+      images, _ = sparse_image_warp.sparse_image_warp(
+        images, source_control_point_locations=src_control_pts,
         dest_control_point_locations=target_control_pts,
         num_boundary_points=2)
 
-      # We are only interested in values 0 or 1
-      masks = tf.to_float(masks > 0.5)
+      if masks is not None:
+        masks, _ = sparse_image_warp.sparse_image_warp(
+          masks, source_control_point_locations=src_control_pts,
+          dest_control_point_locations=target_control_pts,
+          num_boundary_points=2)
+
+        # We are only interested in values 0 or 1
+        masks = tf.to_float(masks > 0.5)
+    else:
+      warp_pts_y = tf.cast(tf.divide(tf.shape(images)[1], 2), tf.int32)
+      warp_pts_x = tf.cast(tf.divide(tf.shape(images)[2], 2), tf.int32)
+
+      src_control_pts = tf.stack([
+        tf.random_uniform([images.get_shape()[0], warp_pts_y], minval=0,
+                          maxval=images.get_shape().as_list()[1]),
+        tf.random_uniform([images.get_shape()[0], warp_pts_x], minval=0,
+                          maxval=images.get_shape().as_list()[2])], axis=2)
+
+      target_control_pts = tf.stack([
+        tf.random_uniform([images.get_shape()[0], warp_pts_y],
+                          minval=-5, maxval=5),
+        tf.random_uniform([images.get_shape()[0], warp_pts_x],
+                          minval=-5, maxval=5)
+      ])
+      target_control_pts = tf.add(src_control_pts, target_control_pts)
+
+      images, _ = tf.contrib.image.sparse_image_warp(
+        images, source_control_point_locations=src_control_pts,
+        dest_control_point_locations=target_control_pts,
+        num_boundary_points=2)
+
+      if masks is not None:
+        masks, _ = tf.contrib.image.sparse_image_warp(
+          masks, source_control_point_locations=src_control_pts,
+          dest_control_point_locations=target_control_pts,
+          num_boundary_points=2)
+
+        # We are only interested in values 0 or 1
+        masks = tf.to_float(masks > 0.5)
 
   return images, masks
 

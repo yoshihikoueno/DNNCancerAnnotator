@@ -104,7 +104,8 @@ def build_dataset(dataset_name, directory,
     augment_fn = functools.partial(
       preprocessor.apply_data_augmentation,
       data_augmentation_options=data_augmentation_options,
-      num_parallel_iterations=num_parallel_iterations)
+      num_parallel_iterations=num_parallel_iterations,
+      is_3d=dataset_config.tfrecords_type == 'input_3d')
     dataset = dataset.map(
       augment_fn, num_parallel_calls=num_parallel_iterations)
 

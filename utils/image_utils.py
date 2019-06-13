@@ -4,7 +4,6 @@ import numpy as np
 import tensorflow as tf
 from PIL import Image
 
-# img = 4 dimensional tensor with shape [batch, height, width, channels]
 # desired_size = List with two elements describing height and width
 def central_crop(img, desired_size):
   assert(len(img.get_shape().as_list()) == 4)
