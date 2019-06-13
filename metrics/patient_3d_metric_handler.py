@@ -112,12 +112,13 @@ class Patient3DMetricHandler():
           patient_region_fn += exam.statistics['region_fn']
           patient_region_fp += exam.statistics['region_fp']
           num_patient_lesions += exam.num_lesions
-        for k, threshold_values in exam.froc_region_cm_values.items():
-          if k not in froc_patient_cm_values:
-            froc_patient_cm_values[k] = [0.0] * len(threshold_values)
-          for i, v in enumerate(threshold_values):
-            froc_patient_cm_values[k][i] += (float(v) / exam.num_slices
-                                             if self.eval_3d_as_2d else v)
+        if self.calc_froc:
+          for k, threshold_values in exam.froc_region_cm_values.items():
+            if k not in froc_patient_cm_values:
+              froc_patient_cm_values[k] = [0.0] * len(threshold_values)
+            for i, v in enumerate(threshold_values):
+              froc_patient_cm_values[k][i] += (float(v) / exam.num_slices
+                                               if self.eval_3d_as_2d else v)
 
       assert(len(patient.exams.keys()) > 0)
       region_tp += patient_region_tp / len(patient.exams.keys())
@@ -127,11 +128,12 @@ class Patient3DMetricHandler():
       fn += patient_fn / len(patient.exams.keys())
       fp += patient_fp / len(patient.exams.keys())
       num_total_lesions += num_patient_lesions / len(patient.exams.keys())
-      for k, threshold_values in froc_patient_cm_values.items():
-        if k not in froc_total_cm_values:
-          froc_total_cm_values[k] = [0.0] * len(threshold_values)
-        for i, v in enumerate(threshold_values):
-          froc_total_cm_values[k][i] += float(v) / len(patient.exams.keys())
+      if self.calc_froc:
+        for k, threshold_values in froc_patient_cm_values.items():
+          if k not in froc_total_cm_values:
+            froc_total_cm_values[k] = [0.0] * len(threshold_values)
+          for i, v in enumerate(threshold_values):
+            froc_total_cm_values[k][i] += float(v) / len(patient.exams.keys())
 
     summary_writer = tf.summary.FileWriterCache.get(
       os.path.join(self.result_folder, self.eval_dir))
