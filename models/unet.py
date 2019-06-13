@@ -5,11 +5,12 @@ import tensorflow as tf
 
 from utils import layer_utils as lu
 from builders import activation_fn_builder as ab
+from builders import norm_builder
 
 
 class UNet(object):
   def __init__(self, weight_decay, conv_padding, filter_sizes, down_activation,
-               up_activation, conv_bn_first, is_3d):
+               up_activation, norm_first, is_3d):
     assert(len(filter_sizes) > 1)
     assert(conv_padding in ['same', 'valid'])
     self.weight_decay = weight_decay
@@ -17,29 +18,20 @@ class UNet(object):
     self.filter_sizes = filter_sizes
     self.down_activation = ab.build(down_activation)
     self.up_activation = ab.build(up_activation)
-    self.conv_bn_first = conv_bn_first
+    self.norm_first = norm_first
     self.is_3d = is_3d
 
-  def _downsample_block(self, inputs, nb_filters, is_training, use_batch_norm,
-                        bn_momentum, bn_epsilon):
+  def _downsample_block(self, inputs, nb_filters, norm_fn):
     conv_params = lu.get_conv_params(activation_fn=self.down_activation,
                                      weight_decay=self.weight_decay)
-    if use_batch_norm:
-      batch_norm_params = lu.get_batch_norm_params(momentum=bn_momentum,
-                                                   epsilon=bn_epsilon)
-    else:
-      batch_norm_params = None
-
     net = lu.conv(
       inputs=inputs, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
-      batch_norm_params=batch_norm_params, is_training=is_training,
-      bn_first=self.conv_bn_first, is_3d=self.is_3d)
+      norm_fn=norm_fn, norm_first=self.norm_first, is_3d=self.is_3d)
     net = lu.conv(
       inputs=net, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
-      batch_norm_params=batch_norm_params, is_training=is_training,
-      bn_first=self.conv_bn_first, is_3d=self.is_3d)
+      norm_fn=norm_fn, norm_first=self.norm_first, is_3d=self.is_3d)
 
     pool_params = lu.get_pooling_params()
 
@@ -48,22 +40,16 @@ class UNet(object):
                         is_3d=self.is_3d)
 
   def _upsample_block(self, inputs, downsample_reference, nb_filters,
-                      is_training, use_batch_norm, bn_momentum, bn_epsilon):
+                      norm_fn):
     conv_transposed_params = lu.get_conv_transpose_params(
       activation_fn=self.up_activation, weight_decay=self.weight_decay)
     conv_params = lu.get_conv_params(activation_fn=self.up_activation,
                                      weight_decay=self.weight_decay)
-    if use_batch_norm:
-      batch_norm_params = lu.get_batch_norm_params(momentum=bn_momentum,
-                                                   epsilon=bn_epsilon)
-    else:
-      batch_norm_params = None
 
     net = lu.conv_t(
       inputs=inputs, filters=nb_filters, kernel_size=2, strides=2,
       padding=self.conv_padding, conv_params=conv_transposed_params,
-      is_training=is_training, batch_norm_params=batch_norm_params,
-      bn_first=self.conv_bn_first, is_3d=self.is_3d)
+      norm_fn=norm_fn, norm_first=self.norm_first, is_3d=self.is_3d)
 
     if self.conv_padding == 'valid':
       downsample_size = downsample_reference[0].get_shape().as_list()[0]
@@ -82,26 +68,25 @@ class UNet(object):
     net = lu.conv(
       inputs=net, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
-      batch_norm_params=batch_norm_params, is_training=is_training,
-      bn_first=self.conv_bn_first, is_3d=self.is_3d)
+      norm_fn=norm_fn, norm_first=self.norm_first, is_3d=self.is_3d)
     net = lu.conv(
       inputs=net, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
-      batch_norm_params=batch_norm_params, is_training=is_training,
-      bn_first=self.conv_bn_first, is_3d=self.is_3d)
+      norm_fn=norm_fn, norm_first=self.norm_first, is_3d=self.is_3d)
 
     return net
 
   def build_network(self, image_batch, is_training, num_classes,
-                    use_batch_norm, bn_momentum, bn_epsilon):
+                    use_norm, norm_config):
+    if use_norm:
+      norm_fn = norm_builder.build(norm_config, is_training=is_training)
+    else:
+      norm_fn = None
+
     ds_fn = functools.partial(
-      self._downsample_block, is_training=is_training,
-      use_batch_norm=use_batch_norm, bn_momentum=bn_momentum,
-      bn_epsilon=bn_epsilon)
+      self._downsample_block, norm_fn=norm_fn)
     us_fn = functools.partial(
-      self._upsample_block, is_training=is_training,
-      use_batch_norm=use_batch_norm, bn_momentum=bn_momentum,
-      bn_epsilon=bn_epsilon)
+      self._upsample_block, norm_fn=norm_fn)
 
     with tf.variable_scope('UNet'):
       ds_references = []
@@ -134,8 +119,8 @@ class UNet(object):
 
       final = lu.conv(inputs=us, filters=num_classes, kernel_size=1,
                          strides=1, padding=self.conv_padding,
-                         is_training=is_training, conv_params=conv_params,
-                         batch_norm_params=None, name='OutputLayer',
+                         conv_params=conv_params,
+                         norm_fn=None, name='OutputLayer',
                       is_3d=self.is_3d)
       print(final)
 

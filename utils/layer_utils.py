@@ -32,17 +32,12 @@ def get_conv_transpose_params(activation_fn, weight_decay):
   return res
 
 
-def get_batch_norm_params(momentum, epsilon):
-  return {'epsilon': epsilon, 'scale': True, 'fused': True,
-          'momentum': momentum, 'center': True, 'trainable': True}
-
-
 def conv(inputs, filters, kernel_size, strides, padding, conv_params,
-         batch_norm_params, is_training, name=None, bn_first=False,
+         norm_fn, name=None, norm_first=False,
          is_3d=False):
   conv_params = conv_params.copy()
 
-  if bn_first:
+  if norm_first and norm_fn is not None:
     activation = conv_params['activation']
     conv_params['activation'] = None
 
@@ -55,25 +50,22 @@ def conv(inputs, filters, kernel_size, strides, padding, conv_params,
       inputs, filters=filters, kernel_size=kernel_size, strides=strides,
       padding=padding, name=name, **conv_params)
 
-  if batch_norm_params is not None:
-    axis = -1 if conv_params['data_format'] == 'channels_last' else 1
-    res = tf.layers.batch_normalization(
-      inputs=res, axis=axis, name=name + 'BN' if name is not None else None,
-      **batch_norm_params, training=is_training)
+  if norm_fn is not None:
+    res = norm_fn(res)
 
-  if bn_first:
+  if norm_first and norm_fn is not None:
     res = activation(res)
 
   return res
 
 
 def conv_t(inputs, filters, kernel_size, strides, padding,
-           conv_params, batch_norm_params,
-           is_training, name=None, bn_first=False, use_dropout=False,
+           conv_params, norm_fn,
+           name=None, norm_first=False, use_dropout=False,
            dropout_rate=0.0, is_3d=False):
   conv_params = conv_params.copy()
 
-  if bn_first:
+  if norm_first and norm_fn is not None:
     activation = conv_params['activation']
     conv_params['activation'] = None
 
@@ -86,13 +78,10 @@ def conv_t(inputs, filters, kernel_size, strides, padding,
       inputs=inputs, filters=filters, kernel_size=kernel_size, strides=strides,
       padding=padding, name=name, **conv_params)
 
-  if batch_norm_params is not None:
-    axis = -1 if conv_params['data_format'] == 'channels_last' else 1
-    res = tf.layers.batch_normalization(
-      inputs=res, axis=axis, name=name + 'BN' if name is not None else None,
-      training=is_training, **batch_norm_params)
+  if norm_fn is not None:
+    res = norm_fn(res)
 
-  if bn_first:
+  if norm_first and norm_fn is not None:
     res = activation(res)
 
   if use_dropout:

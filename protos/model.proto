@@ -5,6 +5,7 @@ package netng.protos;
 import "protos/faster_rcnn.proto";
 import "protos/unet.proto";
 import "protos/gan.proto";
+import "protos/normalization.proto";
 
 message Model {
   optional int32 input_image_size_x = 1[default=0];
@@ -18,15 +19,16 @@ message Model {
     GAN gan = 11;
   }
 
-  // Should only be used with batch size > 1
-  optional bool use_batch_norm = 6[default=false];
-  optional float batch_norm_momentum = 7[default=0.99];
-  optional float batch_norm_epsilon = 8[default=0.0001];
+  optional bool use_norm = 6[default=false];
+  optional bool norm_first = 10[default=false];
+
+  oneof norm {
+    BatchNormalization batch_norm = 7;
+    InstanceNormalization instance_norm = 8;
+  }
 
   // same or valid
   optional string conv_padding = 9[default='valid'];
-
-  optional bool conv_bn_first = 10[default=false];
 
   optional string model_objective = 12[default='segmentation'];
 }
