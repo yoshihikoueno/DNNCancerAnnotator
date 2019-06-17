@@ -484,6 +484,33 @@ def _parse_from_exam(image_files, annotation_files,
 
 def _build_3d_tfrecords_from_files(pickle_data, output_dir, dataset_path):
   with tf.Session() as sess:
+    parse_fn = functools.partial(
+            _parse_from_exam, dataset_folder=dataset_path)
+
+    image_files_op = tf.placeholder(shape=[None], dtype=tf.string)
+    annotation_files_op = tf.placeholder(shape=[None], dtype=tf.string)
+    patient_ids_op = tf.placeholder(shape=[None], dtype=tf.string)
+    slice_ids_op = tf.placeholder(shape=[None], dtype=tf.int64)
+    exam_ids_op = tf.placeholder(shape=[None], dtype=tf.string)
+
+    exam_data_op = (
+      image_files_op, annotation_files_op, patient_ids_op, slice_ids_op,
+      exam_ids_op)
+
+    batch_size_op = tf.placeholder(shape=[], dtype=tf.int64)
+
+    print(batch_size_op)
+
+    dataset = tf.data.Dataset.from_tensor_slices(exam_data_op)
+    dataset = dataset.batch(batch_size_op)
+
+    dataset = dataset.map(parse_fn,
+                          num_parallel_calls=util_ops.get_cpu_count())
+
+    it = dataset.make_initializable_iterator()
+
+    elem_op = it.get_next()
+
     for split, data in pickle_data[
         standard_fields.PickledDatasetInfo.data_dict].items():
       os.mkdir(os.path.join(output_dir, split))
@@ -511,9 +538,6 @@ def _build_3d_tfrecords_from_files(pickle_data, output_dir, dataset_path):
           _serialize_and_save_3d_example, output_dir=output_dir, split=split)
 
       for patient_id, v in readjusted_data.items():
-        elem_ops = []
-        patient_ids = []
-        exam_ids = []
         for exam_id, exam_data in v.items():
           exam_entries = []
 
@@ -523,28 +547,18 @@ def _build_3d_tfrecords_from_files(pickle_data, output_dir, dataset_path):
           for slice_index in slice_indices:
             exam_entries.append(exam_data[slice_index])
 
-          dataset = tf.data.Dataset.from_tensor_slices(
-            tuple([list(e) for e in list(zip(*exam_entries))]))
-          dataset = dataset.batch(len(exam_entries))
+          exam_data = [
+            list(e) for e in list(zip(*exam_entries))]
 
-          parse_fn = functools.partial(
-            _parse_from_exam, dataset_folder=dataset_path)
+          feed_dict = {
+            image_files_op: exam_data[0], annotation_files_op: exam_data[1],
+            patient_ids_op: exam_data[2], slice_ids_op: exam_data[3],
+            exam_ids_op: exam_data[4], batch_size_op: len(exam_entries)}
 
-          dataset = dataset.map(parse_fn,
-                                num_parallel_calls=util_ops.get_cpu_count())
+          sess.run(it.initializer, feed_dict=feed_dict)
+          elem_op_result = sess.run(elem_op, feed_dict=feed_dict)
 
-          it = dataset.make_one_shot_iterator()
-
-          elem = it.get_next()
-
-          elem_ops.append(elem)
-          patient_ids.append(patient_id)
-          exam_ids.append(exam_id)
-
-        elem_ops_result = sess.run(elem_ops)
-
-        for elem_tuple in zip(*[elem_ops_result, patient_ids, exam_ids]):
-          serialize_and_save_fn(elem_tuple)
+          serialize_and_save_fn((elem_op_result, patient_id, exam_id))
 
 
 def _build_regular_tfrecords_from_files(pickle_data, output_dir, dataset_path):
