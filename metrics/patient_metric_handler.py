@@ -168,9 +168,8 @@ class PatientMetricHandler():
           for i, v in enumerate(threshold_values):
             froc_total_cm_values[k][i] += float(v) / len(patient.exams.keys())
 
-
-    adjusted_fp = 2 * fp * self.lesion_slice_ratio
-    adjusted_region_fp = 2 * region_fp * self.lesion_slice_ratio
+    adjusted_fp = 2 * fp * min(self.lesion_slice_ratio, 0.5)
+    adjusted_region_fp = 2 * region_fp * min(self.lesion_slice_ratio, 0.5)
 
     summary_writer = tf.summary.FileWriterCache.get(
       os.path.join(self.result_folder, self.eval_dir))
