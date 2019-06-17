@@ -507,10 +507,13 @@ def _build_3d_tfrecords_from_files(pickle_data, output_dir, dataset_path):
             readjusted_data[patient_id][exam_id][slice_id] = [
               elem[0], elem[1], patient_id, slice_id, elem[5]]
 
-      elem_ops = []
-      patient_ids = []
-      exam_ids = []
+      serialize_and_save_fn = functools.partial(
+          _serialize_and_save_3d_example, output_dir=output_dir, split=split)
+
       for patient_id, v in readjusted_data.items():
+        elem_ops = []
+        patient_ids = []
+        exam_ids = []
         for exam_id, exam_data in v.items():
           exam_entries = []
 
@@ -538,13 +541,10 @@ def _build_3d_tfrecords_from_files(pickle_data, output_dir, dataset_path):
           patient_ids.append(patient_id)
           exam_ids.append(exam_id)
 
-      elem_ops_result = sess.run(elem_ops)
+        elem_ops_result = sess.run(elem_ops)
 
-      serialize_and_save_fn = functools.partial(
-        _serialize_and_save_3d_example, output_dir=output_dir, split=split)
-
-      for elem_tuple in zip(*[elem_ops_result, patient_ids, exam_ids]):
-        serialize_and_save_fn(elem_tuple)
+        for elem_tuple in zip(*[elem_ops_result, patient_ids, exam_ids]):
+          serialize_and_save_fn(elem_tuple)
 
 
 def _build_regular_tfrecords_from_files(pickle_data, output_dir, dataset_path):
