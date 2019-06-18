@@ -303,7 +303,7 @@ class PatientMetricHandler():
       for threshold, cm_values in froc_total_cm_values.items():
         # Average number of FP per patient
         x.append(cm_values['region_fp'] / float(len(
-          self.patient_statistics.keys())))
+          self.patients.keys())))
         y.append(cm_values['region_tp'] / float(num_total_lesions))
 
       fig = Figure()
