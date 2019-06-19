@@ -85,7 +85,15 @@ def main(_):
   result_folder = os.path.join(FLAGS.checkpoint_dir,
                                'eval_{}'.format(FLAGS.split_name))
   if os.path.exists(result_folder):
-    raise ValueError("Evaluation already took place!")
+    eval_folder = result_folder
+    i = 1
+    while os.path.exists(eval_folder):
+      eval_folder = result_folder
+      eval_folder = '{}_{}'.format(eval_folder, i)
+      i = i + 1
+    result_folder = eval_folder
+
+  assert(not os.path.exists(result_folder))
 
   os.mkdir(result_folder)
 
