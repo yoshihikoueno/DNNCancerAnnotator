@@ -300,11 +300,13 @@ class PatientMetricHandler():
       # TP / Num Lesions
       y = []
 
-      for threshold, cm_values in froc_total_cm_values.items():
+      region_fps = froc_total_cm_values['region_fp']
+      region_tps = froc_total_cm_values['region_tp']
+      for i in range(len(region_fps)):
         # Average number of FP per patient
-        x.append(cm_values['region_fp'] / float(len(
+        x.append(region_fps[i] / float(len(
           self.patients.keys())))
-        y.append(cm_values['region_tp'] / float(num_total_lesions))
+        y.append(region_tps[i] / float(num_total_lesions))
 
       fig = Figure()
       canvas = FigureCanvas(fig)
