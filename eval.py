@@ -3,6 +3,7 @@ import sys
 import os
 import logging
 import time
+from shutil import copy
 
 import numpy as np
 import tensorflow as tf
@@ -96,6 +97,7 @@ def main(_):
   assert(not os.path.exists(result_folder))
 
   os.mkdir(result_folder)
+  copy(pipeline_config_file, result_folder)
 
   # Init Logger
   util_ops.init_logger(result_folder)

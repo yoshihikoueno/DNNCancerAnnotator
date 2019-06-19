@@ -99,6 +99,12 @@ def main(_):
     split_name=standard_fields.SplitNames.train,
     is_training=True, num_parallel_iterations=num_parallel_iterations)
 
+  eval_dir = os.path.join(FLAGS.result_dir,
+                          'eval_' + standard_fields.SplitNames.val)
+  if not FLAGS.no_eval and not os.path.exists(eval_dir):
+    os.mkdir(eval_dir)
+    copy(pipeline_config_file, eval_dir)
+
   estimator = estimator_builder.build_estimator(
     pipeline_config=pipeline_config, checkpoint_folder=FLAGS.result_dir,
     dataset_info=dataset_info,
@@ -106,8 +112,7 @@ def main(_):
     eval_split_name=standard_fields.SplitNames.val,
     train_distribution=train_distribution,
     eval_distribution=eval_distribution,
-    eval_dir=os.path.join(FLAGS.result_dir,
-                          'eval_' + standard_fields.SplitNames.val),
+    eval_dir=eval_dir,
     calc_froc=False)
 
   if FLAGS.no_eval:
@@ -121,8 +126,7 @@ def main(_):
         min_steps=pipeline_config.train_config.early_stopping_min_steps,
         run_every_secs=pipeline_config.train_config.
         early_stopping_run_every_secs,
-        eval_dir=os.path.join(FLAGS.result_dir,
-                              'eval_' + standard_fields.SplitNames.val))
+        eval_dir=eval_dir)
     else:
       early_stop_hook = None
 
@@ -153,8 +157,7 @@ def main(_):
       eval_split_name=standard_fields.SplitNames.val,
       train_distribution=train_distribution,
       eval_distribution=eval_distribution,
-      eval_dir=os.path.join(FLAGS.result_dir,
-                            'eval_' + standard_fields.SplitNames.val),
+      eval_dir=eval_dir,
       calc_froc=True)
 
     estimator.evaluate(input_fn=eval_input_fn, steps=None,
@@ -167,6 +170,12 @@ def main(_):
       split_name=standard_fields.SplitNames.train,
       is_training=False, num_parallel_iterations=num_parallel_iterations)
 
+    train_eval_dir = os.path.join(FLAGS.result_dir,
+                                  'eval_' + standard_fields.SplitNames.train)
+    if not os.path.exists(train_eval_dir):
+      os.mkdir(train_eval_dir)
+      copy(pipeline_config_file, train_eval_dir)
+
     estimator = estimator_builder.build_estimator(
       pipeline_config=pipeline_config, checkpoint_folder=FLAGS.result_dir,
       dataset_info=dataset_info,
@@ -174,8 +183,7 @@ def main(_):
       eval_split_name=standard_fields.SplitNames.train,
       train_distribution=train_distribution,
       eval_distribution=eval_distribution,
-      eval_dir=os.path.join(FLAGS.result_dir,
-                            'eval_' + standard_fields.SplitNames.train),
+      eval_dir=train_eval_dir,
       calc_froc=True)
 
     estimator.evaluate(input_fn=train_eval_input_fn, steps=None,
