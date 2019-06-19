@@ -7,7 +7,7 @@ from dataset_helpers import prostate_cancer_utils
 
 
 def get_metrics(prediction_groundtruth_stack,
-                parallel_iterations, calc_froc, is_3d):
+                parallel_iterations, calc_froc, is_3d, thresholds):
   prediction, groundtruth = tf.unstack(prediction_groundtruth_stack, axis=0)
   groundtruth = tf.cast(groundtruth, tf.int64)
 
@@ -35,9 +35,6 @@ def get_metrics(prediction_groundtruth_stack,
     prediction=prediction, split_groundtruth=split_groundtruth,
     parallel_iterations=parallel_iterations, is_3d=is_3d)
 
-  num_thresholds = 200.0
-  thresholds = np.linspace(0.0, 1.0, num=num_thresholds,
-                           endpoint=True, dtype=np.float32)
   if calc_froc:
     # Get FROC values
     froc_region_cm_values = pc_metrics.get_region_cm_values_at_thresholds(
@@ -61,5 +58,4 @@ def get_metrics(prediction_groundtruth_stack,
   statistics_dict['fn'] = fn
   statistics_dict['fp'] = fp
 
-  return (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
-          thresholds)
+  return (metric_dict, statistics_dict, num_lesions, froc_region_cm_values)

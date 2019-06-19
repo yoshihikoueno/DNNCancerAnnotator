@@ -24,10 +24,7 @@ def get_region_cm_values_at_thresholds(prediction, split_groundtruth,
 
 def get_region_cm_values(prediction, split_groundtruth, parallel_iterations,
                          is_3d):
-  if is_3d:
-    assert(len(prediction.get_shape()) == 3)
-    assert(len(split_groundtruth.get_shape()) == 4)
-  else:
+  if not is_3d:
     assert(len(prediction.get_shape()) == 2)
     assert(len(split_groundtruth.get_shape()) == 3)
 

@@ -7,6 +7,7 @@ import shutil
 
 import numpy as np
 import tensorflow as tf
+import cc3d
 
 from utils import util_ops
 from utils import standard_fields
@@ -16,7 +17,6 @@ from dataset_helpers import helpers as dh
 def split_mask(mask, dilate_mask=False, is_3d=False):
   assert(mask.dtype == tf.int64)
   if is_3d:
-    assert(len(mask.get_shape()) == 3)
     pool_op = tf.keras.layers.MaxPool3D
   else:
     assert(len(mask.get_shape()) == 2)
@@ -36,8 +36,19 @@ def split_mask(mask, dilate_mask=False, is_3d=False):
         data_format='channels_last')(
           tf.expand_dims(tf.expand_dims(mask, axis=0), axis=-1)))
 
-  # Label each area with individual index
-  components = tf.contrib.image.connected_components(mask)
+  if is_3d:
+    def fn(x):
+      return cc3d.connected_components(x).astype(np.int32)
+    # Takes 26 surrounding pixels
+    components = tf.cast(tf.py_func(
+      fn, [mask], tf.int32, stateful=False),
+                         tf.int32)
+
+    components.set_shape(mask.get_shape())
+
+  else:
+    # Takes 4 surrounding pixels
+    components = tf.contrib.image.connected_components(mask)
 
   if dilate_mask:
     # we need to shrink the mask again by masking with original

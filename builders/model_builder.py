@@ -223,14 +223,23 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
     image_file = tf.squeeze(
       features[standard_fields.InputDataFields.image_file], axis=0)
 
+    hooks = []
+    metric_dict = {}
+    lesion_slice_ratio = float(dataset_info[
+      standard_fields.PickledDatasetInfo.split_to_num_slices_with_lesion][
+        eval_split_name]) / len(dataset_info[
+          standard_fields.PickledDatasetInfo.file_names][eval_split_name])
+
     if pipeline_config.dataset.tfrecords_type == 'input_3d':
-      # We are only interested in the center two slices
+      annotation_mask = tf.cast(tf.squeeze(annotation_mask, axis=-1),
+                                tf.float32)
+      # We are only interested in evaluating the center two slices
       num_slices = scaled_network_output.get_shape().as_list()[0]
       first_slice_index = int(num_slices / 2 - 1)
       scaled_network_output = scaled_network_output[
         first_slice_index:first_slice_index + 2]
-      annotation_mask = tf.cast(tf.squeeze(annotation_mask[
-        first_slice_index:first_slice_index + 2], axis=-1), tf.float32)
+      annotation_mask = annotation_mask[
+        first_slice_index:first_slice_index + 2]
       image_decoded = image_decoded[
         first_slice_index:first_slice_index + 2]
       slice_ids = slice_ids[first_slice_index: first_slice_index + 2]
@@ -241,12 +250,10 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
       axis=1 if pipeline_config.eval_config.eval_3d_as_2d
       and pipeline_config.dataset.tfrecords_type == 'input_3d' else 0)
 
-    hooks = []
-    metric_dict = {}
-    lesion_slice_ratio = float(dataset_info[
-      standard_fields.PickledDatasetInfo.split_to_num_slices_with_lesion][
-        eval_split_name]) / len(dataset_info[
-          standard_fields.PickledDatasetInfo.file_names][eval_split_name])
+    num_froc_thresholds = 200.0
+    froc_thresholds = np.linspace(0.0, 1.0, num=num_froc_thresholds,
+                                  endpoint=True, dtype=np.float32)
+
     if pipeline_config.dataset.tfrecords_type == 'input_3d':
       eval_3d_hook = session_hooks.Eval3DHook(
         groundtruth=annotation_mask, prediction=scaled_network_output,
@@ -259,7 +266,7 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
         target_size=(pipeline_config.model.input_image_size_y,
                      pipeline_config.model.input_image_size_x),
         result_folder=result_folder, eval_dir=eval_dir,
-        lesion_slice_ratio=lesion_slice_ratio)
+        lesion_slice_ratio=lesion_slice_ratio, froc_thresholds=froc_thresholds)
 
       vis_hook = session_hooks.VisualizationHook(
         result_folder=result_folder,
@@ -273,12 +280,12 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
       hooks.append(eval_3d_hook)
       hooks.append(vis_hook)
     else:
-      (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
-       froc_thresholds) = (metric_utils.get_metrics(
+      (metric_dict, statistics_dict, num_lesions, froc_region_cm_values) = (
+        metric_utils.get_metrics(
          prediction_groundtruth_stack, parallel_iterations=min(
            pipeline_config.eval_config.batch_size,
            util_ops.get_cpu_count()),
-         calc_froc=calc_froc, is_3d=False))
+         calc_froc=calc_froc, is_3d=False, thresholds=froc_thresholds))
 
       vis_hook = session_hooks.VisualizationHook(
         result_folder=result_folder,

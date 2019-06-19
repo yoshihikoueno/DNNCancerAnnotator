@@ -16,7 +16,7 @@ class Eval3DHook(tf.train.SessionRunHook):
   def __init__(
       self, groundtruth, prediction, slice_ids, patient_id, exam_id,
       eval_3d_as_2d, patient_exam_id_to_num_slices, calc_froc, target_size,
-      result_folder, eval_dir, lesion_slice_ratio):
+      result_folder, eval_dir, lesion_slice_ratio, froc_thresholds):
     self.groundtruth = groundtruth
     self.prediction = prediction
     self.slice_ids = slice_ids
@@ -47,7 +47,7 @@ class Eval3DHook(tf.train.SessionRunHook):
         result_folder=result_folder, eval_dir=eval_dir, is_3d=True,
         lesion_slice_ratio=lesion_slice_ratio))
 
-    self.eval_ops = list(self._make_eval_op())
+    self.eval_ops = list(self._make_eval_op(froc_thresholds))
     self.eval_ops.append(self.groundtruth_op)
 
   def before_run(self, run_context):
@@ -102,7 +102,7 @@ class Eval3DHook(tf.train.SessionRunHook):
     self.patient_metric_handler.evaluate(
       tf.train.get_global_step().eval(session=session))
 
-  def _make_eval_op(self):
+  def _make_eval_op(self, froc_thresholds):
     prediction_groundtruth_stack = tf.stack(
       [self.prediction_op, tf.cast(self.groundtruth_op, tf.float32)],
       axis=1 if self.eval_3d_as_2d else 0)
@@ -111,7 +111,8 @@ class Eval3DHook(tf.train.SessionRunHook):
       return tf.map_fn(lambda e: metric_utils.get_metrics(
         e,
         parallel_iterations=util_ops.get_cpu_count(),
-        calc_froc=self.calc_froc, is_3d=False),
+        calc_froc=self.calc_froc, is_3d=False,
+        thresholds=froc_thresholds),
                        elems=prediction_groundtruth_stack, dtype=(
                          {}, {'tp': tf.int64, 'fp': tf.int64, 'fn': tf.int64,
                               'region_tp': tf.int64, 'region_fp': tf.int64,
@@ -123,7 +124,7 @@ class Eval3DHook(tf.train.SessionRunHook):
       return metric_utils.get_metrics(
         prediction_groundtruth_stack,
         parallel_iterations=util_ops.get_cpu_count(),
-        calc_froc=self.calc_froc, is_3d=True)
+        calc_froc=self.calc_froc, is_3d=True, thresholds=froc_thresholds)
 
   def _evaluate_current_patient_exam(self, sess):
     # Make sure all elements are not None
@@ -132,9 +133,9 @@ class Eval3DHook(tf.train.SessionRunHook):
       assert(p is not None)
 
     (metric_dict, statistics_dict, num_lesions, froc_region_cm_values,
-       froc_thresholds, groundtruth) = sess.run(
+       groundtruth) = sess.run(
          self.eval_ops, feed_dict={self.groundtruth_op: self.full_groundtruth,
-                                    self.prediction_op: self.full_prediction})
+                                   self.prediction_op: self.full_prediction})
 
     num_slices = groundtruth.shape[0]
 
