@@ -146,7 +146,7 @@ class Eval3DHook(tf.train.SessionRunHook):
 
 class VisualizationHook(tf.train.SessionRunHook):
   def __init__(self, result_folder, visualization_file_names,
-               file_name, image_decoded, annotation_decoded,
+               file_name, image_decoded, annotation_mask,
                predicted_mask, eval_dir, is_3d):
     self.visualization_file_names = visualization_file_names
     self.result_folder = result_folder
@@ -174,15 +174,20 @@ class VisualizationHook(tf.train.SessionRunHook):
     predicted_mask_overlay = tf.clip_by_value(
       image_decoded * 0.5 + predicted_mask, 0, 255)
 
-    if annotation_decoded is None:
+    if annotation_mask is None:
       # Predict Mode
       self.combined_image = tf.concat([
         image_decoded, predicted_mask_overlay, predicted_mask], axis=2)
     else:
-      annotation_decoded = image_utils.central_crop(
-        annotation_decoded, target_size)
+      annotation_mask = tf.stack([
+        annotation_mask * 255,
+        tf.zeros_like(annotation_mask),
+        tf.zeros_like(annotation_mask)], axis=3)
+      annotation_mask = tf.where(tf.cast(annotation_mask, tf.bool),
+                                 tf.cast(annotation_mask, tf.float32),
+                                 image_decoded)
       self.combined_image = tf.concat([
-        image_decoded, annotation_decoded, predicted_mask_overlay,
+        image_decoded, annotation_mask, predicted_mask_overlay,
         predicted_mask], axis=2)
 
   def before_run(self, run_context):
@@ -198,7 +203,6 @@ class VisualizationHook(tf.train.SessionRunHook):
     summary_writer = tf.summary.FileWriterCache.get(
       self.eval_dir)
 
-    print(file_name_res)
     for batch_index in range(len(combined_image_res)):
       file_name = file_name_res[batch_index].decode('utf-8')
 

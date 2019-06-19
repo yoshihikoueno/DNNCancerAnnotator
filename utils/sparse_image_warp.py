@@ -18,6 +18,7 @@ def _get_grid_locations(image_depth, image_height, image_width):
   x_range = np.linspace(0, image_width - 1, image_width)
   z_grid, y_grid, x_grid = np.meshgrid(
     z_range, y_range, x_range, indexing='ij')
+
   return np.stack((z_grid, y_grid, x_grid), -1)
 
 
@@ -183,7 +184,7 @@ def sparse_image_warp(image,
 
     dense_flows = array_ops.reshape(flattened_flows,
                                     [batch_size, image_depth, image_height,
-                                     image_width, 2])
+                                     image_width, 3])
 
     warped_image = dense_image_warp.dense_image_warp(image, dense_flows)
 

@@ -109,7 +109,7 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
 
   # We should not apply the loss to evaluation. This would just cause
   # our loss to be minimum for f2 score, but we also get the same
-  # optimum if we just optimzie for f1 score
+  # optimum if we just optimize for f1 score
   if (pipeline_config.train_config.loss.use_weighted
       and mode == tf.estimator.ModeKeys.TRAIN):
     cancer_pixels = tf.reduce_sum(tf.cast(annotation_mask_batch,
@@ -200,8 +200,6 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
                                       scaffold=scaffold)
   elif mode == tf.estimator.ModeKeys.EVAL:
     image_decoded = features[standard_fields.InputDataFields.image_decoded]
-    annotation_decoded = features[
-      standard_fields.InputDataFields.annotation_decoded]
     if pipeline_config.train_config.loss.name == 'sigmoid':
       if pipeline_config.dataset.tfrecords_type == 'input_3d':
         scaled_network_output = tf.nn.sigmoid(network_output)[:, :, :, :, 0]
@@ -215,7 +213,6 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
 
     scaled_network_output = tf.squeeze(scaled_network_output, axis=0)
     annotation_mask = tf.squeeze(annotation_mask_batch, axis=0)
-    annotation_decoded = tf.squeeze(annotation_decoded, axis=0)
     image_decoded = tf.squeeze(image_decoded, axis=0)
     slice_ids = tf.squeeze(
       features[standard_fields.InputDataFields.slice_id], axis=0)
@@ -234,8 +231,6 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
         first_slice_index:first_slice_index + 2]
       annotation_mask = tf.cast(tf.squeeze(annotation_mask[
         first_slice_index:first_slice_index + 2], axis=-1), tf.float32)
-      annotation_decoded = annotation_decoded[
-        first_slice_index:first_slice_index + 2]
       image_decoded = image_decoded[
         first_slice_index:first_slice_index + 2]
       slice_ids = slice_ids[first_slice_index: first_slice_index + 2]
@@ -271,7 +266,7 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
         visualization_file_names=visualization_file_names,
         file_name=image_file,
         image_decoded=image_decoded,
-        annotation_decoded=annotation_decoded,
+        annotation_mask=annotation_mask,
         predicted_mask=scaled_network_output, eval_dir=eval_dir,
         is_3d=True)
 
@@ -290,7 +285,7 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
         visualization_file_names=visualization_file_names,
         file_name=image_file,
         image_decoded=image_decoded,
-        annotation_decoded=annotation_decoded,
+        annotation_mask=annotation_mask,
         predicted_mask=scaled_network_output, eval_dir=eval_dir,
         is_3d=False)
       patient_metric_hook = session_hooks.PatientMetricHook(

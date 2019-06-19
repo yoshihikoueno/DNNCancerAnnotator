@@ -17,7 +17,7 @@ def _interpolate_bilinear(grid,
   """Similar to Matlab's interp2 function.
   Finds values for query points on a grid using bilinear interpolation.
   Args:
-    grid: a 4-D float `Tensor` of shape `[batch, height, width, channels]`.
+    grid: a 5-D float `Tensor` of shape `[batch, depth, height, width, channels]`.
     query_points: a 3-D float `Tensor` of N points with shape `[batch, N, 2]`.
     name: a name for the operation (optional).
     indexing: whether the query points are specified as row and column (ij),
@@ -52,8 +52,8 @@ def _interpolate_bilinear(grid,
     with ops.control_dependencies([
         check_ops.assert_equal(
             len(query_points.get_shape()),
-            4,
-            message='Query points must be 4 dimensional.'),
+            3,
+            message='Query points must be 3 dimensional.'),
         check_ops.assert_equal(
             array_ops.shape(query_points)[2],
             3,
@@ -203,8 +203,9 @@ def dense_image_warp(image, flow, name='dense_image_warp'):
 
     # The flow is defined on the image grid. Turn the flow into a list of query
     # points in the grid space.
-    grid_x, grid_y, grid_z = array_ops.meshgrid(
-        math_ops.range(width), math_ops.range(height), math_ops.range(depth))
+    grid_z, grid_y, grid_x = array_ops.meshgrid(
+      math_ops.range(depth), math_ops.range(height), math_ops.range(width),
+      indexing='ij')
     stacked_grid = math_ops.cast(
         array_ops.stack([grid_z, grid_y, grid_x], axis=3), flow.dtype)
     batched_grid = array_ops.expand_dims(stacked_grid, axis=0)
