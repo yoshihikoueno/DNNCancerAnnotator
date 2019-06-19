@@ -23,10 +23,18 @@ def split_mask(mask, dilate_mask=False, is_3d=False):
     pool_op = tf.keras.layers.MaxPool2D
 
   if dilate_mask:
-    mask = tf.squeeze(pool_op(
-      5, strides=1, padding='same',
-      data_format='channels_last')(
-        tf.expand_dims(tf.expand_dims(mask, axis=0), axis=-1)))
+    if is_3d:
+      # Unfortunately 3D Pooling does not support int64
+      mask = tf.squeeze(tf.cast(pool_op(
+        5, strides=1, padding='same',
+        data_format='channels_last')(
+          tf.expand_dims(tf.cast(tf.expand_dims(mask, axis=0), tf.float32),
+                         axis=-1)), tf.int64))
+    else:
+      mask = tf.squeeze(pool_op(
+        5, strides=1, padding='same',
+        data_format='channels_last')(
+          tf.expand_dims(tf.expand_dims(mask, axis=0), axis=-1)))
 
   # Label each area with individual index
   components = tf.contrib.image.connected_components(mask)
