@@ -61,10 +61,11 @@ def split_mask(mask, dilate_mask=False, is_3d=False):
   # Remove zero id, since it describes background
   unique_ids = tf.gather_nd(unique_ids, tf.where(tf.not_equal(unique_ids, 0)))
 
-  # Create mask for each cancer area
-  individual_masks = tf.map_fn(
-    lambda unique_id: tf.equal(unique_id, components), elems=unique_ids,
-    dtype=tf.bool, parallel_iterations=4)
+  individual_masks = tf.cond(
+    tf.greater(tf.shape(unique_ids)[0], 0), lambda: tf.map_fn(
+      lambda unique_id: tf.equal(unique_id, components), elems=unique_ids,
+      dtype=tf.bool, parallel_iterations=4),
+    lambda: tf.constant([], dtype=tf.bool))
 
   return individual_masks
 
