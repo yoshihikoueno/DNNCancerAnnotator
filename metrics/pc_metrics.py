@@ -6,8 +6,9 @@ from dataset_helpers import prostate_cancer_utils
 def get_region_cm_values_at_thresholds(prediction, split_groundtruth,
                                        thresholds, parallel_iterations,
                                        is_3d):
-  assert(len(prediction.get_shape()) == 2)
-  assert(len(split_groundtruth.get_shape()) == 3)
+  if not is_3d:
+    assert(len(prediction.get_shape()) == 2)
+    assert(len(split_groundtruth.get_shape()) == 3)
 
   v = tf.map_fn(lambda threshold: get_region_cm_values(
     tf.cast(tf.greater_equal(
