@@ -22,6 +22,7 @@ flags.DEFINE_string('checkpoint_dir', '', 'The checkpoint directory to load '
                                           'directory')
 flags.DEFINE_string('checkpoint_name', '', 'Optional name of a specific '
                                         'checkpoint')
+flags.DEFINE_string('eval_name', '', 'Optional name for the eval dir suffix.')
 flags.DEFINE_bool('all_checkpoints', False,
                   'Optional flag to evaluate all existing checkpoints in '
                   'checkpoint_dir from the beginning on.')
@@ -83,8 +84,9 @@ def main(_):
   np.random.seed(pipeline_config.seed)
   tf.set_random_seed(pipeline_config.seed)
 
+  suffix = '_{}'.format(FLAGS.eval_name) if FLAGS.eval_name != '' else ''
   result_folder = os.path.join(FLAGS.checkpoint_dir,
-                               'eval_{}'.format(FLAGS.split_name))
+                               'eval_{}{}'.format(FLAGS.split_name, suffix))
   if os.path.exists(result_folder):
     eval_folder = result_folder
     i = 1
