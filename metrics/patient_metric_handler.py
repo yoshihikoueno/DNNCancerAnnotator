@@ -242,7 +242,7 @@ class PatientMetricHandler():
       tp + adjusted_fp > 0) else 0
     summary = tf.Summary()
     summary.value.add(
-      tag='adjusted_precision',
+      tag='metrics/adjusted_precision',
       simple_value=adjusted_precision)
     summary_writer.add_summary(summary, global_step=global_step)
 
