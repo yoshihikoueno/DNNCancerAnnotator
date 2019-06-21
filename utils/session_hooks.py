@@ -118,8 +118,7 @@ class Eval3DHook(tf.train.SessionRunHook):
                               'region_tp': tf.int64, 'region_fp': tf.int64,
                               'region_fn': tf.int64}, tf.int64, {
                                 'region_tp': tf.int64, 'region_fp': tf.int64,
-                                'region_fn': tf.int64},
-                         tf.float32))
+                                'region_fn': tf.int64}))
     else:
       return metric_utils.get_metrics(
         prediction_groundtruth_stack,
