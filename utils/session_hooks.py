@@ -226,11 +226,12 @@ class VisualizationHook(tf.train.SessionRunHook):
 
 
 class PatientMetricHook(tf.train.SessionRunHook):
-  def __init__(self, statistics_dict, patient_id, result_folder,
+  def __init__(self, statistics_dict, patient_id, exam_id, result_folder,
                eval_dir, num_lesions, froc_region_cm_values, froc_thresholds,
                calc_froc, lesion_slice_ratio):
     self.statistics_dict = statistics_dict
     self.patient_id = patient_id
+    self.exam_id = exam_id
     self.result_folder = result_folder
     self.eval_dir = eval_dir
     self.num_lesions = num_lesions
