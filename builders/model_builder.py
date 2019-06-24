@@ -297,8 +297,8 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
         is_3d=False)
       patient_metric_hook = session_hooks.PatientMetricHook(
         statistics_dict=statistics_dict,
-        patient_id=features[standard_fields.InputDataFields.patient_id],
-        exam_id=features[standard_fields.InputDataFields.examination_name],
+        patient_id=patient_id,
+        exam_id=exam_id,
         result_folder=result_folder, eval_dir=eval_dir,
         num_lesions=num_lesions,
         froc_region_cm_values=froc_region_cm_values,
