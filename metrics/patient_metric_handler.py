@@ -61,7 +61,7 @@ class Patient():
         froc_region_cm_values=froc_region_cm_values, num_slices=1,
         calc_froc=self.calc_froc)
     else:
-      self.exams[exam_id].set_sample(
+      self.exams[exam_id].add_sample(
         statistics=statistics, num_lesions=num_lesions,
         froc_region_cm_values=froc_region_cm_values)
 
