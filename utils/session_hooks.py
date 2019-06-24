@@ -158,10 +158,9 @@ class VisualizationHook(tf.train.SessionRunHook):
     else:
       assert(len(predicted_mask.get_shape()) == 2)
       self.file_name = tf.expand_dims(self.file_name, axis=0)
-      self.image_decoded = tf.expand_dims(self.image_decoded, axis=0)
-      self.annotation_decoded = tf.expand_dims(self.annotation_decoded, axis=0)
-      self.predicted_mask = tf.expand_dims(self.predicted_mask, axis=0)
-      self.is_3d
+      image_decoded = tf.expand_dims(image_decoded, axis=0)
+      predicted_mask = tf.expand_dims(predicted_mask, axis=0)
+      annotation_mask = tf.expand_dims(annotation_mask, axis=0)
 
     target_size = predicted_mask.get_shape().as_list()[1:]
 
