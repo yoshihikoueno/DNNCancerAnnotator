@@ -260,9 +260,9 @@ class PatientMetricHook(tf.train.SessionRunHook):
     num_lesions_res = run_values.results[3]
 
     if self.calc_froc:
-      froc_region_cm_values_res = None
-    else:
       froc_region_cm_values_res = run_values.results[4]
+    else:
+      froc_region_cm_values_res = None
 
     self.patient_metric_handler.set_sample(
       patient_id=patient_id_res, exam_id=exam_id_res,
