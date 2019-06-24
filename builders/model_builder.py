@@ -229,10 +229,10 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
       standard_fields.PickledDatasetInfo.split_to_num_slices_with_lesion][
         eval_split_name]) / len(dataset_info[
           standard_fields.PickledDatasetInfo.file_names][eval_split_name])
-
-    if pipeline_config.dataset.tfrecords_type == 'input_3d':
-      annotation_mask = tf.cast(tf.squeeze(annotation_mask, axis=-1),
+    annotation_mask = tf.cast(tf.squeeze(annotation_mask, axis=-1),
                                 tf.float32)
+    if pipeline_config.dataset.tfrecords_type == 'input_3d':
+
       # We are only interested in evaluating the center two slices
       num_slices = scaled_network_output.get_shape().as_list()[0]
       first_slice_index = int(num_slices / 2 - 1)
