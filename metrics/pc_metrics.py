@@ -91,6 +91,8 @@ def _get_f_score(prediction, groundtruth):
   prediction = tf.cast(prediction, tf.bool)
   groundtruth = tf.cast(groundtruth, tf.bool)
 
+  beta = 2
+
   tp = tf.reduce_sum(tf.cast(tf.logical_and(prediction, groundtruth),
                              tf.float32))
   fp = tf.reduce_sum(tf.cast(tf.logical_and(prediction, tf.logical_not(
@@ -98,7 +100,9 @@ def _get_f_score(prediction, groundtruth):
   fn = tf.reduce_sum(tf.cast(tf.logical_and(
     tf.logical_not(prediction), groundtruth), tf.float32))
 
-  gt_assert = tf.Assert(tf.greater((2 * tp + fp + fn), 0), [
-    tf.constant('Groundtruth cannot be empty!')])
+  gt_assert = tf.Assert(
+    tf.greater(((1 + beta * beta) * tp + fp + fn * beta * beta), 0), [
+      tf.constant('Groundtruth cannot be empty!')])
   with tf.control_dependencies([gt_assert]):
-    return (2 * tp) / (2 * tp + fp + fn)
+    return ((1 + beta * beta) * tp) / (
+      (1 + beta * beta) * tp + fp + fn * beta * beta)
