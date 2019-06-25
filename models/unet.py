@@ -79,7 +79,8 @@ class UNet(object):
   def build_network(self, image_batch, is_training, num_classes,
                     use_norm, norm_config):
     if use_norm:
-      norm_fn = norm_builder.build(norm_config, is_training=is_training)
+      norm_fn = norm_builder.build(norm_config, is_training=is_training,
+                                   is_3d=self.is_3d)
     else:
       norm_fn = None
 

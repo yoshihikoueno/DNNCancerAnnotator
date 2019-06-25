@@ -25,6 +25,7 @@ message Model {
   oneof norm {
     BatchNormalization batch_norm = 7;
     InstanceNormalization instance_norm = 8;
+    GroupNormalization group_norm = 14;
   }
 
   // same or valid
