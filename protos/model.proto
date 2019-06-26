@@ -31,7 +31,7 @@ message Model {
   // same or valid
   optional string conv_padding = 9[default='valid'];
   
-  optional bool conv_locally_connected = 15;[default=false];
+  optional bool conv_locally_connected = 15[default=false];
 
   optional string model_objective = 12[default='segmentation'];
 }
