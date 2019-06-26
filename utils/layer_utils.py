@@ -34,7 +34,7 @@ def get_conv_transpose_params(activation_fn, weight_decay):
 
 def conv(inputs, filters, kernel_size, strides, padding, conv_params,
          norm_fn, name=None, norm_first=False,
-         is_3d=False):
+         is_3d=False, locally_connected=False):
   conv_params = conv_params.copy()
 
   if norm_first and norm_fn is not None:
@@ -42,13 +42,20 @@ def conv(inputs, filters, kernel_size, strides, padding, conv_params,
     conv_params['activation'] = None
 
   if is_3d:
+    assert(not locally_connected)
     res = tf.layers.conv3d(
       inputs, filters=filters, kernel_size=kernel_size, strides=strides,
       padding=padding, name=name, **conv_params)
   else:
-    res = tf.layers.conv2d(
-      inputs, filters=filters, kernel_size=kernel_size, strides=strides,
-      padding=padding, name=name, **conv_params)
+    if locally_connected:
+      del conv_params['dilation_rate']
+      res = tf.keras.layers.LocallyConnected2D(
+        filters=filters, kernel_size=kernel_size, strides=strides,
+        padding=padding, implementation=2, **conv_params)(inputs)
+    else:
+      res = tf.layers.conv2d(
+        inputs, filters=filters, kernel_size=kernel_size, strides=strides,
+        padding=padding, name=name, **conv_params)
 
   if norm_fn is not None:
     res = norm_fn(res)

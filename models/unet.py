@@ -10,7 +10,7 @@ from builders import norm_builder
 
 class UNet(object):
   def __init__(self, weight_decay, conv_padding, filter_sizes, down_activation,
-               up_activation, norm_first, is_3d):
+               up_activation, norm_first, is_3d, conv_locally_connected):
     assert(len(filter_sizes) > 1)
     assert(conv_padding in ['same', 'valid'])
     self.weight_decay = weight_decay
@@ -20,6 +20,7 @@ class UNet(object):
     self.up_activation = ab.build(up_activation)
     self.norm_first = norm_first
     self.is_3d = is_3d
+    self.conv_locally_connected = conv_locally_connected
 
   def _downsample_block(self, inputs, nb_filters, norm_fn):
     conv_params = lu.get_conv_params(activation_fn=self.down_activation,
@@ -27,11 +28,13 @@ class UNet(object):
     net = lu.conv(
       inputs=inputs, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
-      norm_fn=norm_fn, norm_first=self.norm_first, is_3d=self.is_3d)
+      norm_fn=norm_fn, norm_first=self.norm_first, is_3d=self.is_3d,
+      locally_connected=self.conv_locally_connected)
     net = lu.conv(
       inputs=net, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
-      norm_fn=norm_fn, norm_first=self.norm_first, is_3d=self.is_3d)
+      norm_fn=norm_fn, norm_first=self.norm_first, is_3d=self.is_3d,
+      locally_connected=self.conv_locally_connected)
 
     pool_params = lu.get_pooling_params()
 
@@ -68,11 +71,13 @@ class UNet(object):
     net = lu.conv(
       inputs=net, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
-      norm_fn=norm_fn, norm_first=self.norm_first, is_3d=self.is_3d)
+      norm_fn=norm_fn, norm_first=self.norm_first, is_3d=self.is_3d,
+      locally_connected=self.conv_locally_connected)
     net = lu.conv(
       inputs=net, filters=nb_filters, kernel_size=3, strides=1,
       padding=self.conv_padding, conv_params=conv_params,
-      norm_fn=norm_fn, norm_first=self.norm_first, is_3d=self.is_3d)
+      norm_fn=norm_fn, norm_first=self.norm_first, is_3d=self.is_3d,
+      locally_connected=self.conv_locally_connected)
 
     return net
 
@@ -122,7 +127,8 @@ class UNet(object):
                          strides=1, padding=self.conv_padding,
                          conv_params=conv_params,
                          norm_fn=None, name='OutputLayer',
-                      is_3d=self.is_3d)
+                      is_3d=self.is_3d,
+                      locally_connected=self.conv_locally_connected)
       print(final)
 
       return final
