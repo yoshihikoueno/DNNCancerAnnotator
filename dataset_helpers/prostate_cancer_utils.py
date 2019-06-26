@@ -596,9 +596,11 @@ def _build_regular_tfrecords_from_files(pickle_data, output_dir, dataset_path):
             output_dir, split, '{}_{}.tfrecords'.format(patient_id, exam_id)))
           writer_dict['{}_{}'.format(patient_id, exam_id)] = writer
 
-      concatenated_elems = [
-        elems for exam_id, elems in exam.items()
-        for patient_id, exam in data.items()]
+      concatenated_elems = []
+      for patient_id, exam in data.items():
+        for exam_id, elems in exam.items():
+          for elem in elems:
+            concatenated_elems.append(elem)
 
       dataset = tf.data.Dataset.from_tensor_slices(
         tuple([list(t) for t in zip(*list(
@@ -866,6 +868,7 @@ def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
       raise ValueError("Invalid tfrecords type.")
 
   elif model_objective == 'interpolation':
+    assert(False)
     tfrecords_dict = dict()
     for tfrecords_file in tfrecords_files:
       patient_id, exam_name = os.path.splitext(
