@@ -603,8 +603,7 @@ def _build_regular_tfrecords_from_files(pickle_data, output_dir, dataset_path):
             concatenated_elems.append(elem)
 
       dataset = tf.data.Dataset.from_tensor_slices(
-        tuple([list(t) for t in zip(*list(
-          itertools.chain.from_iterable(concatenated_elems)))]))
+        tuple([list(t) for t in zip(*concatenated_elems)]))
 
       parse_fn = functools.partial(_parse_from_file,
                                    dataset_folder=dataset_path)

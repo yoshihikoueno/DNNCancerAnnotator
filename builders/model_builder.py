@@ -385,7 +385,8 @@ def get_model_fn(pipeline_config, result_folder, dataset_folder, dataset_info,
       down_activation=pipeline_config.model.unet.down_activation,
       up_activation=pipeline_config.model.unet.up_activation,
       norm_first=pipeline_config.model.norm_first,
-      is_3d=pipeline_config.dataset.tfrecords_type == 'input_3d')
+      is_3d=pipeline_config.dataset.tfrecords_type == 'input_3d',
+      conv_locally_connected=pipeline_config.model.conv_locally_connected)
     return functools.partial(_general_model_fn,
                              pipeline_config=pipeline_config,
                              result_folder=result_folder,
