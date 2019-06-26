@@ -26,19 +26,25 @@ def _extract_patient_id(file_name):
   return patient_id
 
 
-def _loss(labels, logits, loss_name, pos_weight):
+def _loss(labels, logits, loss_name, weight, is_pos_weight):
   # Each entry in labels must be an index in [0, num_classes)
   assert(len(labels.get_shape()) == 1)
 
   if loss_name == 'sigmoid':
     assert(logits.get_shape().as_list()[1] == 1)
-    return tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(
-      tf.cast(labels, dtype=tf.float32), tf.squeeze(logits, axis=1),
-      pos_weight))
+    if is_pos_weight:
+      return tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(
+        tf.cast(labels, dtype=tf.float32), tf.squeeze(logits, axis=1),
+        weight))
+    else:
+      weight_mask = tf.where(tf.equal(labels, 0), weight, 1.0)
+      loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=labels,
+                                                     logits=logits)
+      return tf.reduce_mean(tf.multiply(loss, weight_mask))
   elif loss_name == 'softmax':
     # Logits should be of shape [batch_size, num_classes]
     assert(len(logits.get_shape()) == 2)
-    assert(pos_weight is None and 'Loss weight not implemented for softmax.')
+    assert(weight is None and 'Loss weight not implemented for softmax.')
     return tf.losses.sparse_softmax_cross_entropy(labels, logits)
   else:
     assert(False and 'Loss name "{}" not recognized.'.format(loss_name))
@@ -132,7 +138,8 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
     loss = _loss(tf.reshape(annotation_mask_batch, [-1]),
                  tf.reshape(network_output, [-1, num_classes]),
                  loss_name=pipeline_config.train_config.loss.name,
-                 pos_weight=loss_weight)
+                 weight=loss_weight,
+                 is_pos_weight=pipeline_config.train_config.loss.pos_weight)
     loss = tf.identity(loss, name='ModelLoss')
     tf.summary.scalar(loss.op.name, loss, family='Loss')
 
