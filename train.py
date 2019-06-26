@@ -184,7 +184,7 @@ def main(_):
       train_distribution=train_distribution,
       eval_distribution=eval_distribution,
       eval_dir=train_eval_dir,
-      calc_froc=True)
+      calc_froc=False)
 
     estimator.evaluate(input_fn=train_eval_input_fn, steps=None,
                        name=standard_fields.SplitNames.train)
