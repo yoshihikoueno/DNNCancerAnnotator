@@ -22,5 +22,8 @@ def build(config, is_training, is_3d):
     return functools.partial(
       tf.contrib.layers.group_norm, groups=groups, channels_axis=-1,
       reduction_axes=reduction_axes, center=True, scale=True, trainable=True)
+  elif norm_type == 'layer_norm':
+    return functools.partial(
+      tf.contrib.layers.layer_norm, center=True, scale=True, trainable=True)
   else:
     raise ValueError("Invalid normalization {}".format(norm_type))

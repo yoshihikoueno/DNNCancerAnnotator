@@ -14,3 +14,7 @@ message InstanceNormalization {
 message GroupNormalization {
   optional int32 groups = 1[default=32];
 }
+
+message LayerNormalization {
+
+}

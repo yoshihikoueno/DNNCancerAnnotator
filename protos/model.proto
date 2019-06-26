@@ -26,6 +26,7 @@ message Model {
     BatchNormalization batch_norm = 7;
     InstanceNormalization instance_norm = 8;
     GroupNormalization group_norm = 14;
+    LayerNormalization layer_norm = 16;
   }
 
   // same or valid
