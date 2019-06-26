@@ -470,11 +470,12 @@ def _deserialize_and_decode_3d_example(
 
 def _parse_from_file(image_file, annotation_file, label, patient_id,
                      slice_id, examination_name, dataset_folder):
-  image_file = tf.strings.join([dataset_folder, '/', image_file])
-  image_string = tf.read_file(image_file)
+  full_image_path = tf.strings.join([dataset_folder, '/', image_file])
+  image_string = tf.read_file(full_image_path)
 
-  annotation_file = tf.strings.join([dataset_folder, '/', annotation_file])
-  annotation_string = tf.read_file(annotation_file)
+  full_annotation_path = tf.strings.join([dataset_folder, '/',
+                                          annotation_file])
+  annotation_string = tf.read_file(full_annotation_path)
 
   return {
     standard_fields.TfExampleFields.patient_id: patient_id,
