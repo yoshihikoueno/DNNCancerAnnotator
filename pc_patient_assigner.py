@@ -17,6 +17,7 @@ parser.add_argument('--only_cancer', action='store_true')
 parser.add_argument('--only_in_train', action='store_true',
                     help='Only cancer only for train set')
 parser.add_argument('--seed', required=True, type=int)
+parser.add_argument('--dry_run', action='store_true')
 
 args = parser.parse_args()
 
@@ -40,7 +41,6 @@ def load_from_folder(folder, dataset_folder, id_prefix,
 
   for patient_folder in patient_folders:
     patient_id = id_prefix + patient_folder
-    print(patient_id)
     assert(patient_id not in images)
     images[patient_id] = dict()
     patient_folder = os.path.join(folder, patient_folder)
@@ -106,7 +106,7 @@ def _make_dataset_splits(data, train_ratio, val_ratio, test_ratio):
 
 # Assign patients to a dataset split
 def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
-                    only_cancer, seed, only_in_train):
+                    only_cancer, seed, only_in_train, dry_run):
   if only_cancer and not only_in_train:
     output_file = os.path.join(
       dataset_folder, 'patient_assignment_{}_{}_{}_{}_only_cancer'.format(
@@ -268,8 +268,9 @@ def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
       standard_fields.SplitNames.val: val_num_slices_with_lesion,
       standard_fields.SplitNames.test: test_num_slices_with_lesion}
 
-  with open(output_file, 'wb') as f:
-    pickle.dump(result_dict, f)
+  if not dry_run:
+    with open(output_file, 'wb') as f:
+      pickle.dump(result_dict, f)
 
 
 if __name__ == '__main__':
@@ -288,4 +289,4 @@ if __name__ == '__main__':
   assign_patients(args.dataset_dir, train_ratio=train_ratio,
                   val_ratio=val_ratio, test_ratio=test_ratio,
                   only_cancer=args.only_cancer, seed=args.seed,
-                  only_in_train=args.only_in_train)
+                  only_in_train=args.only_in_train, dry_run=args.dry_run)

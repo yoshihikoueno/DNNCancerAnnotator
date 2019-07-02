@@ -12,7 +12,7 @@ def build(config, is_training, is_3d):
     return functools.partial(tf.layers.batch_normalization, epsilon=epsilon,
                              momentum=momentum, scale=True, fused=True,
                              center=True, trainable=True, axis=-1,
-                             is_training=is_training)
+                             training=is_training)
   elif norm_type == 'instance_norm':
     return functools.partial(tf.contrib.layers.instance_norm, scale=True,
                              center=True, trainable=True)
