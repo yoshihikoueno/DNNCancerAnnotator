@@ -7,8 +7,9 @@ def get_region_cm_values_at_thresholds(prediction, split_groundtruth,
                                        thresholds, parallel_iterations,
                                        is_3d):
   v = tf.map_fn(lambda threshold: get_region_cm_values(
-    tf.cast(tf.greater_equal(
-      tf.cast(prediction, tf.float32), threshold), tf.int64),
+    tf.cast(tf.cond(tf.equal(threshold, 0), lambda: tf.greater_equal(
+      tf.cast(prediction, tf.float32), threshold), lambda: tf.greater(
+        tf.cast(prediction, tf.float32), threshold)), tf.int64),
     split_groundtruth=split_groundtruth,
     parallel_iterations=parallel_iterations, is_3d=is_3d), elems=thresholds,
                 parallel_iterations=parallel_iterations,

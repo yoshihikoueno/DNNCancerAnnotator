@@ -316,7 +316,7 @@ class PatientMetricHandler():
                    xlabel='Average number of FP', ylabel='True Positive Rate')
       ax.grid(True)
 
-      ax.plot(x, y)
+      ax.plot(x, y, marker='o', markevery=5)
 
       canvas.draw()
 
