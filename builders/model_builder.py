@@ -32,14 +32,17 @@ def _loss(labels, logits, loss_name, weight, is_pos_weight):
 
   if loss_name == 'sigmoid':
     assert(logits.get_shape().as_list()[1] == 1)
+    logits = tf.squeeze(logits, axis=1)
     if is_pos_weight:
       return tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(
-        tf.cast(labels, dtype=tf.float32), tf.squeeze(logits, axis=1),
-        weight))
+        labels=tf.cast(labels, dtype=tf.float32), logits=logits,
+        pos_weight=weight))
     else:
-      weight_mask = tf.where(tf.equal(labels, 0), weight, 1.0)
-      loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=labels,
-                                                     logits=logits)
+      loss = tf.nn.sigmoid_cross_entropy_with_logits(
+        labels=tf.cast(labels, dtype=tf.float32), logits=logits)
+      weight_mask = tf.where(tf.equal(labels, 0), tf.fill(
+        tf.shape(labels), weight), tf.fill(tf.shape(labels), 1.0))
+
       return tf.reduce_mean(tf.multiply(loss, weight_mask))
   elif loss_name == 'softmax':
     # Logits should be of shape [batch_size, num_classes]
