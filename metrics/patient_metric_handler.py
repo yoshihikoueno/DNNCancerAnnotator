@@ -313,7 +313,7 @@ class PatientMetricHandler():
       ax = fig.gca(ylim=(0, 1),
                    yticks=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
                            1.0],
-                   xlabel='Average number of FP', ylabel='True Positive Rate')
+                   xlabel='Average number of FP', ylabel='Recall')
       ax.grid(True)
 
       ax.plot(x, y, marker='o', markevery=5)

@@ -3,6 +3,7 @@ import os
 from PIL import Image
 import matplotlib.pyplot as plt
 import numpy as np
+import cc3d
 
 folder = '/mnt/dataset/patrick/datasets'
 old_dataset_folder = os.path.join(folder, 'prostate_images4')
@@ -37,6 +38,7 @@ result_dict['num_healthy_patient_exams'] = 0
 result_dict['num_slices_with_lesion'] = 0
 
 num_slices_histogram = []
+num_lesions = []
 
 
 def has_holes(slice_indices):
@@ -56,6 +58,16 @@ def has_lesion(image):
   bool_mask = np.greater(np_img[:, :, 0] - np_img[:, :, 1], 200)
 
   return np.any(bool_mask)
+
+
+def count_lesions(annotation_image):
+  np_img = np.array(annotation_image)
+
+  annotation_mask = np.greater(np_img[:, :, 0] - np_img[:, :, 1], 200)
+
+  components = cc3d.connected_components(annotation_mask)
+
+  return np.max(components)
 
 
 def walk_dir(directory, is_old, id_prefix, result_dict, annotation_dir=None):
@@ -114,6 +126,11 @@ def walk_dir(directory, is_old, id_prefix, result_dict, annotation_dir=None):
             with_lesion = has_lesion(f_pil)
           if with_lesion:
             result_dict['num_slices_with_lesion'] += 1
+            lesion_count = count_lesions(f_pil)
+            assert(lesion_count > 0)
+            num_lesions.append(lesion_count)
+          else:
+            num_lesions.append(0)
         if size not in result_dict['image_size_tuple_to_num']:
           result_dict['image_size_tuple_to_num'][size] = 0
         result_dict['image_size_tuple_to_num'][size] += 1
@@ -163,13 +180,13 @@ walk_dir(old_dataset_cancer_folder, is_old=True, id_prefix='c',
          annotation_dir=old_dataset_cancer_annotations_folder)
 
 # Plot Histogram
-plt.hist(num_slices_histogram, bins=list(range(1, 80)), density=False,
-         facecolor='b', alpha=0.75)
-plt.xlabel('Number of slices')
-plt.ylabel('Number of examinations')
-plt.title('Histogram of the number of slices')
-plt.grid(True)
-plt.savefig('slice_histogram.png', bbox_inches='tight')
+#plt.hist(num_slices_histogram, bins=list(range(1, 80)), density=False,
+#         facecolor='b', alpha=0.75)
+#plt.xlabel('Number of slices')
+#plt.ylabel('Number of examinations')
+#plt.title('Histogram of the number of slices')
+#plt.grid(True)
+#plt.savefig('slice_histogram.png', bbox_inches='tight')
 
 print(result_dict)
 mean = sum(num_slices_histogram) / len(num_slices_histogram)
@@ -179,3 +196,18 @@ for v in num_slices_histogram:
   variance += (v - mean)**2
 variance /= (len(num_slices_histogram) - 1)
 print("Variance num slices: {}".format(variance))
+print('Mean num lesions: {}'.format(np.mean(num_lesions)))
+print('Total number of lesions: {}'.format(np.sum(num_lesions)))
+print('1 Lesion: {}'.format(np.sum(np.array(num_lesions) == 1)))
+print('2 Lesions: {}'.format(np.sum(np.array(num_lesions) == 2)))
+print('3 Lesions: {}'.format(np.sum(np.array(num_lesions) == 3)))
+print('4 Lesions: {}'.format(np.sum(np.array(num_lesions) == 4)))
+print('More Lesions: {}'.format(np.sum(np.array(num_lesions) > 4)))
+
+plt.hist(num_lesions, bins=list(range(1, 10)), density=False,
+         facecolor='b', alpha=0.75)
+plt.xlabel('Number of lesions')
+plt.ylabel('Number of image slices')
+plt.title('Histogram of the number of slices')
+plt.grid(True)
+plt.savefig('num_lesions_histogram.png', bbox_inches='tight')

@@ -35,7 +35,7 @@ def _loss(labels, logits, loss_name, weight, is_pos_weight):
     logits = tf.squeeze(logits, axis=1)
     if is_pos_weight:
       return tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(
-        labels=tf.cast(labels, dtype=tf.float32), logits=logits,
+        targets=tf.cast(labels, dtype=tf.float32), logits=logits,
         pos_weight=weight))
     else:
       loss = tf.nn.sigmoid_cross_entropy_with_logits(
