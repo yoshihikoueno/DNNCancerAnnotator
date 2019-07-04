@@ -203,6 +203,7 @@ print('Total number of lesions: {}'.format(np.sum(num_lesions)))
 print('1 Lesion: {}'.format(np.sum(np.array(num_lesions) == 1)))
 print('2 Lesions: {}'.format(np.sum(np.array(num_lesions) == 2)))
 print('3 Lesions: {}'.format(np.sum(np.array(num_lesions) == 3)))
+print(np.array(num_lesions_patients)[np.where(np.array(num_lesions) == 3)[0]])
 
 print('4 Lesions: {}'.format(np.sum(np.array(num_lesions) == 4)))
 print(np.array(num_lesions_patients)[np.where(np.array(num_lesions) == 4)[0]])
@@ -210,9 +211,10 @@ print(np.array(num_lesions_patients)[np.where(np.array(num_lesions) == 4)[0]])
 print('More Lesions: {}'.format(np.sum(np.array(num_lesions) > 4)))
 print(np.array(num_lesions_patients)[np.where(np.array(num_lesions) > 4)[0]])
 
-plt.hist(num_lesions, bins=list(range(1, 10)), density=False,
+plt.hist(num_lesions, bins=list(range(0, 5)), density=False,
          facecolor='b', alpha=0.75)
 plt.xlabel('Number of lesions')
+plt.xticks([0, 1, 2, 3, 4])
 plt.ylabel('Number of image slices')
 plt.title('Histogram of the number of slices')
 plt.grid(True)

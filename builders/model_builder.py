@@ -363,7 +363,6 @@ def get_model_fn(pipeline_config, result_folder, dataset_folder, dataset_info,
   else:
     file_names = dataset_info[
       standard_fields.PickledDatasetInfo.file_names][eval_split_name]
-    np.random.shuffle(file_names)
 
     patient_ids = dataset_info[
       standard_fields.PickledDatasetInfo.patient_ids][eval_split_name]
