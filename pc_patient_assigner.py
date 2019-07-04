@@ -24,7 +24,7 @@ args = parser.parse_args()
 
 def _check_for_lesion(annotation_file):
   img = Image.open(annotation_file)
-  np_img = np.array(img)
+  np_img = np.array(img).astype(np.int32)
 
   bool_mask = np.greater(np_img[:, :, 0] - np_img[:, :, 1], 200)
 

@@ -39,7 +39,7 @@ result_dict['num_slices_with_lesion'] = 0
 
 num_slices_histogram = []
 num_lesions = []
-
+num_lesions_patients = []
 
 def has_holes(slice_indices):
   i0 = slice_indices[0]
@@ -53,7 +53,7 @@ def has_holes(slice_indices):
 
 
 def has_lesion(image):
-  np_img = np.array(image)
+  np_img = np.array(image).astype(np.int32)
 
   bool_mask = np.greater(np_img[:, :, 0] - np_img[:, :, 1], 200)
 
@@ -61,7 +61,7 @@ def has_lesion(image):
 
 
 def count_lesions(annotation_image):
-  np_img = np.array(annotation_image)
+  np_img = np.array(annotation_image).astype(np.int32)
 
   annotation_mask = np.greater(np_img[:, :, 0] - np_img[:, :, 1], 200)
 
@@ -131,6 +131,8 @@ def walk_dir(directory, is_old, id_prefix, result_dict, annotation_dir=None):
             num_lesions.append(lesion_count)
           else:
             num_lesions.append(0)
+          num_lesions_patients.append('{}_{}'.format(patient_id,
+                                                     slice_indices[-1]))
         if size not in result_dict['image_size_tuple_to_num']:
           result_dict['image_size_tuple_to_num'][size] = 0
         result_dict['image_size_tuple_to_num'][size] += 1
@@ -201,8 +203,12 @@ print('Total number of lesions: {}'.format(np.sum(num_lesions)))
 print('1 Lesion: {}'.format(np.sum(np.array(num_lesions) == 1)))
 print('2 Lesions: {}'.format(np.sum(np.array(num_lesions) == 2)))
 print('3 Lesions: {}'.format(np.sum(np.array(num_lesions) == 3)))
+
 print('4 Lesions: {}'.format(np.sum(np.array(num_lesions) == 4)))
+print(np.array(num_lesions_patients)[np.where(np.array(num_lesions) == 4)[0]])
+
 print('More Lesions: {}'.format(np.sum(np.array(num_lesions) > 4)))
+print(np.array(num_lesions_patients)[np.where(np.array(num_lesions) > 4)[0]])
 
 plt.hist(num_lesions, bins=list(range(1, 10)), density=False,
          facecolor='b', alpha=0.75)
