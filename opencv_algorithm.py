@@ -63,20 +63,29 @@ def run():
     circles = cv2.HoughCircles(contrast, cv2.HOUGH_GRADIENT, 1.08, 200, param1=200,
                                param2=40, minRadius=20, maxRadius=60)
     circles = np.uint16(np.around(circles))
-    
+
+    cv2.imshow("Circles", circles)
     areas = np.ones_like(original_image, dtype=np.uint8)
     
     for c in circles[0]:
-      cv2.circle(areas, (c[0], c[1]), c[2]+15, (2, 2, 2), -1)
-      cv2.circle(areas, (c[0], c[1]), c[2]+15, (0, 0, 0), 15)
-    cv2.imshow("Areas", areas * 50)
-    print(areas.dtype)
+      cv2.circle(areas, (c[0], c[1]), c[2]+15, (255, 255, 255), -1)
+      #cv2.circle(areas, (c[0], c[1]), c[2]+15, (0, 0, 0), 15)
+    cv2.imshow("Areas", areas)
 
     areas = areas[:,:,0]
     
     areas = np.int32(areas)
     markers = cv2.watershed(cv2.cvtColor(threshold, cv2.COLOR_GRAY2BGR), areas)
     original_image[markers == -1] = [0, 0, 255]
+
+    print(markers)
+    exit(1)
+
+    final = np.zeros_like(original_image, dtype=np.uint8)
+    cv2.fillPoly(final, pts=[markers], color=[255, 255, 255])
+
+    cv2.imshow(final)
+
 
     cv2.imshow("Watershed", original_image)
 

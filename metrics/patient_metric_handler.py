@@ -11,11 +11,12 @@ from utils import image_utils
 
 class Exam():
   def __init__(self, exam_id, statistics, num_lesions, froc_region_cm_values,
-               num_slices, calc_froc):
+               num_slices, calc_froc, num_slices_with_cancer):
     self.exam_id = exam_id
     self.statistics = statistics
     self.num_lesions = num_lesions
     self.num_slices = num_slices
+    self.num_slices_with_cancer = num_slices_with_cancer
     assert(self.num_slices > 0)
     self.froc_region_cm_values = froc_region_cm_values
     self.calc_froc = calc_froc
@@ -27,24 +28,14 @@ class Exam():
 
     self.num_lesions += num_lesions
     self.num_slices += 1
+    if num_lesions > 0:
+      self.num_slices_with_cancer += 1
 
     if self.calc_froc:
       for k, threshold_values in froc_region_cm_values.items():
         assert(k in self.froc_region_cm_values)
         for i, v in enumerate(threshold_values):
           self.froc_region_cm_values[k][i] += v
-
-  def get_normalized_num_lesions(self):
-    return float(self.num_lesions) / float(self.num_slices)
-
-  def get_normalized_froc_region_cm_values(self):
-    normalized_froc_values = dict()
-    for k, v in self.froc_region_cm_values.items():
-      normalized_froc_values[k] = []
-      for e in v:
-        normalized_froc_values.append(float(e) / self.num_slices)
-
-    return normalized_froc_values
 
 
 class Patient():
@@ -59,32 +50,32 @@ class Patient():
       self.exams[exam_id] = Exam(
         exam_id=exam_id, statistics=statistics, num_lesions=num_lesions,
         froc_region_cm_values=froc_region_cm_values, num_slices=1,
-        calc_froc=self.calc_froc)
+        calc_froc=self.calc_froc,
+        num_slices_with_cancer=1 if num_lesions > 0 else 0)
     else:
       self.exams[exam_id].add_sample(
         statistics=statistics, num_lesions=num_lesions,
         froc_region_cm_values=froc_region_cm_values)
 
   def set_exam(self, exam_id, statistics, num_lesions, froc_region_cm_values,
-               num_slices):
+               num_slices, num_slices_with_cancer):
     assert(exam_id not in self.exams)
+    assert((num_lesions > 0) == (num_slices_with_cancer > 0))
 
     self.exams[exam_id] = Exam(
       exam_id=exam_id, statistics=statistics, num_lesions=num_lesions,
       froc_region_cm_values=froc_region_cm_values, num_slices=num_slices,
-      calc_froc=self.calc_froc)
+      calc_froc=self.calc_froc, num_slices_with_cancer=num_slices_with_cancer)
 
 
 class PatientMetricHandler():
-  def __init__(self, eval_3d_as_2d, calc_froc, result_folder, eval_dir, is_3d,
-               lesion_slice_ratio):
+  def __init__(self, eval_3d_as_2d, calc_froc, result_folder, eval_dir, is_3d):
     self.eval_3d_as_2d = eval_3d_as_2d
     self.calc_froc = calc_froc
     self.patients = dict()
     self.result_folder = result_folder
     self.eval_dir = eval_dir
     self.is_3d = is_3d
-    self.lesion_slice_ratio = lesion_slice_ratio
 
   def set_sample(self, patient_id, exam_id, statistics, num_lesions,
                  froc_region_cm_values):
@@ -96,7 +87,7 @@ class PatientMetricHandler():
       froc_region_cm_values=froc_region_cm_values)
 
   def set_exam(self, patient_id, exam_id, statistics, num_lesions,
-               froc_region_cm_values, num_slices):
+               froc_region_cm_values, num_slices, num_slices_with_cancer):
     if (patient_id not in self.patients):
       self.patients[patient_id] = Patient(patient_id, calc_froc=self.calc_froc)
 
@@ -112,7 +103,8 @@ class PatientMetricHandler():
     self.patients[patient_id].set_exam(
       exam_id=exam_id, statistics=statistics,
       num_lesions=num_lesions,
-      froc_region_cm_values=froc_region_cm_values, num_slices=num_slices)
+      froc_region_cm_values=froc_region_cm_values, num_slices=num_slices,
+      num_slices_with_cancer=num_slices_with_cancer)
     logging.info("Patient {} exam {} finished.".format(patient_id, exam_id))
 
   def evaluate(self, global_step):
@@ -136,22 +128,37 @@ class PatientMetricHandler():
       froc_patient_cm_values = dict()
       num_patient_lesions = 0.0
       for exam_id, exam in patient.exams.items():
-        patient_tp += float(exam.statistics['tp']) / exam.num_slices
-        patient_fn += float(exam.statistics['fn']) / exam.num_slices
+        patient_tp += (
+          float(exam.statistics['tp']) / exam.num_slices_with_cancer) if (
+            exam.num_slices_with_cancer > 0) else 0
+        patient_fn += (
+          float(exam.statistics['fn']) / exam.num_slices_with_cancer) if (
+           exam.num_slices_with_cancer > 0) else 0
         patient_fp += float(exam.statistics['fp']) / exam.num_slices
-        patient_region_tp += float(
-          exam.statistics['region_tp']) / exam.num_slices
-        patient_region_fn += float(
-          exam.statistics['region_fn']) / exam.num_slices
+        patient_region_tp += (
+           float(
+             exam.statistics['region_tp']) / exam.num_slices_with_cancer) if (
+             exam.num_slices_with_cancer > 0) else 0
+        patient_region_fn += (
+          float(
+            exam.statistics['region_fn']) / exam.num_slices_with_cancer) if (
+            exam.num_slices_with_cancer > 0) else 0
         patient_region_fp += float(
           exam.statistics['region_fp']) / exam.num_slices
-        num_patient_lesions += float(exam.num_lesions) / exam.num_slices
+        num_patient_lesions += (
+          float(exam.num_lesions) / exam.num_slices_with_cancer) if (
+            exam.num_slices_with_cancer > 0) else 0
         if self.calc_froc:
           for k, threshold_values in exam.froc_region_cm_values.items():
             if k not in froc_patient_cm_values:
               froc_patient_cm_values[k] = [0.0] * len(threshold_values)
             for i, v in enumerate(threshold_values):
-              froc_patient_cm_values[k][i] += float(v) / exam.num_slices
+              if k == 'fp' or k == 'region_fp':
+                froc_patient_cm_values[k][i] += float(v) / exam.num_slices
+              else:
+                froc_patient_cm_values[k][i] += (
+                  float(v) / exam.num_slices_with_cancer) if (
+                    exam.num_slices_with_cancer > 0) else 0
 
       assert(len(patient.exams.keys()) > 0)
       region_tp += patient_region_tp / len(patient.exams.keys())
@@ -167,9 +174,6 @@ class PatientMetricHandler():
             froc_total_cm_values[k] = [0.0] * len(threshold_values)
           for i, v in enumerate(threshold_values):
             froc_total_cm_values[k][i] += float(v) / len(patient.exams.keys())
-
-    adjusted_fp = 2 * fp * min(self.lesion_slice_ratio, 0.5)
-    adjusted_region_fp = 2 * region_fp * min(self.lesion_slice_ratio, 0.5)
 
     summary_writer = tf.summary.FileWriterCache.get(
       os.path.join(self.result_folder, self.eval_dir))
@@ -235,62 +239,6 @@ class PatientMetricHandler():
     summary.value.add(
       tag='metrics/region_f2_score',
       simple_value=region_f2_score)
-    summary_writer.add_summary(summary, global_step=global_step)
-
-    # Adjusted for lesion ratio metrics
-    adjusted_precision = tp / (tp + adjusted_fp) if (
-      tp + adjusted_fp > 0) else 0
-    summary = tf.Summary()
-    summary.value.add(
-      tag='metrics/adjusted_precision',
-      simple_value=adjusted_precision)
-    summary_writer.add_summary(summary, global_step=global_step)
-
-    adjusted_f1_score = (2 * adjusted_precision * recall / (
-      adjusted_precision + recall)) if (
-        adjusted_precision + recall) > 0 else 0
-    summary = tf.Summary()
-    summary.value.add(
-      tag='metrics/adjusted_f1_score',
-      simple_value=adjusted_f1_score)
-    summary_writer.add_summary(summary, global_step=global_step)
-
-    adjusted_f2_score = (5 * adjusted_precision * recall / (
-      4 * adjusted_precision + recall)) if (
-      (4 * adjusted_precision + recall)) > 0 else 0
-    summary = tf.Summary()
-    summary.value.add(
-      tag='metrics/adjusted_f2_score',
-      simple_value=adjusted_f2_score)
-    summary_writer.add_summary(summary, global_step=global_step)
-
-    adjusted_region_precision = region_tp / (
-      region_tp + adjusted_region_fp) if (
-        region_tp + adjusted_region_fp > 0) else 0
-    summary = tf.Summary()
-    summary.value.add(
-      tag='metrics/adjusted_region_precision',
-      simple_value=adjusted_region_precision)
-    summary_writer.add_summary(summary, global_step=global_step)
-
-    adjusted_region_f1_score = (
-      2 * adjusted_region_precision * region_recall / (
-        adjusted_region_precision + region_recall)) if (
-          adjusted_region_precision + region_recall) > 0 else 0
-    summary = tf.Summary()
-    summary.value.add(
-      tag='metrics/adjusted_region_f1_score',
-      simple_value=adjusted_region_f1_score)
-    summary_writer.add_summary(summary, global_step=global_step)
-
-    adjusted_region_f2_score = (
-      5 * adjusted_region_precision * region_recall / (
-        4 * adjusted_region_precision + region_recall)) if (
-          (4 * adjusted_region_precision + region_recall)) > 0 else 0
-    summary = tf.Summary()
-    summary.value.add(
-      tag='metrics/adjusted_region_f2_score',
-      simple_value=adjusted_region_f2_score)
     summary_writer.add_summary(summary, global_step=global_step)
 
     if self.calc_froc and num_total_lesions > 0:

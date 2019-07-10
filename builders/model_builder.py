@@ -235,10 +235,6 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
 
     hooks = []
     metric_dict = {}
-    lesion_slice_ratio = float(dataset_info[
-      standard_fields.PickledDatasetInfo.split_to_num_slices_with_lesion][
-        eval_split_name]) / len(dataset_info[
-          standard_fields.PickledDatasetInfo.file_names][eval_split_name])
     annotation_mask = tf.cast(tf.squeeze(annotation_mask, axis=-1),
                                 tf.float32)
     if pipeline_config.dataset.tfrecords_type == 'input_3d':
@@ -276,7 +272,7 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
         target_size=(pipeline_config.model.input_image_size_y,
                      pipeline_config.model.input_image_size_x),
         result_folder=result_folder, eval_dir=eval_dir,
-        lesion_slice_ratio=lesion_slice_ratio, froc_thresholds=froc_thresholds)
+        froc_thresholds=froc_thresholds)
 
       vis_hook = session_hooks.VisualizationHook(
         result_folder=result_folder,
@@ -312,8 +308,7 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
         result_folder=result_folder, eval_dir=eval_dir,
         num_lesions=num_lesions,
         froc_region_cm_values=froc_region_cm_values,
-        froc_thresholds=froc_thresholds, calc_froc=calc_froc,
-        lesion_slice_ratio=lesion_slice_ratio)
+        froc_thresholds=froc_thresholds, calc_froc=calc_froc)
 
       hooks.append(vis_hook)
       hooks.append(patient_metric_hook)

@@ -12,11 +12,20 @@ from utils import util_ops
 from metrics import patient_metric_handler
 
 
+def _count_lesion_slices(groundtruth):
+  num_lesion_slices = 0
+  for s in groundtruth:
+    if np.any(s.astype(np.bool)):
+      num_lesion_slices += 1
+
+  return num_lesion_slices
+
+
 class Eval3DHook(tf.train.SessionRunHook):
   def __init__(
       self, groundtruth, prediction, slice_ids, patient_id, exam_id,
       eval_3d_as_2d, patient_exam_id_to_num_slices, calc_froc, target_size,
-      result_folder, eval_dir, lesion_slice_ratio, froc_thresholds):
+      result_folder, eval_dir, froc_thresholds):
     self.groundtruth = groundtruth
     self.prediction = prediction
     self.slice_ids = slice_ids
@@ -44,8 +53,7 @@ class Eval3DHook(tf.train.SessionRunHook):
     self.patient_metric_handler = (
       patient_metric_handler.PatientMetricHandler(
         eval_3d_as_2d=self.eval_3d_as_2d, calc_froc=self.calc_froc,
-        result_folder=result_folder, eval_dir=eval_dir, is_3d=True,
-        lesion_slice_ratio=lesion_slice_ratio))
+        result_folder=result_folder, eval_dir=eval_dir, is_3d=True))
 
     self.eval_ops = list(self._make_eval_op(froc_thresholds))
     self.eval_ops.append(self.groundtruth_op)
@@ -137,11 +145,13 @@ class Eval3DHook(tf.train.SessionRunHook):
                                    self.prediction_op: self.full_prediction})
 
     num_slices = groundtruth.shape[0]
+    num_slices_with_cancer = _count_lesion_slices(groundtruth)
 
     self.patient_metric_handler.set_exam(
       patient_id=self.current_patient_id, exam_id=self.current_exam_id,
       statistics=statistics_dict, num_lesions=num_lesions,
-      froc_region_cm_values=froc_region_cm_values, num_slices=num_slices)
+      froc_region_cm_values=froc_region_cm_values, num_slices=num_slices,
+      num_slices_with_cancer=num_slices_with_cancer)
 
 
 class VisualizationHook(tf.train.SessionRunHook):
@@ -228,7 +238,7 @@ class VisualizationHook(tf.train.SessionRunHook):
 class PatientMetricHook(tf.train.SessionRunHook):
   def __init__(self, statistics_dict, patient_id, exam_id, result_folder,
                eval_dir, num_lesions, froc_region_cm_values, froc_thresholds,
-               calc_froc, lesion_slice_ratio):
+               calc_froc):
     self.statistics_dict = statistics_dict
     self.patient_id = patient_id
     self.exam_id = exam_id
@@ -241,7 +251,7 @@ class PatientMetricHook(tf.train.SessionRunHook):
 
     self.patient_metric_handler = patient_metric_handler.PatientMetricHandler(
       eval_3d_as_2d=False, calc_froc=calc_froc, result_folder=result_folder,
-      eval_dir=eval_dir, is_3d=False, lesion_slice_ratio=lesion_slice_ratio)
+      eval_dir=eval_dir, is_3d=False)
 
   def before_run(self, run_context):
     fetch_list = [self.statistics_dict,
