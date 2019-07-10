@@ -55,9 +55,13 @@ def preprocess(features, val_range, scale_input, model_objective,
 
 
 def apply_data_augmentation(features, data_augmentation_options,
-                            num_parallel_iterations, is_3d):
+                            num_parallel_iterations, is_3d,
+                            only_augment_positive):
   if not data_augmentation_options:
     return features
+
+  original_images = features[standard_fields.InputDataFields.image_decoded]
+  original_gt_masks = features[standard_fields.InputDataFields.annotation_mask]
 
   images = features[standard_fields.InputDataFields.image_decoded]
   gt_masks = features[standard_fields.InputDataFields.annotation_mask]
@@ -121,6 +125,20 @@ def apply_data_augmentation(features, data_augmentation_options,
     else:
       raise ValueError("Unknown data augmentation type! {}".format(
         augmentation_type))
+
+  if only_augment_positive:
+    if is_3d:
+      has_mask = tf.reduce_any(
+        tf.reduce_any(tf.reduce_any(
+          tf.reduce_any(tf.cast(
+            original_gt_masks, tf.bool), axis=-1), axis=-1), axis=-1), axis=-1)
+    else:
+      has_mask = tf.reduce_any(
+        tf.reduce_any(tf.reduce_any(
+          tf.cast(original_gt_masks, tf.bool), axis=-1), axis=-1), axis=-1)
+
+    images = tf.where(has_mask, images, original_images)
+    gt_masks = tf.where(has_mask, gt_masks, original_gt_masks)
 
   features[standard_fields.InputDataFields.image_decoded] = images
   features[standard_fields.InputDataFields.annotation_mask] = gt_masks

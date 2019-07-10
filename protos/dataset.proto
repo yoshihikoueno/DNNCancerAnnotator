@@ -27,4 +27,6 @@ message Dataset {
   optional bool scale_input = 8[default=false];
 
   optional string tfrecords_type = 9[default='regular'];
+
+  optional bool only_augment_positive = 10[default=false];
 }
