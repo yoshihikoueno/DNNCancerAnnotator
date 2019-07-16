@@ -182,13 +182,22 @@ walk_dir(old_dataset_cancer_folder, is_old=True, id_prefix='c',
          annotation_dir=old_dataset_cancer_annotations_folder)
 
 # Plot Histogram
-#plt.hist(num_slices_histogram, bins=list(range(1, 80)), density=False,
-#         facecolor='b', alpha=0.75)
-#plt.xlabel('Number of slices')
-#plt.ylabel('Number of examinations')
-#plt.title('Histogram of the number of slices')
-#plt.grid(True)
-#plt.savefig('slice_histogram.png', bbox_inches='tight')
+#x = []
+#y = np.unique(num_slices_histogram)
+#for u_v in y:
+#  x.append(np.where(np.array(num_slices_histogram) == u_v)[0])
+
+#for i in range(len(x)):
+#  x[i] = np.array(x[i]).size
+
+#plt.bar(x, y, width=1.0, align='edge')
+plt.hist(num_slices_histogram, bins=list(range(1, 80)), density=False,
+         facecolor='b', alpha=0.75)
+plt.xlabel('Number of slices')
+plt.ylabel('Number of examinations')
+plt.title('Histogram for the number of slices.')
+plt.grid(True)
+plt.savefig('slice_histogram.png', bbox_inches='tight')
 
 print(result_dict)
 mean = sum(num_slices_histogram) / len(num_slices_histogram)

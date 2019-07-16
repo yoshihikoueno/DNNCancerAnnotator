@@ -167,9 +167,9 @@ def _random_warp(images, masks, is_3d):
         tf.random_uniform([images.get_shape()[0], num_warp_pts], minval=0,
                           maxval=images.get_shape().as_list()[1]),
         tf.random_uniform([images.get_shape()[0], num_warp_pts], minval=0,
-                          maxval=images.get_shape().as_list()[1]),
+                          maxval=images.get_shape().as_list()[2]),
         tf.random_uniform([images.get_shape()[0], num_warp_pts], minval=0,
-                          maxval=images.get_shape().as_list()[2])], axis=2)
+                          maxval=images.get_shape().as_list()[3])], axis=2)
 
       target_control_pts = tf.stack([
         tf.random_uniform([images.get_shape()[0], num_warp_pts],
