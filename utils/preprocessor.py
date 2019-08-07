@@ -63,8 +63,8 @@ def apply_data_augmentation(features, data_augmentation_options,
   original_images = features[standard_fields.InputDataFields.image_decoded]
   original_gt_masks = features[standard_fields.InputDataFields.annotation_mask]
 
-  images = features[standard_fields.InputDataFields.image_decoded]
-  gt_masks = features[standard_fields.InputDataFields.annotation_mask]
+  images = original_images
+  gt_masks = original_gt_masks
 
   required_dims = 5 if is_3d else 4
   if len(images.get_shape()) != required_dims:
@@ -128,14 +128,11 @@ def apply_data_augmentation(features, data_augmentation_options,
 
   if only_augment_positive:
     if is_3d:
-      has_mask = tf.reduce_any(
-        tf.reduce_any(tf.reduce_any(
-          tf.reduce_any(tf.cast(
-            original_gt_masks, tf.bool), axis=-1), axis=-1), axis=-1), axis=-1)
+      has_mask = tf.reduce_any(tf.cast(original_gt_masks, tf.bool),
+                               axis=[1, 2, 3, 4])
     else:
-      has_mask = tf.reduce_any(
-        tf.reduce_any(tf.reduce_any(
-          tf.cast(original_gt_masks, tf.bool), axis=-1), axis=-1), axis=-1)
+      has_mask = tf.reduce_any(tf.cast(original_gt_masks, tf.bool),
+                               axis=[1, 2, 3])
 
     images = tf.where(has_mask, images, original_images)
     gt_masks = tf.where(has_mask, gt_masks, original_gt_masks)
