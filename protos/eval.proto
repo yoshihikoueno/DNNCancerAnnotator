@@ -20,6 +20,4 @@ message EvalConfig {
   optional bool dilate_groundtruth = 8;
     
   optional int32 groundtruth_dilation_kernel_size = 9;
-
-  optional bool eval_3d_as_2d = 10 [default=true];
 }

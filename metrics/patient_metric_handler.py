@@ -69,8 +69,7 @@ class Patient():
 
 
 class PatientMetricHandler():
-  def __init__(self, eval_3d_as_2d, calc_froc, result_folder, eval_dir, is_3d):
-    self.eval_3d_as_2d = eval_3d_as_2d
+  def __init__(self, calc_froc, result_folder, eval_dir, is_3d):
     self.calc_froc = calc_froc
     self.patients = dict()
     self.result_folder = result_folder
@@ -90,15 +89,6 @@ class PatientMetricHandler():
                froc_region_cm_values, num_slices, num_slices_with_cancer):
     if (patient_id not in self.patients):
       self.patients[patient_id] = Patient(patient_id, calc_froc=self.calc_froc)
-
-    if self.is_3d and self.eval_3d_as_2d:
-      num_lesions = np.sum(num_lesions)
-      for k, v in statistics.items():
-        statistics[k] = np.sum(v)
-
-      if self.calc_froc:
-        for k, v in froc_region_cm_values.items():
-          froc_region_cm_values[k] = np.sum(v, axis=0)
 
     self.patients[patient_id].set_exam(
       exam_id=exam_id, statistics=statistics,

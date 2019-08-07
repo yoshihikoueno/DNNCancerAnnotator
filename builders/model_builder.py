@@ -250,21 +250,21 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
         first_slice_index:first_slice_index + 2]
       slice_ids = slice_ids[first_slice_index: first_slice_index + 2]
       image_file = image_file[first_slice_index: first_slice_index + 2]
-
-    prediction_groundtruth_stack = tf.stack(
-      [scaled_network_output, annotation_mask],
-      axis=1 if pipeline_config.eval_config.eval_3d_as_2d
-      and pipeline_config.dataset.tfrecords_type == 'input_3d' else 0)
+    else:
+      # In the 2D case, we need to add one depth dimension
+      scaled_network_output = tf.expand_dims(scaled_network_output, axis=0)
+      annotation_mask = tf.expand_dims(annotation_mask, axis=0)
+      image_decoded = tf.expand_dims(image_decoded, axis=0)
+      slice_ids = tf.expand_dims(slice_ids, axis=0)
+      image_file = tf.expand_dims(image_file, axis=0)
 
     num_froc_thresholds = 200.0
     froc_thresholds = np.linspace(0.0, 1.0, num=num_froc_thresholds,
                                   endpoint=True, dtype=np.float32)
 
-    if pipeline_config.dataset.tfrecords_type == 'input_3d':
-      eval_3d_hook = session_hooks.Eval3DHook(
+    eval_3d_hook = session_hooks.Eval3DHook(
         groundtruth=annotation_mask, prediction=scaled_network_output,
         slice_ids=slice_ids, patient_id=patient_id,
-        eval_3d_as_2d=pipeline_config.eval_config.eval_3d_as_2d,
         exam_id=exam_id,
         patient_exam_id_to_num_slices=dataset_info[
           standard_fields.PickledDatasetInfo.patient_exam_id_to_num_slices][
@@ -274,7 +274,7 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
         result_folder=result_folder, eval_dir=eval_dir,
         froc_thresholds=froc_thresholds)
 
-      vis_hook = session_hooks.VisualizationHook(
+    vis_hook = session_hooks.VisualizationHook(
         result_folder=result_folder,
         visualization_file_names=visualization_file_names,
         file_name=image_file,
@@ -283,35 +283,8 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
         predicted_mask=scaled_network_output, eval_dir=eval_dir,
         is_3d=True)
 
-      hooks.append(eval_3d_hook)
-      hooks.append(vis_hook)
-    else:
-      (metric_dict, statistics_dict, num_lesions, froc_region_cm_values) = (
-        metric_utils.get_metrics(
-         prediction_groundtruth_stack, parallel_iterations=min(
-           pipeline_config.eval_config.batch_size,
-           util_ops.get_cpu_count()),
-         calc_froc=calc_froc, is_3d=False, thresholds=froc_thresholds))
-
-      vis_hook = session_hooks.VisualizationHook(
-        result_folder=result_folder,
-        visualization_file_names=visualization_file_names,
-        file_name=image_file,
-        image_decoded=image_decoded,
-        annotation_mask=annotation_mask,
-        predicted_mask=scaled_network_output, eval_dir=eval_dir,
-        is_3d=False)
-      patient_metric_hook = session_hooks.PatientMetricHook(
-        statistics_dict=statistics_dict,
-        patient_id=patient_id,
-        exam_id=exam_id,
-        result_folder=result_folder, eval_dir=eval_dir,
-        num_lesions=num_lesions,
-        froc_region_cm_values=froc_region_cm_values,
-        froc_thresholds=froc_thresholds, calc_froc=calc_froc)
-
-      hooks.append(vis_hook)
-      hooks.append(patient_metric_hook)
+    hooks.append(eval_3d_hook)
+    hooks.append(vis_hook)
 
     return tf.estimator.EstimatorSpec(
       mode, loss=total_loss, train_op=train_op,
