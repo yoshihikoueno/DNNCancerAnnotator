@@ -11,7 +11,8 @@ from utils import preprocessor
 
 def _load_existing_tfrecords(directory, split_name, target_dims, dataset_name,
                              dataset_info, is_training, model_objective,
-                             dataset_config, target_depth):
+                             dataset_config, target_depth,
+                             use_2d_input_architecture):
   ids = dataset_info[standard_fields.PickledDatasetInfo.patient_ids][
     split_name]
 
@@ -25,7 +26,8 @@ def _load_existing_tfrecords(directory, split_name, target_dims, dataset_name,
       common_size_factor=dataset_config.prostate_cancer.common_size_factor,
       model_objective=model_objective,
       tfrecords_type=dataset_config.tfrecords_type,
-      target_depth=target_depth)
+      target_depth=target_depth,
+      use_2d_input_architecture=use_2d_input_architecture)
   else:
     assert(False)
 
@@ -72,13 +74,14 @@ def build_dataset(dataset_name, directory,
                   shuffle_buffer_size, is_training, dataset_info,
                   dataset_config, is_gan_model, data_augmentation_options,
                   num_parallel_iterations, model_objective,
-                  target_depth):
+                  target_depth, use_2d_input_architecture):
   assert split_name in standard_fields.SplitNames.available_names
 
   dataset = _load_existing_tfrecords(
     directory, split_name, target_dims, dataset_name,
     dataset_info, is_training=is_training, dataset_config=dataset_config,
-    model_objective=model_objective, target_depth=target_depth)
+    model_objective=model_objective, target_depth=target_depth,
+    use_2d_input_architecture=use_2d_input_architecture)
 
   if shuffle and is_training:
     dataset = dataset.apply(tf.data.experimental.shuffle_and_repeat(

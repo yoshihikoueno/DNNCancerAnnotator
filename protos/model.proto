@@ -35,4 +35,6 @@ message Model {
   optional bool conv_locally_connected = 15[default=false];
 
   optional string model_objective = 12[default='segmentation'];
+
+  optional bool use_2d_input_architecture = 17;
 }

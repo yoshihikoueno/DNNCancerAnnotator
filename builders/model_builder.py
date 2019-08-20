@@ -80,6 +80,13 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
   else:
     image_batch = features[standard_fields.InputDataFields.image_preprocessed]
 
+  if (pipeline_config.dataset.tfrecords_type == 'input_3d'
+      and pipeline_config.model.use_2d_input_architecture):
+    # Merge depth and batch dimensions
+    image_batch_shape = tf.shape(image_batch)
+    image_batch = tf.reshape(image_batch, tf.concat(
+      [[-1], image_batch_shape[2:]], axis=0))
+
   network_output = feature_extractor.build_network(
     image_batch, is_training=mode == tf.estimator.ModeKeys.TRAIN,
     num_classes=num_classes,
@@ -95,7 +102,11 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
     annotation_mask_batch = features[
       standard_fields.InputDataFields.annotation_mask]
 
-  print(annotation_mask_batch)
+    if (pipeline_config.dataset.tfrecords_type == 'input_3d'
+       and pipeline_config.model.use_2d_input_architecture):
+      # Merge depth and batch dimensions
+      annotation_mask_batch = tf.reshape(annotation_mask_batch, tf.concat(
+        [[-1], tf.shape(annotation_mask_batch)[2:]], axis=0))
 
   if mode == tf.estimator.ModeKeys.TRAIN:
     # Record model variable summaries
@@ -210,8 +221,15 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
                                       scaffold=scaffold)
   elif mode == tf.estimator.ModeKeys.EVAL:
     image_decoded = features[standard_fields.InputDataFields.image_decoded]
+    if (pipeline_config.dataset.tfrecords_type == 'input_3d'
+       and pipeline_config.model.use_2d_input_architecture):
+      # Merge depth and batch dimensions
+      image_decoded = tf.reshape(image_decoded, tf.concat(
+        [[-1], tf.shape(image_decoded)[2:]], axis=0))
+
     if pipeline_config.train_config.loss.name == 'sigmoid':
-      if pipeline_config.dataset.tfrecords_type == 'input_3d':
+      if (pipeline_config.dataset.tfrecords_type == 'input_3d'
+          and not pipeline_config.model.use_2d_input_architecture):
         scaled_network_output = tf.nn.sigmoid(network_output)[:, :, :, :, 0]
       else:
         scaled_network_output = tf.nn.sigmoid(network_output)[:, :, :, 0]
@@ -221,23 +239,23 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
       assert(network_output.get_shape().as_list()[-1] == 2)
       scaled_network_output = tf.nn.softmax(network_output)[:, :, :, 1]
 
-    scaled_network_output = tf.squeeze(scaled_network_output, axis=0)
-    annotation_mask = tf.squeeze(annotation_mask_batch, axis=0)
-    image_decoded = tf.squeeze(image_decoded, axis=0)
-    slice_ids = tf.squeeze(
-      features[standard_fields.InputDataFields.slice_id], axis=0)
-    patient_id = tf.squeeze(
-      features[standard_fields.InputDataFields.patient_id], axis=0)
-    exam_id = tf.squeeze(
-      features[standard_fields.InputDataFields.examination_name], axis=0)
-    image_file = tf.squeeze(
-      features[standard_fields.InputDataFields.image_file], axis=0)
-
     hooks = []
     metric_dict = {}
-    annotation_mask = tf.cast(tf.squeeze(annotation_mask, axis=-1),
-                                tf.float32)
-    if pipeline_config.dataset.tfrecords_type == 'input_3d':
+    annotation_mask = tf.cast(tf.squeeze(annotation_mask_batch, axis=-1),
+                                    tf.float32)
+    if (pipeline_config.dataset.tfrecords_type == 'input_3d'
+        and not pipeline_config.model.use_2d_input_architecture):
+      scaled_network_output = tf.squeeze(scaled_network_output, axis=0)
+      annotation_mask = tf.squeeze(annotation_mask, axis=0)
+      image_decoded = tf.squeeze(image_decoded, axis=0)
+      slice_ids = tf.squeeze(
+        features[standard_fields.InputDataFields.slice_id], axis=0)
+      patient_id = tf.squeeze(
+        features[standard_fields.InputDataFields.patient_id], axis=0)
+      exam_id = tf.squeeze(
+        features[standard_fields.InputDataFields.examination_name], axis=0)
+      image_file = tf.squeeze(
+        features[standard_fields.InputDataFields.image_file], axis=0)
 
       # We are only interested in evaluating the center two slices
       num_slices = scaled_network_output.get_shape().as_list()[0]
@@ -251,12 +269,21 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
       slice_ids = slice_ids[first_slice_index: first_slice_index + 2]
       image_file = image_file[first_slice_index: first_slice_index + 2]
     else:
-      # In the 2D case, we need to add one depth dimension
-      scaled_network_output = tf.expand_dims(scaled_network_output, axis=0)
-      annotation_mask = tf.expand_dims(annotation_mask, axis=0)
-      image_decoded = tf.expand_dims(image_decoded, axis=0)
-      slice_ids = tf.expand_dims(slice_ids, axis=0)
-      image_file = tf.expand_dims(image_file, axis=0)
+      slice_ids = features[standard_fields.InputDataFields.slice_id]
+      patient_id = features[standard_fields.InputDataFields.patient_id]
+      exam_id = features[standard_fields.InputDataFields.examination_name]
+      image_file = features[standard_fields.InputDataFields.image_file]
+
+      if (pipeline_config.dataset.tfrecords_type == 'input_3d'
+        and pipeline_config.model.use_2d_input_architecture):
+        # Merge depth and batch dimensions
+        slice_ids = tf.reshape(slice_ids, tf.concat(
+          [[-1], tf.shape(slice_ids)[2:]], axis=0))
+        image_file = tf.reshape(image_file, tf.concat(
+          [[-1], tf.shape(image_file)[2:]], axis=0))
+
+        exam_id = tf.squeeze(exam_id, axis=0)
+        patient_id = tf.squeeze(patient_id, axis=0)
 
     num_froc_thresholds = 200.0
     froc_thresholds = np.linspace(0.0, 1.0, num=num_froc_thresholds,
@@ -362,7 +389,8 @@ def get_model_fn(pipeline_config, result_folder, dataset_folder, dataset_info,
       down_activation=pipeline_config.model.unet.down_activation,
       up_activation=pipeline_config.model.unet.up_activation,
       norm_first=pipeline_config.model.norm_first,
-      is_3d=pipeline_config.dataset.tfrecords_type == 'input_3d',
+      is_3d=(pipeline_config.dataset.tfrecords_type == 'input_3d'
+             and not pipeline_config.model.use_2d_input_architecture),
       conv_locally_connected=pipeline_config.model.conv_locally_connected)
     return functools.partial(_general_model_fn,
                              pipeline_config=pipeline_config,

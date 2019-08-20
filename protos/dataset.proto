@@ -26,7 +26,11 @@ message Dataset {
   // Should input have zero mean and unit variance?
   optional bool scale_input = 8[default=false];
 
+  // regular or input_3d
   optional string tfrecords_type = 9[default='regular'];
 
   optional bool only_augment_positive = 10[default=false];
+
+  optional bool use_only_partial_labels = 12[default=false];
+  optional float partial_labels_fraction = 11[default=1.0];
 }

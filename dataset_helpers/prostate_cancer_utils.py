@@ -796,7 +796,8 @@ def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
                                     patient_ids, is_training,
                                     dilate_groundtruth, dilate_kernel_size,
                                     common_size_factor, model_objective,
-                                    tfrecords_type, target_depth):
+                                    tfrecords_type, target_depth,
+                                    use_2d_input_architecture):
   tfrecords_folder = os.path.join(directory, 'tfrecords', split_name)
   assert(os.path.exists(tfrecords_folder))
 
@@ -856,7 +857,7 @@ def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
       dataset = dataset.map(deserialize_and_decode_fn,
                             num_parallel_calls=util_ops.get_cpu_count())
 
-      if not is_training:
+      if not is_training and not use_2d_input_architecture:
         dataset = dataset.flat_map(
           lambda e: _create_sliding_window_eval_dataset(
             e, target_dims=target_dims, target_depth=target_depth))
