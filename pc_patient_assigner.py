@@ -1,6 +1,7 @@
 import argparse
 import os
 import pickle
+import copy
 
 import numpy as np
 from PIL import Image
@@ -18,6 +19,8 @@ parser.add_argument('--only_in_train', action='store_true',
                     help='Only cancer only for train set')
 parser.add_argument('--seed', required=True, type=int)
 parser.add_argument('--dry_run', action='store_true')
+# The ratio of labeled slices to keep for the train set
+parser.add_argument('--label_keep_ratio', default=1.0, type=float)
 
 args = parser.parse_args()
 
@@ -104,9 +107,40 @@ def _make_dataset_splits(data, train_ratio, val_ratio, test_ratio):
   return train_split, val_split, test_split
 
 
+def _strip_labels(train_cancer_set, keep_ratio):
+  result_set = copy.deepcopy(train_cancer_set)
+  if keep_ratio >= 1.0:
+    return train_cancer_set
+
+  for patient_id, exam_data in train_cancer_set.items():
+    for exam_id, entries in exam_data.items():
+      labels = list(zip(*entries))[2]
+      num_labeled_slices = sum(labels)
+      positive_slice_indices = np.where(np.array(labels) == 1)[0]
+      assert(num_labeled_slices > 0)
+      target_num_labeled_slices = int(np.ceil(num_labeled_slices * keep_ratio))
+
+      num_labels_to_remove = num_labeled_slices - target_num_labeled_slices
+      assert(num_labels_to_remove >= 0)
+      if num_labels_to_remove == 0:
+        continue
+
+      # Randomly sample num_labels_to_remove indices from positive_slice_indices
+      # Then exchange their annotation file path with the original image path
+      # Also, change the label
+      selected_indices = np.random.choice(
+        positive_slice_indices, num_labels_to_remove, replace=False)
+      for index in selected_indices:
+        result_set[patient_id][exam_id][index][1] = result_set[
+          patient_id][exam_id][index][0]
+        result_set[patient_id][exam_id][index][2] = 0
+
+  return result_set
+
 # Assign patients to a dataset split
 def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
-                    only_cancer, seed, only_in_train, dry_run):
+                    only_cancer, seed, only_in_train, dry_run,
+                    label_keep_ratio):
   if only_cancer and not only_in_train:
     output_file = os.path.join(
       dataset_folder, 'patient_assignment_{}_{}_{}_{}_only_cancer'.format(
@@ -120,6 +154,9 @@ def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
     output_file = os.path.join(
       dataset_folder, 'patient_assignment_{}_{}_{}_{}'.format(
         train_ratio, val_ratio, test_ratio, seed))
+
+  if label_keep_ratio < 1.0:
+    output_file = '{}_keep_{}'.format(output_file, int(label_keep_ratio * 100))
 
   train_ratio = float(train_ratio) / 100.0
   val_ratio = float(val_ratio) / 100.0
@@ -162,6 +199,8 @@ def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
     healthy_images, train_ratio, val_ratio, test_ratio)
   cancer_train, cancer_val, cancer_test = _make_dataset_splits(
     cancer_images, train_ratio, val_ratio, test_ratio)
+
+  cancer_train = _strip_labels(cancer_train, label_keep_ratio)
 
   print("Healthy Patient Train/Val/Test: {}/{}/{}".format(
     len(healthy_train), len(healthy_val), len(healthy_test)))
@@ -289,4 +328,5 @@ if __name__ == '__main__':
   assign_patients(args.dataset_dir, train_ratio=train_ratio,
                   val_ratio=val_ratio, test_ratio=test_ratio,
                   only_cancer=args.only_cancer, seed=args.seed,
-                  only_in_train=args.only_in_train, dry_run=args.dry_run)
+                  only_in_train=args.only_in_train, dry_run=args.dry_run,
+                  label_keep_ratio=args.label_keep_ratio)
