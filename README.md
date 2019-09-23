@@ -6,3 +6,16 @@ Estimator API
 
 # Dataset
 Private datasets consists of t2-weighted MRI images.
+
+# Models
+ * UNet
+ * Pix2Pix
+ * GAN
+ ![](https://lmb.informatik.uni-freiburg.de/people/ronneber/u-net/u-net-architecture.png)
+
+# Data augmentations
+ * Flipping
+ * Warping
+
+# Data Format
+ Compatible with both 2D and 3D
