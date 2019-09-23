@@ -7,7 +7,7 @@ Estimator API
 ## Dataset
 Private datasets consists of t2-weighted MRI images.
 
-#3 Models
+## Models
  * UNet
  * Pix2Pix
  * GAN
