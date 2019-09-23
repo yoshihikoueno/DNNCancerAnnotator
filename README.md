@@ -18,3 +18,27 @@ Private datasets consists of t2-weighted MRI images.
 
 ## Data Format
  Compatible with both 2D and 3D
+
+## Getting Started
+### Install
+ ```bash
+ # Clone
+ git clone https://github.com/yoshihikoueno/DNNCancerAnnotator
+ cd DNNCancerAnnotator
+ python3 setup.py
+ ```
+
+### Train, Evaluate, Predict
+ ```bash
+ # train
+ python3 -m runs.train
+
+ # see the usage
+ python3 -m runs.train -h
+
+ # evaluate
+ python3 -m runs.evaluate
+
+ # predict
+ python3 -m runs.predict
+ ```
