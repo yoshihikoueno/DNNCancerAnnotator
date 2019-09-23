@@ -11,7 +11,6 @@ Private datasets consists of t2-weighted MRI images.
  * UNet
  * Pix2Pix
  * GAN
- ![ ](https://lmb.informatik.uni-freiburg.de/people/ronneber/u-net/u-net-architecture.png)
 
 # Data augmentations
  * Flipping
