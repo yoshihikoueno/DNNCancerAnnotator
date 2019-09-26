@@ -1,7 +1,10 @@
 from tensorflow/tensorflow:1.13.1-gpu-py3
-run install_proto.sh
+run apt update && apt install --no-install-recommends -y git libopencv-dev
 run git clone --single-branch --branch dev https://github.com/yoshihikoueno/DNNCancerAnnotator
 workdir DNNCancerAnnotator
+run pip3 install -r requirements.txt
+run chmod +x ./install_proto.sh
+run ./install_proto.sh
 run protc --python_out=./ ./protos/*.prot
 cmd python3 -m runs.train\
     --num_train_steps 2000\
