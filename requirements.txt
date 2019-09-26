@@ -13,7 +13,6 @@ Markdown
 matplotlib
 numpy
 Pillow
-pkg-resources
 protobuf
 pyparsing
 python-dateutil
