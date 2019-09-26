@@ -11,4 +11,4 @@ run protoc --python_out=./ ./protos/*.proto
 cmd python3 -m runs.train\
     --num_train_steps 2000\
     --pipeline_config_file default.config\
-    --result_dir /kw_resources/results
+    --result_dir /kw_resources/results/annotation
