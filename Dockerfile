@@ -6,7 +6,7 @@ run pip3 install -U pip
 run pip3 install -r requirements.txt
 run chmod +x ./install_proto.sh
 run ./install_proto.sh
-run protc --python_out=./ ./protos/*.prot
+run protoc --python_out=./ ./protos/*.prot
 cmd python3 -m runs.train\
     --num_train_steps 2000\
     --pipeline_config_file default.config\
