@@ -2,6 +2,7 @@ from tensorflow/tensorflow:1.13.1-gpu-py3
 run apt update && apt install --no-install-recommends -y git libopencv-dev
 run git clone --single-branch --branch dev https://github.com/yoshihikoueno/DNNCancerAnnotator
 workdir DNNCancerAnnotator
+run pip3 install -U pip
 run pip3 install -r requirements.txt
 run chmod +x ./install_proto.sh
 run ./install_proto.sh
