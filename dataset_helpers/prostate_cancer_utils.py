@@ -881,13 +881,13 @@ def decode_mri(image_file, target_nchannels=1, encoded=False):
 
     if target_nchannels == 1:
         image = tf.image.decode_image(image_file)
+        pdb.set_trace()
         nchannels = tf.shape(image)[-1]
         image = tf.cond(
             tf.equal(nchannels, 1),
             lambda: squash_8bits(image),
             lambda: squash_12bits(image),
         )
-        pdb.set_trace()
         image.set_shape([*image.get_shape(), target_nchannels])
     else: NotImplementedError
     return image
