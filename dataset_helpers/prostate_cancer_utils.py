@@ -895,6 +895,9 @@ def squash_8bits(image):
     '''
     with tf.control_dependencies([tf.assert_equal(tf.shape(image)[-1], 1)]):
         squashed_image = tf.cast(image, tf.float32)
+
+        shape = squashed_image.get_shape()
+        squashed_image.set_shape([*shape[:-1], 1])
     return squashed_image
 
 def squash_12bits(image):
@@ -911,4 +914,7 @@ def squash_12bits(image):
         image = image[:, :, 0] + max8bits * image[:, :, 1]
 
         squashed_image = image * max8bits / max12bits
+
+        shape = squashed_image.get_shape()
+        squashed_image.set_shape([*shape[:-1], 3])
     return squashed_image
