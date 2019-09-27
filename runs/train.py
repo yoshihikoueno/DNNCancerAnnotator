@@ -119,7 +119,7 @@ def main(_):
     estimator.train(train_input_fn, max_steps=FLAGS.num_train_steps)
   else:
     if pipeline_config.train_config.early_stopping:
-      early_stop_hook = tf.contrib.estimator.stop_if_no_decrease_hook(
+      early_stop_hook = tf.estimator.experimental.stop_if_no_decrease_hook(
         estimator=estimator, metric_name='loss',
         max_steps_without_decrease=pipeline_config.
         train_config.early_stopping_max_steps_without_decrease,
