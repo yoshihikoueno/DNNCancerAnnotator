@@ -151,6 +151,7 @@ def _decode_example(example_dict, target_dims, dilate_groundtruth, dilate_kernel
 
     annotation_string = example_dict[standard_fields.TfExampleFields.annotation_encoded]
     annotation_decoded = tf.cast(tf.image.decode_jpeg(annotation_string, channels=3), tf.float32)
+    pdb.set_trace()
 
     same_size_assert = tf.Assert(
         tf.reduce_all(tf.equal(tf.shape(annotation_decoded)[:2], tf.shape(image_decoded)[:2])),
@@ -879,7 +880,6 @@ def decode_mri(image_file, target_nchannels=1, encoded=False):
     if not encoded: image_file = tf.read_file(image_file)
 
     if target_nchannels == 1:
-        pdb.set_trace()
         image = tf.image.decode_image(image_file)
         nchannels = tf.shape(image)[-1]
         image = tf.cond(
@@ -887,9 +887,6 @@ def decode_mri(image_file, target_nchannels=1, encoded=False):
             lambda: squash_8bits(image),
             lambda: squash_12bits(image),
         )
-
-        shape = image.get_shape()
-        image.set_shape([*shape[:-1], 1])
     else: NotImplementedError
     return image
 
