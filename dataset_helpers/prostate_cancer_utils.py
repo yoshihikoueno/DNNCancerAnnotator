@@ -880,7 +880,7 @@ def decode_mri(image_file, target_nchannels=1, encoded=False):
     if not encoded: image_file = tf.read_file(image_file)
 
     if target_nchannels == 1:
-        image = tf.image.decode_image(image_file)
+        image = tf.image.decode_image(image_file, expand_animations=False)
         pdb.set_trace()
         nchannels = tf.shape(image)[-1]
         image = tf.cond(
