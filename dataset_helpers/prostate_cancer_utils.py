@@ -151,7 +151,6 @@ def _decode_example(example_dict, target_dims, dilate_groundtruth, dilate_kernel
 
     annotation_string = example_dict[standard_fields.TfExampleFields.annotation_encoded]
     annotation_decoded = tf.cast(tf.image.decode_jpeg(annotation_string, channels=3), tf.float32)
-    pdb.set_trace()
 
     same_size_assert = tf.Assert(
         tf.reduce_all(tf.equal(tf.shape(annotation_decoded)[:2], tf.shape(image_decoded)[:2])),
@@ -203,6 +202,7 @@ def _decode_3d_example(example_dict, target_dims, dilate_groundtruth,
                                       dilate_kernel_size=dilate_kernel_size),
         parallel_iterations=util_ops.get_cpu_count(),
         elems=annotation_decoded, dtype=tf.int32)
+    pdb.set_trace()
 
     image_files = sequence_features[standard_fields.TfExampleFields.image_file].values
     annotation_files = sequence_features[standard_fields.TfExampleFields.annotation_file].values
