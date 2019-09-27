@@ -887,6 +887,8 @@ def decode_mri(image_file, target_nchannels=1, encoded=False):
             lambda: squash_8bits(image),
             lambda: squash_12bits(image),
         )
+        pdb.set_trace()
+        image.set_shape([*image.get_shape(), target_nchannels])
     else: NotImplementedError
     return image
 
