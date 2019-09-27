@@ -5,6 +5,7 @@ import logging
 import pickle
 import itertools
 import shutil
+import pdb
 
 # external
 import numpy as np
@@ -878,6 +879,7 @@ def decode_mri(image_file, target_nchannels=1, encoded=False):
     if not encoded: image_file = tf.read_file(image_file)
 
     if target_nchannels == 1:
+        pdb.set_trace()
         image = tf.image.decode_image(image_file)
         nchannels = tf.shape(image)[-1]
         image = tf.cond(
