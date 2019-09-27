@@ -6,8 +6,6 @@ gast
 google-pasta
 grpcio
 h5py
-Keras-Applications
-Keras-Preprocessing
 kiwisolver
 Markdown
 matplotlib
@@ -18,9 +16,6 @@ pyparsing
 python-dateutil
 regex
 six
-tensorboard
-tensorflow-estimator
-tensorflow-gpu
 termcolor
 Werkzeug
 wrapt

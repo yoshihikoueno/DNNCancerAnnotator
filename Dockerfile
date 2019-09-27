@@ -1,5 +1,5 @@
 from tensorflow/tensorflow:1.14.0-gpu-py3
-run apt update && apt install --no-install-recommends -y git libopencv-dev
+run DEBIAN_FRONTEND=noninteractive apt update && apt install --no-install-recommends -y git libopencv-dev
 run git clone --single-branch --branch dev https://github.com/yoshihikoueno/DNNCancerAnnotator
 workdir DNNCancerAnnotator
 run pip3 install -U pip
