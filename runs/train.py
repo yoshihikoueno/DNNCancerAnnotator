@@ -3,6 +3,7 @@ import os
 import sys
 import pdb
 from shutil import copy
+import pdb
 
 import numpy as np
 import tensorflow as tf
@@ -74,7 +75,7 @@ def main(_):
 
   if not resume_training:
     if not os.path.exists(FLAGS.result_dir):
-      os.mkdir(FLAGS.result_dir)
+      os.makedirs(FLAGS.result_dir)
     copy(pipeline_config_file, os.path.join(FLAGS.result_dir,
                                             'pipeline.config'))
 
@@ -102,7 +103,7 @@ def main(_):
   eval_dir = os.path.join(FLAGS.result_dir,
                           'eval_' + standard_fields.SplitNames.val)
   if not FLAGS.no_eval and not os.path.exists(eval_dir):
-    os.mkdir(eval_dir)
+    os.makedirs(eval_dir, exist_ok=True)
     copy(pipeline_config_file, eval_dir)
 
   estimator = estimator_builder.build_estimator(
@@ -173,7 +174,7 @@ def main(_):
     train_eval_dir = os.path.join(FLAGS.result_dir,
                                   'eval_' + standard_fields.SplitNames.train)
     if not os.path.exists(train_eval_dir):
-      os.mkdir(train_eval_dir)
+      os.makedirs(train_eval_dir, exist_ok=True)
       copy(pipeline_config_file, train_eval_dir)
 
     estimator = estimator_builder.build_estimator(

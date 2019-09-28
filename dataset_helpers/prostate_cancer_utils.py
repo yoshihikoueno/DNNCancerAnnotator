@@ -886,7 +886,6 @@ def decode_mri(image_file, target_nchannels=1, encoded=False):
             lambda: squash_8bits(image),
             lambda: squash_12bits(image),
         )
-        image.set_shape([*image.get_shape(), target_nchannels])
     else: NotImplementedError
     return image
 
@@ -897,6 +896,7 @@ def squash_8bits(image):
     '''
     with tf.control_dependencies([tf.assert_equal(tf.shape(image)[-1], 1)]):
         squashed_image = tf.cast(image, tf.float32)
+        squashed_image.set_shape([*squashed_image.get_shape()[:-1], 1])
     return squashed_image
 
 def squash_12bits(image):
@@ -914,4 +914,5 @@ def squash_12bits(image):
         image = image[:, :, 0] + max8bits * image[:, :, 1]
 
         squashed_image = image * max8bits / max12bits
+        squashed_image = tf.expand_dims(squashed_image, -1)
     return squashed_image
