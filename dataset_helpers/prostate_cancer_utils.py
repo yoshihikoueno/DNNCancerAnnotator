@@ -202,7 +202,6 @@ def _decode_3d_example(example_dict, target_dims, dilate_groundtruth,
                                       dilate_kernel_size=dilate_kernel_size),
         parallel_iterations=util_ops.get_cpu_count(),
         elems=annotation_decoded, dtype=tf.int32)
-    pdb.set_trace()
 
     image_files = sequence_features[standard_fields.TfExampleFields.image_file].values
     annotation_files = sequence_features[standard_fields.TfExampleFields.annotation_file].values
@@ -881,7 +880,6 @@ def decode_mri(image_file, target_nchannels=1, encoded=False):
 
     if target_nchannels == 1:
         image = tf.image.decode_image(image_file, expand_animations=False)
-        pdb.set_trace()
         nchannels = tf.shape(image)[-1]
         image = tf.cond(
             tf.equal(nchannels, 1),
@@ -907,6 +905,7 @@ def squash_12bits(image):
     return images should fit in range [0.0, 255.0]
     '''
     with tf.control_dependencies([tf.assert_equal(tf.shape(image)[-1], 3)]):
+        pdb.set_trace()
         max8bits = 2.0**8 - 1
         max12bits = 2.0**12 - 1
         image = tf.cast(image, tf.float32)
