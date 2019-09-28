@@ -1,16 +1,15 @@
 FROM tensorflow/tensorflow:1.13.1-gpu-py3
-
 RUN apt-get update && apt-get install -y git protobuf-compiler python3-pil python3-matplotlib python3-pip
-
 RUN pip install connected-components-3d --no-binary :all:
-
-RUN git clone https://github.com/P-Hidringer/NetNextGen
-
-WORKDIR NetNextGen
-
+run git clone --single-branch --branch dev https://github.com/yoshihikoueno/DNNCancerAnnotator
+workdir DNNCancerAnnotator
 RUN protoc protos/*.proto --python_out=.
+CMD python3 -m runs.train\
+    --pipeline_config_file /kw_resources/configs/3d_positive_warping.config\
+    --result_dir /kw_resources/results/annotation/3d/3d_positive_warping\
+    --num_train_steps 200000
 
-CMD python3 train.py --pipeline_config_file /kw_resources/configs/3d_positive_warping.config --result_dir \
-    /kw_resources/results/3d/3d_positive_warping --num_train_steps 200000
-#CMD python3 eval.py --checkpoint_dir /kw_resources/results/3d/3d_warped --all_checkpoints --use_gpu \
-#    --split_name val --eval_checkpoint_step_interval 3000 --eval_name normalized
+# CMD python3 -m runs.eval\
+#     --checkpoint_dir /kw_resources/results/annotation/3d/3d_positive_warping\
+#     --all_checkpoints --use_gpu
+# #    --split_name val --eval_checkpoint_step_interval 3000 --eval_name normalized
