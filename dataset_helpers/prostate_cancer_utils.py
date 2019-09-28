@@ -905,7 +905,6 @@ def squash_12bits(image):
     return images should fit in range [0.0, 255.0]
     '''
     with tf.control_dependencies([tf.assert_equal(tf.shape(image)[-1], 3)]):
-        pdb.set_trace()
         max8bits = 2.0**8 - 1
         max12bits = 2.0**12 - 1
         image = tf.cast(image, tf.float32)
