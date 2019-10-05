@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y git protobuf-compiler python3-pil pytho
 
 RUN pip install connected-components-3d --no-binary :all:
 
-RUN git clone https://github.com/P-Hidringer/NetNextGen
+RUN git clone https://github.com/yoshihikoueno/DNNCancerAnnotator
 
 WORKDIR NetNextGen
 
