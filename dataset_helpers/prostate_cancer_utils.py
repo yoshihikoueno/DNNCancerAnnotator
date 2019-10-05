@@ -880,7 +880,7 @@ def decode_mri(image_file, target_nchannels=1, encoded=False):
 
     if target_nchannels == 1:
         image = tf.image.decode_image(image_file, expand_animations=False)
-        image = squash_8bits()
+        image = squash_8bits(image)
     elif target_nchannels == 3:
         raise NotImplementedError
     else: raise NotImplementedError
