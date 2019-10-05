@@ -893,6 +893,7 @@ def squash_8bits(image):
     '''
     image = image[:,:,:1]
     squashed_image = tf.cast(image, tf.float32)
+    pdb.set_trace()
     return squashed_image
 
 def squash_24(image):
