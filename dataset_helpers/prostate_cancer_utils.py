@@ -891,9 +891,9 @@ def squash_8bits(image):
     [ unit8 -> float32 ]
     return images should fit in range [0.0, 255.0]
     '''
-    image = image[:,:,:1]
+    image = image[:,:,0]
+    image = tf.expand_dims(image, -1)
     squashed_image = tf.cast(image, tf.float32)
-    pdb.set_trace()
     return squashed_image
 
 def squash_24(image):
