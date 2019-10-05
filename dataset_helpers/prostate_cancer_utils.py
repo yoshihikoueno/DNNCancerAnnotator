@@ -891,9 +891,8 @@ def squash_8bits(image):
     [ unit8 -> float32 ]
     return images should fit in range [0.0, 255.0]
     '''
-    with tf.control_dependencies([tf.assert_equal(tf.shape(image)[-1], 1)]):
-        squashed_image = tf.cast(image, tf.float32)
-        squashed_image.set_shape([*squashed_image.get_shape()[:-1], 1])
+    image = image[:,:,:1]
+    squashed_image = tf.cast(image, tf.float32)
     return squashed_image
 
 def squash_24(image):
