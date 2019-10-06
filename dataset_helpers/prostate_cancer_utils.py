@@ -959,3 +959,32 @@ def _prepare_predict_example(image_file, target_dims, common_size_factor):
 
     return {standard_fields.InputDataFields.image_decoded: image_preprocessed,
             standard_fields.InputDataFields.image_file: image_file}
+
+def decode_mri(image_file, target_nchannels=1, encoded=False):
+    '''
+    decode mri image and return image(type=tf.float32)
+    this func is capable of dealing with 1D, 3D images
+    since a MRI images has 12 bits.
+
+    if 'image_file' is string path, set encoded=False
+    if 'image_file' is a encoded jpeg data, set it to True
+    '''
+    if not encoded: image_file = tf.read_file(image_file)
+
+    if target_nchannels == 1:
+        image = tf.image.decode_image(image_file, expand_animations=False)
+        image = squash_8bits(image)
+    elif target_nchannels == 3:
+        raise NotImplementedError
+    else: raise NotImplementedError
+    return image
+
+def squash_8bits(image):
+    '''
+    [ unit8 -> float32 ]
+    return images should fit in range [0.0, 255.0]
+    '''
+    image = image[:,:,0]
+    image = tf.expand_dims(image, -1)
+    squashed_image = tf.cast(image, tf.float32)
+    return squashed_image
