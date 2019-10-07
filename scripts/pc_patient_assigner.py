@@ -1,4 +1,5 @@
 import argparse
+import pdb
 import os
 import pickle
 import copy
@@ -41,6 +42,7 @@ def load_from_folder(folder, dataset_folder, id_prefix,
 
   patient_folders = os.listdir(folder)
   num_patients = len(patient_folders)
+  pdb.set_trace()
 
   for patient_folder in patient_folders:
     patient_id = id_prefix + patient_folder
@@ -56,11 +58,12 @@ def load_from_folder(folder, dataset_folder, id_prefix,
       assert(os.path.isdir(examination_folder))
       for f in os.listdir(examination_folder):
         f = os.path.join(examination_folder, f)
+        if not os.path.isfile(f): continue
         if annotation_folder is not None:
           annotation_file = os.path.join(
             annotation_folder, os.path.basename(patient_folder),
             os.path.basename(examination_folder),
-            os.path.basename(f).split('.')[0] + '.png')
+            os.path.basename(f).split('.')[0] + '.jpg')
           if not os.path.exists(annotation_file):
             raise ValueError("{} has no annotation file {}".format(
               f, annotation_file))
@@ -167,9 +170,9 @@ def assign_patients(dataset_folder, train_ratio, val_ratio, test_ratio,
   cancer_annotations_folder = os.path.join(dataset_folder,
                                            'cancer_annotations')
 
-  assert(os.path.exists(healthy_cases_folder))
-  assert(os.path.exists(cancer_cases_folder))
-  assert(os.path.exists(cancer_annotations_folder))
+  assert os.path.exists(healthy_cases_folder), f'failed to find {healthy_cases_folder}'
+  assert os.path.exists(cancer_cases_folder), f'failed to find {cancer_cases_folder}'
+  assert os.path.exists(cancer_annotations_folder), f'failed to find {cancer_annotations_folder}'
 
   if only_cancer and not only_in_train:
     healthy_images = dict()
