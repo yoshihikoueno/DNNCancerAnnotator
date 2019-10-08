@@ -1,5 +1,5 @@
 from google.protobuf import text_format
-
+import pdb
 from protos import pipeline_pb2
 from builders import dataset_builder
 
@@ -40,6 +40,7 @@ def get_input_fn(pipeline_config, directory, existing_tfrecords,
         shuffle = pipeline_config.eval_config.shuffle
         shuffle_buffer_size = pipeline_config.eval_config.shuffle_buffer_size
 
+    pdb.set_trace()
     meta_info = dataset_builder.prepare_dataset(
         pipeline_config.dataset, directory=directory,
         existing_tfrecords=existing_tfrecords, target_dims=target_dims,
