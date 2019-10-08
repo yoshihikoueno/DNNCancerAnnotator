@@ -1,9 +1,6 @@
 FROM tensorflow/tensorflow:1.13.1-gpu-py3
-
 RUN apt-get update && apt-get install -y git protobuf-compiler python3-pil python3-matplotlib python3-pip
-
 RUN pip install connected-components-3d --no-binary :all:
-
 run git clone --single-branch --branch dev https://github.com/yoshihikoueno/DNNCancerAnnotator
 workdir DNNCancerAnnotator
 RUN protoc protos/*.proto --python_out=.
