@@ -518,8 +518,7 @@ def _build_sorted_tfrecords_from_files(pickle_data, output_dir, dataset_path):
 
         elem_op = it.get_next()
 
-        for split, data in pickle_data[
-                standard_fields.PickledDatasetInfo.data_dict].items():
+        for split, data in pickle_data[standard_fields.PickledDatasetInfo.data_dict].items():
             os.mkdir(os.path.join(output_dir, split))
 
             # Readjust data so that it is easier to create fitting tfrecords
@@ -543,6 +542,9 @@ def _build_sorted_tfrecords_from_files(pickle_data, output_dir, dataset_path):
 
             for patient_id, v in readjusted_data.items():
                 for exam_id, exam_data in v.items():
+                    if not exam_data:
+                        print(f'Ignored empty exam: {patient_id}/{exam_id}')
+                        continue
                     exam_entries = []
 
                     slice_indices = list(exam_data.keys())
@@ -749,10 +751,10 @@ def build_tf_dataset_from_tfrecords(directory, split_name, target_dims,
                     num_parallel_calls=util_ops.get_cpu_count())
             else:
                 dataset = dataset.interleave(
-                    lambda tfrecords_file: tf.data.TFRecordDataset(
-                        tfrecords_file), block_length=999,
+                    lambda tfrecords_file: tf.data.TFRecordDataset(tfrecords_file),
+                    block_length=999,
                     cycle_length=len(tfrecords_files),
-                    num_parallel_calls=util_ops.get_cpu_count())
+                    num_parallel_calls=len(tfrecords_files))
 
             deserialize_and_decode_fn = functools.partial(
                 _deserialize_and_decode_example, target_dims=target_dims,
