@@ -42,7 +42,6 @@ def load_from_folder(folder, dataset_folder, id_prefix,
 
   patient_folders = os.listdir(folder)
   num_patients = len(patient_folders)
-  pdb.set_trace()
 
   for patient_folder in patient_folders:
     patient_id = id_prefix + patient_folder
