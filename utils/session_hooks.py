@@ -66,8 +66,8 @@ class Eval3DHook(tf.train.SessionRunHook):
     groundtruth_res = run_values.results[0]
     prediction_res = run_values.results[1]
     slice_ids_res = run_values.results[2]
-    patient_id_res = run_values.results[3].decode('utf-8')
-    exam_id_res = run_values.results[4].decode('utf-8')
+    patient_id_res = run_values.results[3][0].decode('utf-8')
+    exam_id_res = run_values.results[4][0].decode('utf-8')
 
     for i, slice_id in enumerate(slice_ids_res):
       if self.current_patient_id is None:
