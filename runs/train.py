@@ -99,6 +99,7 @@ def main(_):
     existing_tfrecords=resume_training,
     split_name=standard_fields.SplitNames.train,
     is_training=True, num_parallel_iterations=num_parallel_iterations)
+  pdb.set_trace()
 
   eval_dir = os.path.join(FLAGS.result_dir,
                           'eval_' + standard_fields.SplitNames.val)

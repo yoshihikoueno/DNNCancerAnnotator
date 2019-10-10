@@ -187,7 +187,7 @@ def _decode_3d_example(example_dict, target_dims, dilate_groundtruth,
     annotation_3d_encoded = sequence_features[standard_fields.TfExampleFields.annotation_3d_encoded].values
 
     image_decoded = tf.map_fn(
-        lambda x: decode_mri(x, encoded=True),
+        lambda x: decode_mri(x, target_nchannels=target_dims[2], encoded=True),
         elems=image_3d_encoded,
         parallel_iterations=util_ops.get_cpu_count(),
         dtype=tf.float32,
@@ -884,7 +884,7 @@ def decode_mri(image_file, target_nchannels=1, encoded=False):
         image = tf.image.decode_image(image_file, expand_animations=False)
         image = squash_8bits(image)
     elif target_nchannels == 3:
-        raise NotImplementedError
+        image = squash_24bits(image_file)
     else: raise NotImplementedError
     return image
 
@@ -898,17 +898,10 @@ def squash_8bits(image):
     squashed_image = tf.cast(image, tf.float32)
     return squashed_image
 
-def squash_24(image):
+def squash_24bits(image):
     '''
     '''
-    with tf.control_dependencies([tf.assert_equal(tf.shape(image)[-1], 3)]):
-        max8bits = 2.0**8 - 1
-        max12bits = 2.0**12 - 1
-        image = tf.cast(image, tf.float32)
-
-        # apply bit shift and merge into the first one
-        image = image[:, :, 0] + max8bits * image[:, :, 1]
-
-        squashed_image = image * max8bits / max12bits
-        squashed_image = tf.expand_dims(squashed_image, -1)
+    # image = tf.image.decode_image(image, channels=3, expand_animations=False)
+    image = tf.image.decode_jpeg(image, channels=3)
+    squashed_image = tf.cast(image, tf.float32)
     return squashed_image
