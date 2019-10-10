@@ -66,6 +66,7 @@ def main(_):
   else:
     pipeline_config_file = FLAGS.pipeline_config_file
 
+  pdb.set_trace()
   pipeline_config = setup_utils.load_config(pipeline_config_file)
 
   np.random.seed(pipeline_config.seed)
