@@ -89,16 +89,16 @@ def _extract_annotation(decoded_annotation, dilate_groundtruth, dilate_kernel_si
     return annotation_mask
 
 
-def _preprocess_image(image_decoded, target_dims, is_annotation_mask, common_size_factor):
+def _preprocess_image(image_decoded, target_dims, is_annotation_mask, common_size_factor, tags=[]):
     # Image should be quadratic
     image_shape = tf.shape(image_decoded)
     quadratic_assert_op = tf.Assert(tf.equal(image_shape[0], image_shape[1]),
-                                    [tf.constant('Image should be quadratic.')])
+                                    ['Image should be quadratic.'])
     # Since we want to resize to a common size, we do it to the largest naturally
     # occuring, which should be 512x512
-    size_assert_op = tf.Assert(tf.reduce_all(tf.less_equal(
-        image_shape[:2], tf.constant([512, 512]))), [
-        tf.constant('Largest natural image size should be <= 512')])
+    size_assert_op = tf.Assert(
+        tf.reduce_all(tf.less_equal(image_shape[:2], tf.constant([512, 512]))),
+        ['Largest natural image size should be <= 512'])
 
     with tf.control_dependencies([quadratic_assert_op, size_assert_op]):
         # Resize to common size
@@ -117,21 +117,19 @@ def _preprocess_image(image_decoded, target_dims, is_annotation_mask, common_siz
             image_resized = tf.cast(tf.greater(image_resized, 0.2), tf.float32)
             # Get bounding box around masked region, in order to check if our crop
             # will cut it off
-            mask_min = tf.reduce_min(tf.where(tf.equal(image_resized, 1)),
-                                     axis=0)[:2]
-            mask_max = tf.reduce_max(tf.where(tf.equal(image_resized, 1)),
-                                     axis=0)[:2]
+            mask_min = tf.reduce_min(tf.where(tf.equal(image_resized, 1)), axis=0)[:2]
+            mask_max = tf.reduce_max(tf.where(tf.equal(image_resized, 1)), axis=0)[:2]
 
+            mask_min_criteria = [offset_height, offset_width]
             mask_min_crop_assert = tf.Assert(
-                tf.reduce_all(tf.greater(
-                    mask_min, [offset_height, offset_width])),
-                data=[mask_min, [tf.constant('Groundtruth mask is cropped.')]])
+                tf.reduce_all(tf.greater(mask_min, mask_min_criteria)),
+                data=[mask_min, mask_min_criteria, 'mask_min_crop_assert Failed', *tags])
+
+            mask_max_criteria = [offset_height + target_dims[0], offset_width + target_dims[1]]
             mask_max_crop_assert = tf.Assert(
-                tf.reduce_all(tf.less(mask_max, [offset_height + target_dims[0],
-                                                 offset_width + target_dims[1]])),
-                data=[mask_max, [tf.constant('Groundtruth mask is cropped.')]])
-            with tf.control_dependencies([mask_min_crop_assert,
-                                          mask_max_crop_assert]):
+                tf.reduce_all(tf.less(mask_max, mask_max_criteria)),
+                data=[mask_max, mask_max_criteria, 'mask_max_crop_assert Failed', *tags])
+            with tf.control_dependencies([mask_min_crop_assert, mask_max_crop_assert]):
                 image_cropped = tf.image.crop_to_bounding_box(
                     image_resized, offset_height, offset_width, target_dims[0],
                     target_dims[1])
@@ -143,25 +141,45 @@ def _preprocess_image(image_decoded, target_dims, is_annotation_mask, common_siz
         return image_cropped
 
 
-def _decode_example(example_dict, target_dims, dilate_groundtruth, dilate_kernel_size, common_size_factor):
+def _decode_example(
+        example_dict, target_dims, dilate_groundtruth, dilate_kernel_size, common_size_factor):
+    patient_id = example_dict[standard_fields.TfExampleFields.patient_id]
+    image_file = example_dict[standard_fields.TfExampleFields.image_file]
     image_string = example_dict[standard_fields.TfExampleFields.image_encoded]
     image_decoded = decode_mri(image_string, target_nchannels=target_dims[2], encoded=True)
 
     label = example_dict[standard_fields.TfExampleFields.label]
 
+    patient_indicator = tf.strings.substr(patient_id, 0, 1)
     annotation_string = example_dict[standard_fields.TfExampleFields.annotation_encoded]
-    annotation_decoded = tf.cast(tf.image.decode_jpeg(annotation_string, channels=3), tf.float32)
+    annotation_decoded = tf.cond(
+        tf.equal('h', patient_indicator),
+        lambda: tf.zeros(tf.shape(image_decoded), tf.float32),
+        lambda: tf.cast(tf.image.decode_jpeg(annotation_string, channels=3), tf.float32),
+    )
 
     same_size_assert = tf.Assert(
         tf.reduce_all(tf.equal(tf.shape(annotation_decoded)[:2], tf.shape(image_decoded)[:2])),
         data=[tf.shape(annotation_decoded)[:2], tf.shape(image_decoded)[:2],
-              example_dict[standard_fields.TfExampleFields.image_file],
-              [tf.constant('Annotation and original image not same size.')]])
+              image_file, 'Annotation and original image not same size.'])
 
-    with tf.control_dependencies([same_size_assert]): annotation_mask = _extract_annotation(annotation_decoded, dilate_groundtruth, dilate_kernel_size)
-    annotation_mask_preprocessed = _preprocess_image(annotation_mask, target_dims, is_annotation_mask=True, common_size_factor=common_size_factor)
-    annotation_preprocessed = _preprocess_image(annotation_decoded, target_dims, is_annotation_mask=False, common_size_factor=common_size_factor)
-    image_preprocessed = _preprocess_image(image_decoded, target_dims, is_annotation_mask=False, common_size_factor=common_size_factor)
+    with tf.control_dependencies([same_size_assert]):
+        annotation_mask = _extract_annotation(annotation_decoded, dilate_groundtruth, dilate_kernel_size)
+    annotation_mask_preprocessed = _preprocess_image(
+        annotation_mask, target_dims,
+        is_annotation_mask=True, common_size_factor=common_size_factor,
+        tags=[image_file, 'annotation_mask'],
+    )
+    annotation_preprocessed = _preprocess_image(
+        annotation_decoded, target_dims,
+        is_annotation_mask=False, common_size_factor=common_size_factor,
+        tags=[image_file, 'annotation_preprocessed'],
+    )
+    image_preprocessed = _preprocess_image(
+        image_decoded, target_dims,
+        is_annotation_mask=False, common_size_factor=common_size_factor,
+        tags=[image_file, 'image_mask'],
+    )
 
     return {
         standard_fields.InputDataFields.patient_id: example_dict[standard_fields.TfExampleFields.patient_id],
@@ -344,22 +362,14 @@ def _serialize_and_save_3d_example(elem_tuple, output_dir, split):
 def _deserialize_and_decode_example(example, target_dims, dilate_groundtruth,
                                     dilate_kernel_size, common_size_factor):
     features = {
-        standard_fields.TfExampleFields.patient_id: tf.FixedLenFeature(
-            (), tf.string, default_value=''),
-        standard_fields.TfExampleFields.slice_id: tf.FixedLenFeature(
-            (), tf.int64, default_value=0),
-        standard_fields.TfExampleFields.image_file: tf.FixedLenFeature(
-            (), tf.string, default_value=''),
-        standard_fields.TfExampleFields.image_encoded: tf.FixedLenFeature(
-            (), tf.string, default_value=''),
-        standard_fields.TfExampleFields.annotation_file: tf.FixedLenFeature(
-            (), tf.string, default_value=''),
-        standard_fields.TfExampleFields.annotation_encoded:
-        tf.FixedLenFeature((), tf.string, default_value=''),
-        standard_fields.TfExampleFields.label: tf.FixedLenFeature(
-            (), tf.int64, default_value=0),
-        standard_fields.TfExampleFields.examination_name: tf.FixedLenFeature(
-            (), tf.string, default_value='')}
+        standard_fields.TfExampleFields.patient_id: tf.FixedLenFeature((), tf.string, default_value=''),
+        standard_fields.TfExampleFields.slice_id: tf.FixedLenFeature((), tf.int64, default_value=0),
+        standard_fields.TfExampleFields.image_file: tf.FixedLenFeature((), tf.string, default_value=''),
+        standard_fields.TfExampleFields.image_encoded: tf.FixedLenFeature((), tf.string, default_value=''),
+        standard_fields.TfExampleFields.annotation_file: tf.FixedLenFeature((), tf.string, default_value=''),
+        standard_fields.TfExampleFields.annotation_encoded: tf.FixedLenFeature((), tf.string, default_value=''),
+        standard_fields.TfExampleFields.label: tf.FixedLenFeature((), tf.int64, default_value=0),
+        standard_fields.TfExampleFields.examination_name: tf.FixedLenFeature((), tf.string, default_value='')}
 
     example_dict = tf.parse_single_example(example, features)
 
@@ -403,12 +413,10 @@ def _deserialize_and_decode_3d_example(
 def _parse_from_exam(image_files, annotation_files,
                      patient_ids, slice_ids, exam_ids, dataset_folder):
     image_encoded = tf.map_fn(
-        lambda f: tf.read_file(tf.strings.join(
-            [dataset_folder, '/', f])),
+        lambda f: tf.read_file(tf.strings.join([dataset_folder, '/', f])),
         elems=image_files, parallel_iterations=util_ops.get_cpu_count())
     annotation_encoded = tf.map_fn(
-        lambda f: tf.read_file(tf.strings.join(
-            [dataset_folder, '/', f])),
+        lambda f: tf.read_file(tf.strings.join([dataset_folder, '/', f])),
         elems=annotation_files, parallel_iterations=util_ops.get_cpu_count())
 
     return (image_files, annotation_files, patient_ids, slice_ids, exam_ids,
@@ -545,21 +553,18 @@ def _build_sorted_tfrecords_from_files(pickle_data, output_dir, dataset_path):
                     if not exam_data:
                         print(f'Ignored empty exam: {patient_id}/{exam_id}')
                         continue
-                    exam_entries = []
 
-                    slice_indices = list(exam_data.keys())
-                    slice_indices.sort()
-
-                    for slice_index in slice_indices:
-                        exam_entries.append(exam_data[slice_index])
-
-                    exam_data = [
-                        list(e) for e in list(zip(*exam_entries))]
+                    slice_indices = sorted(list(exam_data.keys()))
+                    exam_entries = list(map(lambda x: exam_data[x], slice_indices))
+                    exam_data = list(zip(*exam_entries))
 
                     feed_dict = {
-                        image_files_op: exam_data[0], annotation_files_op: exam_data[1],
-                        patient_ids_op: exam_data[2], slice_ids_op: exam_data[3],
-                        exam_ids_op: exam_data[4], batch_size_op: len(exam_entries)}
+                        image_files_op: exam_data[0],
+                        annotation_files_op: exam_data[1],
+                        patient_ids_op: exam_data[2],
+                        slice_ids_op: exam_data[3],
+                        exam_ids_op: exam_data[4],
+                        batch_size_op: len(exam_entries)}
 
                     sess.run(it.initializer, feed_dict=feed_dict)
                     elem_op_result = sess.run(elem_op, feed_dict=feed_dict)
