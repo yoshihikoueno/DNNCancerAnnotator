@@ -75,7 +75,9 @@ def split_mask(mask, dilate_mask=False, is_3d=False):
     return individual_masks
 
 def _extract_annotation(decoded_annotation, dilate_groundtruth, dilate_kernel_size):
-    bool_mask = tf.greater(tf.subtract(decoded_annotation[:, :, 0], decoded_annotation[:, :, 1]), 200)
+    annotation_channel_assert = tf.assert_greater(tf.shape(decoded_annotation)[2], 1, data=['Invalid annotation channels'])
+    with tf.control_dependencies([annotation_channel_assert]):
+        bool_mask = tf.greater(tf.subtract(decoded_annotation[:, :, 0], decoded_annotation[:, :, 1]), 200)
 
     assert len(bool_mask.get_shape().as_list()) == 2
 
@@ -152,9 +154,10 @@ def _decode_example(
 
     patient_indicator = tf.strings.substr(patient_id, 0, 1)
     annotation_string = example_dict[standard_fields.TfExampleFields.annotation_encoded]
+    annotation_shape = tf.concat([tf.shape(image_decoded)[:2], [3]], 0)
     annotation_decoded = tf.cond(
         tf.equal('h', patient_indicator),
-        lambda: tf.zeros(tf.shape(image_decoded), tf.float32),
+        lambda: tf.zeros(annotation_shape, tf.float32),
         lambda: tf.cast(tf.image.decode_jpeg(annotation_string, channels=3), tf.float32),
     )
 
@@ -645,8 +648,7 @@ def _create_sliding_window_eval_dataset(element, target_dims, target_depth):
         ksizes=[1, target_depth, target_dims[0], target_dims[1], 1],
         strides=[1, 2, 1, 1, 1], padding='VALID')
     image_decoded = tf.squeeze(tf.squeeze(image_decoded, axis=2), axis=0)
-    image_decoded = tf.reshape(image_decoded, shape=[
-        -1, target_depth, target_dims[0], target_dims[1], target_dims[2]])
+    image_decoded = tf.reshape(image_decoded, shape=[-1, target_depth, target_dims[0], target_dims[1], target_dims[2]])
 
     annotation_decoded = tf.extract_volume_patches(
         tf.expand_dims(
@@ -886,8 +888,7 @@ def decode_mri(image_file, target_nchannels=1, encoded=False):
     if not encoded: image_file = tf.read_file(image_file)
 
     if target_nchannels == 1:
-        image = tf.image.decode_image(image_file, expand_animations=False)
-        image = squash_8bits(image)
+        image = squash_8bits(image_file)
     elif target_nchannels == 3:
         image = squash_24bits(image_file)
     else: raise NotImplementedError
@@ -898,7 +899,8 @@ def squash_8bits(image):
     [ unit8 -> float32 ]
     return images should fit in range [0.0, 255.0]
     '''
-    image = image[:,:,0]
+    image = tf.image.decode_jpeg(image, channels=3)
+    image = image[:, :, 0]
     image = tf.expand_dims(image, -1)
     squashed_image = tf.cast(image, tf.float32)
     return squashed_image
