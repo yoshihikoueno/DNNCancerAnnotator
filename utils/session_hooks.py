@@ -1,5 +1,6 @@
 import logging
 import os
+import pdb
 
 import tensorflow as tf
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
@@ -159,7 +160,7 @@ class VisualizationHook(tf.train.SessionRunHook):
         target_size = predicted_mask.get_shape().as_list()[1:]
 
         image_decoded = image_utils.central_crop(image_decoded, target_size)
-        if self.grayscale_input:
+        if self.grayscale_input or image_decoded.get_shape()[-1] == 1:
             image_decoded = tf.image.grayscale_to_rgb(image_decoded)
         predicted_mask = tf.stack([predicted_mask * 255,
                                    tf.zeros_like(predicted_mask),

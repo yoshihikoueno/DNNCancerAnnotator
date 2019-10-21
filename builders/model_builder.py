@@ -238,37 +238,28 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
                     :, :, :, 0]
         elif pipeline_config.train_config.loss.name == 'softmax':
             # We dont care about softmax for now
-            assert(False)
-            assert(network_output.get_shape().as_list()[-1] == 2)
+            raise NotImplementedError('Softmax is still not implemented')
+            assert network_output.get_shape().as_list()[-1] == 2
             scaled_network_output = tf.nn.softmax(network_output)[:, :, :, 1]
 
         hooks = []
         metric_dict = {}
-        annotation_mask = tf.cast(tf.squeeze(annotation_mask_batch, axis=-1),
-                                  tf.float32)
-        if (pipeline_config.dataset.tfrecords_type == 'input_3d'
-                and not pipeline_config.model.use_2d_input_architecture):
+        annotation_mask = tf.cast(tf.squeeze(annotation_mask_batch, axis=-1), tf.float32)
+        if (pipeline_config.dataset.tfrecords_type == 'input_3d' and not pipeline_config.model.use_2d_input_architecture):
             scaled_network_output = tf.squeeze(scaled_network_output, axis=0)
             annotation_mask = tf.squeeze(annotation_mask, axis=0)
             image_decoded = tf.squeeze(image_decoded, axis=0)
-            slice_ids = tf.squeeze(
-                features[standard_fields.InputDataFields.slice_id], axis=0)
-            patient_id = tf.squeeze(
-                features[standard_fields.InputDataFields.patient_id], axis=0)
-            exam_id = tf.squeeze(
-                features[standard_fields.InputDataFields.examination_name], axis=0)
-            image_file = tf.squeeze(
-                features[standard_fields.InputDataFields.image_file], axis=0)
+            slice_ids = tf.squeeze(features[standard_fields.InputDataFields.slice_id], axis=0)
+            patient_id = tf.squeeze(features[standard_fields.InputDataFields.patient_id], axis=0)
+            exam_id = tf.squeeze(features[standard_fields.InputDataFields.examination_name], axis=0)
+            image_file = tf.squeeze(features[standard_fields.InputDataFields.image_file], axis=0)
 
             # We are only interested in evaluating the center two slices
             num_slices = scaled_network_output.get_shape().as_list()[0]
             first_slice_index = int(num_slices / 2 - 1)
-            scaled_network_output = scaled_network_output[
-                first_slice_index:first_slice_index + 2]
-            annotation_mask = annotation_mask[
-                first_slice_index:first_slice_index + 2]
-            image_decoded = image_decoded[
-                first_slice_index:first_slice_index + 2]
+            scaled_network_output = scaled_network_output[first_slice_index:first_slice_index + 2]
+            annotation_mask = annotation_mask[first_slice_index:first_slice_index + 2]
+            image_decoded = image_decoded[first_slice_index:first_slice_index + 2]
             slice_ids = slice_ids[first_slice_index: first_slice_index + 2]
             image_file = image_file[first_slice_index: first_slice_index + 2]
         else:
@@ -351,7 +342,7 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
                 'prediction_overlay': predicted_mask_overlay,
                 'prediction': predicted_mask})
     else:
-        assert(False)
+        assert False
 
 
 def get_model_fn(pipeline_config, result_folder, dataset_folder, dataset_info,
