@@ -368,11 +368,9 @@ def get_model_fn(pipeline_config, result_folder, dataset_folder, dataset_info,
         if num_visualizations is None or num_visualizations == -1:
             num_visualizations = len(selected_files)
         else:
-            num_visualizations = min(num_visualizations,
-                                     len(selected_files))
+            num_visualizations = min(num_visualizations, len(selected_files))
 
-        visualization_file_names = list(selected_files.values())[
-            :num_visualizations]
+        visualization_file_names = list(selected_files.values())[:num_visualizations]
 
     model_name = pipeline_config.model.WhichOneof('model_type')
     if model_name == 'unet':

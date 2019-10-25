@@ -205,8 +205,7 @@ class VisualizationHook(tf.train.SessionRunHook):
                 continue
 
             # In prediction mode we want to visualize in any case
-            if (self.visualization_file_names is None
-                    or file_name in self.visualization_file_names):
+            if self.visualization_file_names is None or file_name in self.visualization_file_names:
                 summary = tf.Summary(value=[
                     tf.Summary.Value(
                         tag=file_name,
@@ -218,6 +217,7 @@ class VisualizationHook(tf.train.SessionRunHook):
                 logging.info('Visualization for {}'.format(file_name))
             else:
                 logging.info('Skipping visualization for {}'.format(file_name))
+                pdb.set_trace()
                 continue
 
 
