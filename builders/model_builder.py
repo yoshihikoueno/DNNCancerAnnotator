@@ -231,11 +231,9 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
         if pipeline_config.train_config.loss.name == 'sigmoid':
             if (pipeline_config.dataset.tfrecords_type == 'input_3d'
                     and not pipeline_config.model.use_2d_input_architecture):
-                scaled_network_output = tf.nn.sigmoid(network_output)[
-                    :, :, :, :, 0]
+                scaled_network_output = tf.nn.sigmoid(network_output)[:, :, :, :, 0]
             else:
-                scaled_network_output = tf.nn.sigmoid(network_output)[
-                    :, :, :, 0]
+                scaled_network_output = tf.nn.sigmoid(network_output)[:, :, :, 0]
         elif pipeline_config.train_config.loss.name == 'softmax':
             # We dont care about softmax for now
             raise NotImplementedError('Softmax is still not implemented')
@@ -304,8 +302,14 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
             predicted_mask=scaled_network_output, eval_dir=eval_dir,
             is_3d=True)
 
+        summary_saver_hook = tf.train.SummarySaverHook(
+            save_steps=100,
+            output_dir=eval_dir,
+            summary_op=tf.summary.merge_all())
+
         hooks.append(eval_3d_hook)
         hooks.append(vis_hook)
+        hooks.append(summary_saver_hook)
 
         return tf.estimator.EstimatorSpec(
             mode, loss=total_loss, train_op=train_op,

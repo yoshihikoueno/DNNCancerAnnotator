@@ -166,8 +166,7 @@ class VisualizationHook(tf.train.SessionRunHook):
                                    tf.zeros_like(predicted_mask),
                                    tf.zeros_like(predicted_mask)], axis=3)
 
-        predicted_mask_overlay = tf.clip_by_value(
-            image_decoded * 0.5 + predicted_mask, 0, 255)
+        predicted_mask_overlay = tf.clip_by_value(image_decoded * 0.5 + predicted_mask, 0, 255)
 
         if annotation_mask is None:
             # Predict Mode
@@ -195,8 +194,7 @@ class VisualizationHook(tf.train.SessionRunHook):
         global_step = run_values.results[2]
 
         # Estimator writes summaries to the eval subfolder
-        summary_writer = tf.summary.FileWriterCache.get(
-            self.eval_dir)
+        summary_writer = tf.summary.FileWriterCache.get(self.eval_dir)
 
         for batch_index in range(len(combined_image_res)):
             file_name = file_name_res[batch_index].decode('utf-8')
@@ -217,7 +215,6 @@ class VisualizationHook(tf.train.SessionRunHook):
                 logging.info('Visualization for {}'.format(file_name))
             else:
                 logging.info('Skipping visualization for {}'.format(file_name))
-                pdb.set_trace()
                 continue
 
 
