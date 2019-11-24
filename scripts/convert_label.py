@@ -105,13 +105,57 @@ def test():
     cv2.imwrite('label.jpg', image)
     return
 
+def get_label_source_file_name(patient, exam, extension='jpg'):
+    filename = f'{int(patient)}_{int(exam) % 100:02d}.{extension}'
+    return filename
+
+def process_patient_dir(patient_dir):
+    assert os.path.exists(patient_dir), f'failed to find: {patient_dir}'
+
+    print('Processing {}'.format(patient_dir))
+    label_source = os.path.join(patient_dir, f'{os.path.basename(patient_dir)}.jpg')
+
+    if not os.path.exists(label_source):
+        print(f'Not found: {label_source}')
+        return
+
+    image = cv2.imread(label_source)
+    image = crop_annotation_image(image)
+    image = crop_body(image)
+    label = extract_label(image)
+    filled_label = fill_label(label)
+    image = add_label(image, filled_label)
+    image = tf.image.resize_image_with_pad(image, 512, 512).numpy()
+    cv2.imwrite(os.path.join(patient_dir, 'label.jpg'), image)
+    return
+
+def process_patient_dir2(patient_dir):
+    assert os.path.exists(patient_dir)
+
+    exams = os.listdir(patient_dir)
+    exam_dirs = list(filter(os.path.isdir, map(lambda x: os.path.join(patient_dir, x), exams)))
+
+    for exam_dir in exam_dirs:
+        print('Processing {}'.format(exam_dir))
+        image = cv2.imread('./15601715_15.jpg')
+        image = crop_annotation_image(image)
+        image = crop_body(image)
+        label = extract_label(image)
+        filled_label = fill_label(label)
+        image = add_label(image, filled_label)
+        image = tf.image.resize_image_with_pad(image, 512, 512).numpy()
+        cv2.imwrite('label.jpg', image)
+    return
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--target', required=True)
     args = parser.parse_args()
-    target_root = args['target']
+    target_root = args.target
 
     for target_dir in os.listdir(target_root):
+        print(target_dir)
         target_path = os.path.join(target_root, target_dir)
         if not os.path.isdir(target_path): continue
+        process_patient_dir(target_path)
