@@ -7,5 +7,5 @@ workdir DNNCancerAnnotator
 RUN protoc protos/*.proto --python_out=.
 CMD python3 -m runs.train\
     --pipeline_config_file configs/2d_singlechannel.config\
-    --result_dir /kw_resources/results/annotation/singlechannel\
-    --num_train_steps 200000
+    --result_dir /kw_resources/results/annotation/new_db/singlechannel_001\
+    --num_train_steps 1000000
