@@ -69,7 +69,7 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
                       result_folder,
                       dataset_info, feature_extractor,
                       visualization_file_names, eval_dir,
-                      as_gan_generator, eval_split_name):
+                      as_gan_generator, eval_split_name, logger=logging):
     num_classes = pipeline_config.dataset.num_classes
     add_background_class = pipeline_config.train_config.loss.name == 'softmax'
     if add_background_class:
@@ -181,7 +181,7 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
         if pipeline_config.train_config.optimizer.use_moving_average:
             # EMA's are currently not supported with tf's DistributionStrategy.
             # Reenable once they fixed the bugs
-            logging.warn(
+            logger.warn(
                 'EMA is currently not supported with tf DistributionStrategy.')
             exit(1)
             pipeline_config.train_config.optimizer.use_moving_average = False
@@ -210,7 +210,7 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
             train_op = tf.identity(total_loss)
 
     if mode == tf.estimator.ModeKeys.TRAIN:
-        logging.info("Total number of trainable parameters: {}".format(np.sum([
+        logger.info("Total number of trainable parameters: {}".format(np.sum([
             np.prod(v.get_shape().as_list()) for v in tf.trainable_variables()])))
 
         # Training Hooks are not working with MirroredStrategy. Fixed in 1.13
@@ -300,7 +300,8 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
             image_decoded=image_decoded,
             annotation_mask=annotation_mask,
             predicted_mask=scaled_network_output, eval_dir=eval_dir,
-            is_3d=True)
+            is_3d=True, logger=logger,
+        )
 
         summary_saver_hook = tf.train.SummarySaverHook(
             save_steps=100,
@@ -330,7 +331,9 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
             file_name=features[standard_fields.InputDataFields.image_file],
             image_decoded=features[standard_fields.InputDataFields.image_decoded],
             annotation_decoded=None,
-            predicted_mask=scaled_network_output, eval_dir=eval_dir)
+            predicted_mask=scaled_network_output, eval_dir=eval_dir,
+            logger=logger,
+        )
 
         predicted_mask = tf.stack([scaled_network_output * 255,
                                    tf.zeros_like(scaled_network_output),

@@ -139,15 +139,26 @@ class Eval3DHook(tf.train.SessionRunHook):
 
 
 class VisualizationHook(tf.train.SessionRunHook):
-    def __init__(self, result_folder, visualization_file_names,
-                 file_name, image_decoded, annotation_mask,
-                 predicted_mask, eval_dir, is_3d):
+    def __init__(
+            self,
+            result_folder,
+            visualization_file_names,
+            file_name,
+            image_decoded,
+            annotation_mask,
+            predicted_mask,
+            eval_dir,
+            is_3d,
+            logger=logging,
+    ):
         self.visualization_file_names = visualization_file_names
         self.result_folder = result_folder
         self.file_name = file_name
         self.eval_dir = eval_dir
         self.is_3d = is_3d
         self.grayscale_input = False
+        self.logger = logger
+
         if is_3d:
             assert(len(predicted_mask.get_shape()) == 3)
         else:
@@ -212,9 +223,9 @@ class VisualizationHook(tf.train.SessionRunHook):
                                 combined_image_res[batch_index])))])
                 summary_writer.add_summary(summary, global_step)
 
-                logging.info('Visualization for {}'.format(file_name))
+                self.logger.info('Visualization for {}'.format(file_name))
             else:
-                logging.info('Skipping visualization for {}'.format(file_name))
+                self.logger.info('Skipping visualization for {}'.format(file_name))
                 continue
 
 

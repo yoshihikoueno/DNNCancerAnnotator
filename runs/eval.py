@@ -7,10 +7,12 @@ from shutil import copy
 
 import numpy as np
 import tensorflow as tf
+from tqdm import tqdm
 
 from utils import setup_utils
 from utils import util_ops
 from utils import standard_fields
+from utils import logging_handlers
 from builders import estimator_builder
 
 flags = tf.app.flags
@@ -41,9 +43,8 @@ flags.DEFINE_integer('eval_checkpoint_step_interval', -1,
 FLAGS = flags.FLAGS
 
 
-def _eval_checkpoint(checkpoint_path, estimator, input_fn, num_steps,
-                     split_name):
-    logging.info('Evaluating {}'.format(checkpoint_path))
+def _eval_checkpoint(checkpoint_path, estimator, input_fn, num_steps, split_name, logger=logging):
+    logger.info('Evaluating {}'.format(checkpoint_path))
     return estimator.evaluate(input_fn=input_fn, checkpoint_path=checkpoint_path,
                               steps=num_steps, name=split_name)
 
@@ -55,6 +56,10 @@ def main(_):
     if FLAGS.pdb:
         debugger = pdb.Pdb(stdout=sys.__stdout__)
         debugger.set_trace()
+
+    tqdm_logger = logging.getLogger(__name__)
+    tqdm_logger.setLevel(logging.INFO)
+    tqdm_logger.addHandler(logging_handlers.TqdmLoggingHandler())
 
     # Get the number of GPU from env
     num_gpu = 0
@@ -153,7 +158,7 @@ def main(_):
             all_checkpoints = tf.train.get_checkpoint_state(
                 FLAGS.checkpoint_dir).all_model_checkpoint_paths
             new_checkpoint_evaluated = False
-            for checkpoint in all_checkpoints:
+            for checkpoint in tqdm(all_checkpoints, desc='checkpoints'):
                 if checkpoint in evaluated_checkpoints:
                     continue
                 elif (latest_checkpoint != ''
@@ -165,8 +170,10 @@ def main(_):
                     continue
                 else:
                     new_checkpoint_evaluated = True
-                _eval_checkpoint(checkpoint, estimator, input_fn, num_steps,
-                                 split_name=FLAGS.split_name)
+                _eval_checkpoint(
+                    checkpoint, estimator, input_fn, num_steps,
+                    split_name=FLAGS.split_name, logger=tqdm_logger,
+                )
                 evaluated_checkpoints.append(checkpoint)
                 latest_checkpoint = checkpoint
             if not new_checkpoint_evaluated:
