@@ -57,10 +57,10 @@ def main(_):
         debugger = pdb.Pdb(stdout=sys.__stdout__)
         debugger.set_trace()
 
-    tqdm_logger = logging.getLogger('tqdm_logger')
+    tqdm_logger = logging.getLogger('Eval(tqdm)')
     tqdm_logger.setLevel(logging.INFO)
     tqdm_handler = logging_handlers.TqdmLoggingHandler(logging.INFO)
-    formatter = logging.Formatter('tqdm %(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     tqdm_handler.setFormatter(formatter)
     tqdm_logger.addHandler(tqdm_handler)
     tqdm_logger.propagate = False
