@@ -1,4 +1,5 @@
 import functools
+import logging
 
 import numpy as np
 import tensorflow as tf
@@ -11,7 +12,8 @@ from builders import optimizer_builder
 def build_estimator(pipeline_config, checkpoint_folder,
                     dataset_folder, dataset_info,
                     eval_split_name, train_distribution, eval_distribution,
-                    eval_dir, calc_froc):
+                    eval_dir, calc_froc, logger=logging,
+                    ):
     np.random.seed(pipeline_config.seed)
     tf.set_random_seed(pipeline_config.seed)
 
@@ -32,7 +34,7 @@ def build_estimator(pipeline_config, checkpoint_folder,
         generator_fn, discriminator_fn = model_builder.get_model_fn(
             pipeline_config=pipeline_config, result_folder=checkpoint_folder,
             dataset_folder=dataset_folder, dataset_info=dataset_info,
-            eval_split_name=eval_split_name, eval_dir=eval_dir, calc_froc=calc_froc)
+            eval_split_name=eval_split_name, eval_dir=eval_dir, calc_froc=calc_froc, logger=logger)
 
         generator_loss = tfgan.losses.modified_generator_loss
         discriminator_loss = tfgan.losses.modified_discriminator_loss
@@ -56,7 +58,9 @@ def build_estimator(pipeline_config, checkpoint_folder,
                                               dataset_info=dataset_info,
                                               eval_split_name=eval_split_name,
                                               eval_dir=eval_dir,
-                                              calc_froc=calc_froc)
+                                              calc_froc=calc_froc,
+                                              logger=logger,
+                                              )
 
         estimator = tf.estimator.Estimator(
             model_fn=model_fn, config=run_config)

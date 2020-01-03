@@ -353,7 +353,7 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
 
 
 def get_model_fn(pipeline_config, result_folder, dataset_folder, dataset_info,
-                 eval_split_name, eval_dir, calc_froc):
+                 eval_split_name, eval_dir, calc_froc, logger=logging):
     if dataset_info is None:
         visualization_file_names = None
     else:
@@ -399,7 +399,9 @@ def get_model_fn(pipeline_config, result_folder, dataset_folder, dataset_info,
                                  visualization_file_names=visualization_file_names,
                                  eval_dir=eval_dir, calc_froc=calc_froc,
                                  as_gan_generator=False,
-                                 eval_split_name=eval_split_name)
+                                 eval_split_name=eval_split_name,
+                                 logger=logger,
+                                 )
     elif model_name == 'gan':
         generator_name = pipeline_config.model.gan.WhichOneof('generator')
         discriminator_name = pipeline_config.model.gan.WhichOneof(
@@ -425,12 +427,16 @@ def get_model_fn(pipeline_config, result_folder, dataset_folder, dataset_info,
             feature_extractor=generator,
             visualization_file_names=visualization_file_names,
             eval_dir=eval_dir, calc_froc=calc_froc,
-            as_gan_generator=True, eval_split_name=eval_split_name)
+            as_gan_generator=True, eval_split_name=eval_split_name,
+            logger=logger,
+        )
         discriminator_model_fn = functools.partial(
             _gan_discriminator_model_fn, model=discriminator,
             use_batch_norm=pipeline_config.model.use_batch_norm,
             bn_momentum=pipeline_config.model.batch_norm_momentum,
-            bn_epsilon=pipeline_config.model.batch_norm_epsilon)
+            bn_epsilon=pipeline_config.model.batch_norm_epsilon,
+            logger=logger,
+        )
 
         return generator_model_fn, discriminator_model_fn
     else:

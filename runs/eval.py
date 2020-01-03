@@ -136,7 +136,9 @@ def main(_):
         eval_split_name=FLAGS.split_name, train_distribution=None,
         eval_distribution=distribution,
         eval_dir=result_folder,
-        calc_froc=not FLAGS.all_checkpoints and not FLAGS.continuous)
+        calc_froc=not FLAGS.all_checkpoints and not FLAGS.continuous,
+        logger=tqdm_logger,
+    )
 
     if FLAGS.num_steps > 0:
         num_steps = FLAGS.num_steps
@@ -172,7 +174,7 @@ def main(_):
                     new_checkpoint_evaluated = True
                 _eval_checkpoint(
                     checkpoint, estimator, input_fn, num_steps,
-                    split_name=FLAGS.split_name, logger=tqdm_logger,
+                    split_name=FLAGS.split_name,
                 )
                 evaluated_checkpoints.append(checkpoint)
                 latest_checkpoint = checkpoint
