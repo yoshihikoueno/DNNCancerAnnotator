@@ -26,7 +26,7 @@ class Eval3DHook(tf.train.SessionRunHook):
     def __init__(
             self, groundtruth, prediction, slice_ids, patient_id, exam_id,
             patient_exam_id_to_num_slices, calc_froc, target_size,
-            result_folder, eval_dir, froc_thresholds):
+            result_folder, eval_dir, froc_thresholds, logger=logging):
         self.groundtruth = groundtruth
         self.prediction = prediction
         self.slice_ids = slice_ids
@@ -43,6 +43,8 @@ class Eval3DHook(tf.train.SessionRunHook):
         self.full_slice_ids = []
         self.current_patient_num_slices = None
 
+        self.logger = logger
+
         self.groundtruth_op = tf.placeholder(
             shape=[None, self.target_size[0],
                    self.target_size[1]], dtype=tf.float32)
@@ -53,7 +55,9 @@ class Eval3DHook(tf.train.SessionRunHook):
         self.patient_metric_handler = (
             patient_metric_handler.PatientMetricHandler(
                 calc_froc=self.calc_froc,
-                result_folder=result_folder, eval_dir=eval_dir, is_3d=True))
+                result_folder=result_folder, eval_dir=eval_dir, is_3d=True,
+                logger=self.logger,
+            ))
 
         self.eval_ops = list(self._make_eval_op(froc_thresholds))
         self.eval_ops.append(self.groundtruth_op)
@@ -232,7 +236,8 @@ class VisualizationHook(tf.train.SessionRunHook):
 class PatientMetricHook(tf.train.SessionRunHook):
     def __init__(self, statistics_dict, patient_id, exam_id, result_folder,
                  eval_dir, num_lesions, froc_region_cm_values, froc_thresholds,
-                 calc_froc):
+                 calc_froc, logger=logging,
+                 ):
         self.statistics_dict = statistics_dict
         self.patient_id = patient_id
         self.exam_id = exam_id
@@ -242,10 +247,12 @@ class PatientMetricHook(tf.train.SessionRunHook):
         self.calc_froc = calc_froc
         self.froc_region_cm_values = froc_region_cm_values
         self.froc_thresholds = froc_thresholds
+        self.logger = logger
 
         self.patient_metric_handler = patient_metric_handler.PatientMetricHandler(
             calc_froc=calc_froc, result_folder=result_folder,
-            eval_dir=eval_dir, is_3d=False)
+            eval_dir=eval_dir, is_3d=False, logger=self.logger,
+        )
 
     def before_run(self, run_context):
         fetch_list = [self.statistics_dict,

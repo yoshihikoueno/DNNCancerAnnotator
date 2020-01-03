@@ -291,7 +291,9 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
             target_size=(pipeline_config.model.input_image_size_y,
                          pipeline_config.model.input_image_size_x),
             result_folder=result_folder, eval_dir=eval_dir,
-            froc_thresholds=froc_thresholds)
+            froc_thresholds=froc_thresholds,
+            logger=logger,
+        )
 
         vis_hook = session_hooks.VisualizationHook(
             result_folder=result_folder,

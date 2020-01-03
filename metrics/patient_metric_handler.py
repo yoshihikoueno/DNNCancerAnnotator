@@ -69,12 +69,13 @@ class Patient():
 
 
 class PatientMetricHandler():
-  def __init__(self, calc_froc, result_folder, eval_dir, is_3d):
+  def __init__(self, calc_froc, result_folder, eval_dir, is_3d, logger=logging):
     self.calc_froc = calc_froc
     self.patients = dict()
     self.result_folder = result_folder
     self.eval_dir = eval_dir
     self.is_3d = is_3d
+    self.logger = logger
 
   def set_sample(self, patient_id, exam_id, statistics, num_lesions,
                  froc_region_cm_values):
@@ -95,7 +96,7 @@ class PatientMetricHandler():
       num_lesions=num_lesions,
       froc_region_cm_values=froc_region_cm_values, num_slices=num_slices,
       num_slices_with_cancer=num_slices_with_cancer)
-    logging.info("Patient {} exam {} finished.".format(patient_id, exam_id))
+    self.logger.info("Patient {} exam {} finished.".format(patient_id, exam_id))
 
   def evaluate(self, global_step):
     logging.info("Starting final evaluation.")
