@@ -277,7 +277,7 @@ def _general_model_fn(features, mode, calc_froc, pipeline_config,
                 exam_id = tf.squeeze(exam_id, axis=0)
                 patient_id = tf.squeeze(patient_id, axis=0)
 
-        num_froc_thresholds = 200.0
+        num_froc_thresholds = 200
         froc_thresholds = np.linspace(0.0, 1.0, num=num_froc_thresholds,
                                       endpoint=True, dtype=np.float32)
 
