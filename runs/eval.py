@@ -60,7 +60,10 @@ def main(_):
     tqdm_logger = logging.getLogger('Eval(tqdm)')
     tqdm_logger.setLevel(logging.INFO)
     tqdm_handler = logging_handlers.TqdmLoggingHandler(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        '%Y-%m-%d %H:%M',
+    )
     tqdm_handler.setFormatter(formatter)
     tqdm_logger.addHandler(tqdm_handler)
     tqdm_logger.propagate = False
