@@ -71,6 +71,7 @@ def main(_):
             if FLAGS.visible_device_index != -1:
                 num_gpu = 1
                 index_list = [FLAGS.visible_device_index]
+                os.environ['CUDA_VISIBLE_DEVICES'] = str(FLAGS.visible_device_index)
             else: num_gpu = len(util_ops.get_devices())
     else:
         os.environ['CUDA_VISIBLE_DEVICES'] = ''
