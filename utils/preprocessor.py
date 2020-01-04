@@ -122,11 +122,15 @@ def apply_data_augmentation(features, data_augmentation_options,
 
         elif augmentation_type == 'random_warp':
             images, gt_masks = _random_warp(
-                images, masks=gt_masks, is_3d=is_3d)
+                images,
+                masks=gt_masks,
+                is_3d=is_3d,
+                amplitude_ratio=0.05,
+                pts_ratio=0.5,
+            )
 
         else:
-            raise ValueError("Unknown data augmentation type! {}".format(
-                augmentation_type))
+            raise ValueError(f'Unknown data augmentation type: {augmentation_type}')
 
     if only_augment_positive:
         if is_3d:
@@ -145,7 +149,7 @@ def apply_data_augmentation(features, data_augmentation_options,
     return features
 
 
-def _random_warp(images, masks, is_3d, amplitude_ratio=0.01, pts_ratio=0.2):
+def _random_warp(images, masks, is_3d, amplitude_ratio=0.01, pts_ratio=0.5):
     '''
     apply random warp to the given batch of images.
 
