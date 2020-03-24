@@ -12,8 +12,8 @@ import argparse
 # customs
 import engine
 import data
-from utils import dump_utils
-from utils import load_utils
+from utils import dump
+from utils import load
 
 
 def main(
@@ -31,7 +31,7 @@ def main(
         save_path: where to save weights/configs/results
         data_path: path to the data root dir
     '''
-    dump_utils.dump_options(
+    dump.dump_options(
         os.path.join(save_path, 'options.json'),
         format_='json',
         model_config=model_config,
@@ -40,11 +40,11 @@ def main(
     )
 
     ds = data.train_ds(data_path)
-    model_config = load_utils.load_model_config(model_config)
+    model_config = load.load_model_config(model_config)
     model = engine.TFKerasModel(model_config, save_path)
     results = model.train(ds)
 
-    dump_utils.dump_train_results(
+    dump.dump_train_results(
         os.path.join(save_path, 'resutls.pickle'),
         results,
     )
