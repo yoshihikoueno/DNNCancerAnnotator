@@ -10,10 +10,10 @@ import argparse
 # external
 
 # customs
-import engine
-import data
-from utils import dump
-from utils import load
+from annotator import engine
+from annotator import data
+from annotator.utils import dump
+from annotator.utils import load
 
 
 def main(
