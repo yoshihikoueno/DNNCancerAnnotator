@@ -1,3 +1,3 @@
-from annotator.utils import image
-from annotator.utils import load
-from annotator.utils import dump
+from . import image
+from . import load
+from . import dump

@@ -10,7 +10,7 @@ import tensorflow as tf
 from tensorflow import keras
 
 # customs
-from annotator.models import tf_models
+from ..models import tf_models
 
 
 class TFKerasModel():

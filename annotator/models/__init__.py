@@ -1,1 +1,1 @@
-from annotator.models import tf_models
+from . import tf_models

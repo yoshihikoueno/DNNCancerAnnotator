@@ -8,18 +8,22 @@ import os
 import argparse
 
 # external
+import dsargparse
+import yaml
 
 # customs
-from annotator import engine
-from annotator import data
-from annotator.utils import dump
-from annotator.utils import load
+from .. import engine
+from .. import data
+from ..utils import dump
+from ..utils import load
 
 
-def main(
+def train(
     model_config,
     save_path,
     data_path,
+    max_steps,
+    early_stop_steps,
 ):
     '''
     Train a model with specified configs.
@@ -27,10 +31,17 @@ def main(
     then train a model, finally dump reults.
 
     Args:
-        model_config (dict): model configuration
+        model_config: model configuration
+            this can be a dict contianing configs,
+            or a string path to the config file
         save_path: where to save weights/configs/results
         data_path: path to the data root dir
     '''
+    if isinstance(model_config, str):
+        with open(model_config) as f:
+            model_config = yaml.safe_load(f)
+    assert isinstance(model_config, dict)
+
     dump.dump_options(
         os.path.join(save_path, 'options.json'),
         format_='json',
@@ -49,23 +60,3 @@ def main(
         results,
     )
     return
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument(
-        '--model_config',
-        help='Path to the model config file.',
-    )
-    parser.add_argument(
-        '--save_path',
-        help='Path to the directory where model data are saved in and loaded from.',
-    )
-    command = parser.add_subparsers(help='Action to take.', metavar='command', dest='command')
-
-    train_parser = command.add_parser('train', help='Train a model')
-    eval_parser = command.add_parser('eval', help='Train a model')
-    predict_parser = command.add_parser('predict', help='Train a model')
-
-    args = parser.parse_args()
-    main(**vars(args))
