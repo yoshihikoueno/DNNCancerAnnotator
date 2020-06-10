@@ -23,7 +23,8 @@ def train(
     save_path,
     data_path,
     max_steps,
-    early_stop_steps,
+    early_stop_steps=None,
+    save_freq=500,
 ):
     '''
     Train a model with specified configs.
@@ -32,15 +33,14 @@ def train(
 
     Args:
         model_config: model configuration
-            this can be a dict contianing configs,
-            or a string path to the config file
         save_path: where to save weights/configs/results
         data_path: path to the data root dir
+        max_steps: max training steps
+        early_stop_steps: steps to train without improvements
+            None(default) disables this feature
+        save_freq: interval of checkpoints
+            default: 500 steps
     '''
-    if isinstance(model_config, str):
-        with open(model_config) as f:
-            model_config = yaml.safe_load(f)
-    assert isinstance(model_config, dict)
 
     dump.dump_options(
         os.path.join(save_path, 'options.json'),
@@ -52,11 +52,17 @@ def train(
 
     ds = data.train_ds(data_path)
     model_config = load.load_model_config(model_config)
-    model = engine.TFKerasModel(model_config, save_path)
-    results = model.train(ds)
+    model = engine.TFKerasModel(model_config)
+    results = model.train(
+        ds,
+        save_path=os.path.join(save_path, 'checkpoints'),
+        max_steps=max_steps,
+        early_stop_steps=early_stop_steps,
+        save_freq=save_freq,
+    )
 
     dump.dump_train_results(
         os.path.join(save_path, 'resutls.pickle'),
         results,
     )
-    return
+    return results

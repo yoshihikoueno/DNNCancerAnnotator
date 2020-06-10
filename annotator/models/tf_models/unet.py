@@ -13,7 +13,7 @@ from tensorflow.keras.layers import Layer
 from tensorflow.keras import Model
 
 # customs
-from annotator.models.tf_models import components
+from . import components
 
 
 class UNet(Layer):
