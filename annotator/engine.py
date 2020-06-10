@@ -4,13 +4,15 @@ provides abstraction of DNN library
 
 # built-in
 import copy
+import os
+import pdb
 
 # external
 import tensorflow as tf
 from tensorflow import keras
 
 # customs
-from ..models import tf_models
+from .models import tf_models
 
 
 class TFKerasModel():
@@ -26,13 +28,23 @@ class TFKerasModel():
         Args:
             model_config (dict):m model configuration
         '''
-        self.model_package = tf_models
-        self.model_fn = self._model_config_to_model_fn(model_config)
-        self.model = keras.Model(self.model_fn)
+        self.model = self.from_config(model_config)
         return
 
-    def train(self, dataset):
-        results = self.model.fit()
+    def train(self, dataset, save_path=None, save_freq=100, max_steps=None, early_stop_steps=None):
+        callbacks = []
+        if save_path is not None:
+            ckpt_path = os.path.join(save_path, 'checkpoints', 'ckpt-{epoch}.hdf5')
+            callbacks.append(tf.keras.callbacks.ModelCheckpoint(ckpt_path, save_freq=save_freq))
+
+            tfevents_path = os.path.join(save_path, 'tfevents', 'ckpt-{epoch}.hdf5')
+            callbacks.append(tf.keras.callbacks.TensorBoard(tfevents_path, update_freq=save_freq))
+
+        if early_stop_steps is not None:
+            stopper = tf.keras.callbacks.EarlyStopping(patience=early_stop_steps, verbose=1)
+            callbacks.append(stopper)
+
+        results = self.model.fit(dataset, callbacks=callbacks, steps_per_epoch=1, epochs=max_steps)
         return results
 
     def eval(self, dataset):
@@ -54,10 +66,12 @@ class TFKerasModel():
     def _saving_hook(self):
         return
 
-    def _model_config_to_model_fn(self, model_config):
-        model_name = model_config['name']
-        model_config = copy.deepcopy(model_config)
-        del model_config['name']
+    def from_config(self, model_config):
+        assert 'model' in model_config
+        assert 'model_options' in model_config
+        assert 'deploy_options' in model_config
 
-        model_fn = self.model_package[model_name](**model_config)
-        return model_fn
+        model_name = model_config['model']
+        model = getattr(tf_models, model_name)(**model_config['model_options'])
+        model.compile(**model_config['deploy_options'])
+        return model
