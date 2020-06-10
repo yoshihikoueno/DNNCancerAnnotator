@@ -31,7 +31,7 @@ import tensorflow as tf
 # customs
 
 
-def train_ds(path, batch_size, buffer_size, repeat=True):
+def train_ds(path, batch_size, buffer_size, repeat=True, slice_types=('TRA', 'ADC', 'DWI', 'DCEE', 'DCEL', 'label')):
     '''
     generate dataset for training
 
@@ -41,8 +41,9 @@ def train_ds(path, batch_size, buffer_size, repeat=True):
         buffer_size: buffer_size
         repeat: should ds be repeated
     '''
-    ds = base(path)
+    ds = base(path, slice_types=slice_types)
     ds = augment(ds)
+    ds = to_feature_label(ds, slice_types=slice_types)
     ds = ds.shuffle(buffer_size)
     if repeat: ds = ds.repeat(None)
     ds = ds.batch(batch_size)
@@ -54,6 +55,7 @@ def eval_ds(path, batch_size):
     generate dataset for evaluation
     '''
     ds = base(path)
+    ds = to_feature_label(ds)
     ds = ds.batch(batch_size)
     ds = ds.prefetch(tf.data.experimental.AUTOTUNE)
     return ds
@@ -63,10 +65,11 @@ def predict_ds(path):
     generate dataset for prediction
     '''
     ds = base(path)
+    ds = to_feature_label(ds)
     ds = ds.batch(1)
     return ds
 
-def base(path):
+def base(path, slice_types):
     '''
     generate base dataset
     '''
@@ -79,7 +82,7 @@ def base(path):
     ds = ds.map(parse_exam, tf.data.experimental.AUTOTUNE)
     return ds
 
-def parse_exam(exam_dir, slice_types=('TRA', 'ADC', 'DWI', 'DCEE', 'DCEL'), decoder=tf.image.decode_image):
+def parse_exam(exam_dir, slice_types, decoder=tf.image.decode_image):
     '''
     parse exam directory and return contents in dict
 
@@ -94,6 +97,7 @@ def parse_exam(exam_dir, slice_types=('TRA', 'ADC', 'DWI', 'DCEE', 'DCEL'), deco
             'patientID': patient ID,
             'examID': exam ID,
             'nslices': the number of available slices,
+            'label': segmentation map
             'TRA': decoded TRA slices,
             'ADC': decoded ADC slices,
             'DWI': decoded DWI slices,
@@ -131,4 +135,24 @@ def base_from_tfrecords(path):
     return
 
 def augment(ds, methods=None):
+    return ds
+
+def to_feature_label(ds, slice_types):
+    '''
+    convert ds containing dicts to ds containing tuple(feature, tuple)
+    '''
+    feature_slice_types = tuple(e for e in slice_types if e != 'label')
+
+    def convert(dict_):
+        assert dict_['nslices'] > 0, f'Found invalid record in ds: {dict_}'
+        if dict_['nslices'] > 1: raise NotImplementedError
+
+        label = dict_['label']
+        feature = tf.concat(
+            list(map(dict_.get, feature_slice_types)),
+            axis=2,
+        )
+        return feature, label
+
+    ds = ds.map(convert, tf.data.experimental.AUTOTUNE)
     return ds
