@@ -18,7 +18,7 @@ from ..utils import dump
 from ..utils import load
 
 
-def main(prog='python3 -m annotator.runs -h'):
+def main(prog='python3 -m annotator.runs'):
     parser = dsargparse.ArgumentParser(main=main, prog=prog)
     subparsers = parser.add_subparsers(help='command')
     subparsers.add_parser(train.train, add_arguments_auto=True)
