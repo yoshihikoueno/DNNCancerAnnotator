@@ -249,7 +249,7 @@ def process_slice(slice_, exam, dry, include_label):
     for kind, img in results.items():
         kind_dir = os.path.join(exam, kind)
         if not dry:
-            os.makedirs(kind_dir, exist_ok=True)
+            if not os.path.exists(kind_dir): os.makedirs(kind_dir, exist_ok=True)
             cv2.imwrite(os.path.join(kind_dir, slice_), img)
     return
 
