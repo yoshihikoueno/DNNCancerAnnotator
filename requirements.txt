@@ -8,3 +8,4 @@ tqdm
 opencv-python
 git+https://github.com/yoshihikoueno/dsargparse.git@master
 p_tqdm
+pyyaml
