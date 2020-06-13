@@ -188,6 +188,7 @@ def extract(
     if debug_output is not None: os.makedirs(debug_output, exist_ok=True)
 
     collective_img = cv2.imread(path)
+    assert collective_img is not None, f'failed to load {path}'
     boxes = detect_internals(collective_img, debug_output=debug_output)
     imgs = extract_images(collective_img, boxes)
 
@@ -255,7 +256,7 @@ def process_slice(slice_, exam, dry, include_label):
 def list_exams(path, extension='png'):
     if path[-1] == os.path.sep: path = path[:-1]
     exams = {
-        exam: sorted(os.listdir(exam))
+        exam: sorted(list(filter(lambda x: os.path.splitext(x)[1][1:] == extension, os.listdir(exam))))
         for exam in glob(os.path.join(path, '*', '*'))
         if list(filter(lambda x: os.path.splitext(x)[1][1:] == extension, os.listdir(exam)))
     }
