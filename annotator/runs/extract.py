@@ -233,7 +233,7 @@ def extract(
 
     if include_label_comparison:
         assert include_label, 'label must be included to include label_comparison'
-        result['label_comparison'] = np.concatenate([cv2.cvtColor(imgs[0], cv2.COLOR_BGR2GRAY), label], axis=1)
+        result['label_comparison'] = np.concatenate([np.expand_dims(cv2.cvtColor(imgs[0], cv2.COLOR_BGR2GRAY), axis=-1), label], axis=1)
     else: assert not label_exists(imgs[0])
 
     if output is not None: save_output(output, result)
