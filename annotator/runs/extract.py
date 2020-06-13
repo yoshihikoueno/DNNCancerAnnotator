@@ -58,6 +58,7 @@ def detect_internals(
     conv_result = signal.convolve2d(filtered, np.flip(conv_filter), 'valid')
     corners = conv_result == (conv_filter_size * 2 - 1)
     xs, ys = np.where(corners)
+    if len(xs) == 0: raise ValueError('Failed to detect corners')
     target_idx = np.argmin(xs)
     x, y = xs[target_idx], ys[target_idx]
 
@@ -189,7 +190,8 @@ def extract(
 
     collective_img = cv2.imread(path)
     assert collective_img is not None, f'failed to load {path}'
-    boxes = detect_internals(collective_img, debug_output=debug_output)
+    try: boxes = detect_internals(collective_img, debug_output=debug_output)
+    except ValueError: raise ValueError(f'Failed to detect corners: {path}')
     imgs = extract_images(collective_img, boxes)
 
     result = {
