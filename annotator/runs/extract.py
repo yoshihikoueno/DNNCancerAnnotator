@@ -157,6 +157,7 @@ def extract_label(
     line_eraser_thickness=3,
     minLineLength=3,
     debug_output=None,
+    kernel_size=9,
 ):
     '''
     detect label and return filled label image
@@ -171,7 +172,7 @@ def extract_label(
         cv2.line(color_nolines, (x0, y0), (x1, y1), 0, line_eraser_thickness)
 
     center_masked = np.logical_and(get_center_mask(color_nolines.shape), color_nolines).astype(np.uint8) * 255
-    closed = cv2.morphologyEx(center_masked, cv2.MORPH_CLOSE, np.ones([7] * 2, np.uint8))
+    closed = cv2.morphologyEx(center_masked, cv2.MORPH_CLOSE, np.ones([kernel_size] * 2, np.uint8))
     ctrs, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     label = np.zeros(color.shape, dtype=np.uint8)
     cv2.fillPoly(label, ctrs, 255)
@@ -199,6 +200,7 @@ def extract(
     include_label=False,
     debug_output=None,
     include_label_comparison=False,
+    kernel_size=9,
 ):
     '''
     extract data
@@ -211,6 +213,7 @@ def extract(
             default: None (disabled)
         include_label_comparison: should this func also export
             an image combining annotation image and segmentation image
+        kernel_size: size of the kernel to use to generate segmentation mask
     '''
     if debug_output is not None: os.makedirs(debug_output, exist_ok=True)
 
@@ -228,7 +231,7 @@ def extract(
     if include_label:
         assert label_exists(imgs[0]), f'{path} doen\'t seem to have a label'
         label = imgs[0]
-        label = extract_label(label, debug_output=debug_output)
+        label = extract_label(label, debug_output=debug_output, kernel_size=kernel_size)
         result['label'] = label
 
     if include_label_comparison:
@@ -240,7 +243,7 @@ def extract(
     return result
 
 
-def extract_all(path, dry=False, debug=False):
+def extract_all(path, dry=False, debug=False, kernel_size=9):
     '''
     extract indivisual images (TRA, ADC, etc...) from the screenshots
     under the specified directory.
@@ -254,13 +257,14 @@ def extract_all(path, dry=False, debug=False):
             this will make no changes to the disk.
             useful to make sure that it doesn't fail
         debug: should also output debug image
+        kernel_size: kernel size to be used during segmentation map inference
     '''
     assert os.path.exists(path)
     healthy_path = os.path.join(path, 'healthy')
     cancer_path = os.path.join(path, 'cancer')
     assert os.path.exists(healthy_path) and os.path.exists(cancer_path)
 
-    tasks = {'slice': [], 'exam': [], 'include_label': [], 'debug': [], 'dry': []}
+    tasks = {'slice': [], 'exam': [], 'include_label': [], 'debug': [], 'dry': [], 'kernel_size': []}
 
     # process healthy cases
     for exam, slices in tqdm(list_exams(healthy_path).items(), desc='healthy cases', leave=False):
@@ -270,6 +274,7 @@ def extract_all(path, dry=False, debug=False):
             tasks['include_label'].append(False)
             tasks['dry'].append(dry)
             tasks['debug'].append(False)
+            tasks['kernel_size'].append(kernel_size)
 
     # process cancer cases
     for exam, slices in tqdm(list_exams(cancer_path).items(), desc='cancer cases', leave=False):
@@ -279,6 +284,7 @@ def extract_all(path, dry=False, debug=False):
             tasks['include_label'].append(True)
             tasks['dry'].append(dry)
             tasks['debug'].append(debug)
+            tasks['kernel_size'].append(kernel_size)
 
     p_tqdm.p_map(
         process_slice,
@@ -286,8 +292,14 @@ def extract_all(path, dry=False, debug=False):
     )
     return
 
-def process_slice(slice_, exam, dry, include_label, debug):
-    results = extract(os.path.join(exam, slice_), None, include_label=include_label, include_label_comparison=debug)
+def process_slice(slice_, exam, dry, include_label, debug, kernel_size):
+    results = extract(
+        os.path.join(exam, slice_),
+        None,
+        include_label=include_label,
+        include_label_comparison=debug,
+        kernel_size=kernel_size,
+    )
     for kind, img in results.items():
         kind_dir = os.path.join(exam, kind)
         if not dry:
