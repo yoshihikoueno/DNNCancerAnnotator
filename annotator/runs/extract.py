@@ -198,6 +198,7 @@ def extract(
     output,
     include_label=False,
     debug_output=None,
+    include_label_comparison=False,
 ):
     '''
     extract data
@@ -208,6 +209,8 @@ def extract(
         include_label: should label image also generated
         debug_output: debug image output directory
             default: None (disabled)
+        include_label_comparison: should this func also export
+            an image combining annotation image and segmentation image
     '''
     if debug_output is not None: os.makedirs(debug_output, exist_ok=True)
 
@@ -227,13 +230,17 @@ def extract(
         label = imgs[0]
         label = extract_label(label, debug_output=debug_output)
         result['label'] = label
+
+    if include_label_comparison:
+        assert include_label, 'label must be included to include label_comparison'
+        result['label_comparison'] = np.concatenate([cv2.cvtColor(imgs[0], cv2.COLOR_BGR2GRAY), label], axis=1)
     else: assert not label_exists(imgs[0])
 
     if output is not None: save_output(output, result)
     return result
 
 
-def extract_all(path, dry=False):
+def extract_all(path, dry=False, debug=False):
     '''
     extract indivisual images (TRA, ADC, etc...) from the screenshots
     under the specified directory.
@@ -246,31 +253,41 @@ def extract_all(path, dry=False):
         dry: should do the dry run.
             this will make no changes to the disk.
             useful to make sure that it doesn't fail
+        debug: should also output debug image
     '''
     assert os.path.exists(path)
     healthy_path = os.path.join(path, 'healthy')
     cancer_path = os.path.join(path, 'cancer')
     assert os.path.exists(healthy_path) and os.path.exists(cancer_path)
 
+    tasks = {'slice': [], 'exam': [], 'include_label': [], 'debug': [], 'dry': []}
+
     # process healthy cases
     for exam, slices in tqdm(list_exams(healthy_path).items(), desc='healthy cases', leave=False):
-        p_tqdm.p_map(
-            functools.partial(process_slice, exam=exam, dry=dry, include_label=False),
-            slices,
-            desc=f'Exam: {exam}', leave=False,
-        )
+        for slice_ in slices:
+            tasks['slice'].append(slice_)
+            tasks['exam'].append(exam)
+            tasks['include_label'].append(False)
+            tasks['dry'].append(dry)
+            tasks['debug'].append(False)
 
     # process cancer cases
     for exam, slices in tqdm(list_exams(cancer_path).items(), desc='cancer cases', leave=False):
-        p_tqdm.p_map(
-            functools.partial(process_slice, exam=exam, dry=dry, include_label=True),
-            slices,
-            desc=f'Exam: {exam}', leave=False,
-        )
+        for slice_ in slices:
+            tasks['slice'].append(slice_)
+            tasks['exam'].append(exam)
+            tasks['include_label'].append(True)
+            tasks['dry'].append(dry)
+            tasks['debug'].append(debug)
+
+    p_tqdm.p_map(
+        process_slice,
+        tasks['slice'], tasks['exam'], tasks['dry'], tasks['include_label'], tasks['debug'],
+    )
     return
 
-def process_slice(slice_, exam, dry, include_label):
-    results = extract(os.path.join(exam, slice_), None, include_label=include_label)
+def process_slice(slice_, exam, dry, include_label, debug):
+    results = extract(os.path.join(exam, slice_), None, include_label=include_label, include_label_comparison=debug)
     for kind, img in results.items():
         kind_dir = os.path.join(exam, kind)
         if not dry:
