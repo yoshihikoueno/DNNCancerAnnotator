@@ -198,6 +198,7 @@ def extract(
     }
 
     if include_label:
+        assert label_exists(imgs[0]), f'{path} doen\'t seem to have a label'
         label = imgs[0]
         label = extract_label(label, debug_output=debug_output)
         result['label'] = label
@@ -235,7 +236,7 @@ def extract_all(path, dry=False):
         )
 
     # process cancer cases
-    for exam, slices in tqdm(list_exams(cancer_path).items(), desc='healthy cases', leave=False):
+    for exam, slices in tqdm(list_exams(cancer_path).items(), desc='cancer cases', leave=False):
         p_tqdm.p_map(
             functools.partial(process_slice, exam=exam, dry=dry, include_label=True),
             slices,
