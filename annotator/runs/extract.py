@@ -32,6 +32,27 @@ def get_orthogonal_detector(size=200):
     return filter_
 
 
+def find_top_left_fallback(gray):
+    '''fallback method to find top left corner
+    conv-based method should be used instead of this method
+    when it's possible.
+    '''
+    def find_top(start=120):
+        current = start
+        while np.sum(gray[current, 100:700]) != 0:
+            current += 1
+        return current
+
+    def find_left(start=120):
+        current = start
+        while np.sum(gray[250:800, current]) != 0:
+            current -= 1
+        return current
+
+    x, y = find_top() + 3, find_left() - 75
+    return x, y
+
+
 def detect_internals(
     collective_img,
     num_internals=6,
@@ -58,13 +79,15 @@ def detect_internals(
     conv_result = signal.convolve2d(filtered, np.flip(conv_filter), 'valid')
     corners = conv_result == (conv_filter_size * 2 - 1)
     xs, ys = np.where(corners)
-    if len(xs) == 0: raise ValueError('Failed to detect corners')
-    target_idx = np.argmin(xs)
-    x, y = xs[target_idx], ys[target_idx]
-
-    # make sure (x,y) is pointing to the top-left corner
-    while x > 200: x -= box_size[0]
-    while y > 60: y -= box_size[1]
+    if len(xs) > 0:
+        target_idx = np.argmin(xs)
+        x, y = xs[target_idx], ys[target_idx]
+        # make sure (x,y) is pointing to the top-left corner
+        while x > 200: x -= box_size[0]
+        while y > 60: y -= box_size[1]
+    else:
+        x, y = find_top_left_fallback(gray)
+        if x < 0 or y < 0: raise ValueError('Failed to detect corners')
 
     anchor = x, y
     first_anchor = anchor
