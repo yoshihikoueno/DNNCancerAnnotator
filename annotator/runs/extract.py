@@ -288,7 +288,7 @@ def extract_all(path, dry=False, debug=False, kernel_size=9):
 
     p_tqdm.p_map(
         process_slice,
-        tasks['slice'], tasks['exam'], tasks['dry'], tasks['include_label'], tasks['debug'],
+        tasks['slice'], tasks['exam'], tasks['dry'], tasks['include_label'], tasks['debug'], tasks['kernel_size'],
     )
     return
 
