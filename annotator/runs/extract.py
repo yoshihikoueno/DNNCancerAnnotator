@@ -177,9 +177,11 @@ def extract_label(
 
     color_nolines = color.copy()
 
-    hough_result = cv2.HoughLinesP(color, 0.5, np.pi / 720, 50, minLineLength=minLineLength)
+    hough_result = cv2.HoughLinesP(
+        color, 0.5, np.pi / 1800, 50, minLineLength=minLineLength, maxLineGap=2,
+    )
     if hough_result is not None:
-        lines = hough_result[:, 0, :]
+        lines = np.squeeze(hough_result, 1)
         for x0, y0, x1, y1 in lines:
             cv2.line(color_nolines, (x0, y0), (x1, y1), 0, line_eraser_thickness)
 
