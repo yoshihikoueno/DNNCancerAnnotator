@@ -158,6 +158,7 @@ def extract_label(
     minLineLength=3,
     debug_output=None,
     kernel_size=9,
+    iterations=1,
 ):
     '''
     detect label and return filled label image
@@ -172,14 +173,25 @@ def extract_label(
         cv2.line(color_nolines, (x0, y0), (x1, y1), 0, line_eraser_thickness)
 
     center_masked = np.logical_and(get_center_mask(color_nolines.shape), color_nolines).astype(np.uint8) * 255
-    closed = cv2.morphologyEx(center_masked, cv2.MORPH_CLOSE, np.ones([kernel_size] * 2, np.uint8))
+
+    nmarkers, marker_ids = cv2.connectedComponents(center_masked)
+    closed = np.sum(list(map(
+        lambda marker_id: cv2.morphologyEx(
+            (marker_id == marker_ids).astype(np.uint8) * 255,
+            cv2.MORPH_CLOSE,
+            np.ones([kernel_size] * 2, np.uint8),
+            iterations=iterations,
+        ),
+        range(1, nmarkers),
+    )), axis=0, dtype=np.uint8)
+    closed = np.expand_dims(closed, -1)
+
     ctrs, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     label = np.zeros(color.shape, dtype=np.uint8)
     cv2.fillPoly(label, ctrs, 255)
 
     if debug_output is not None:
         cv2.imwrite(os.path.join(debug_output, 'extract_label_input.png'), label_img)
-        cv2.imwrite(os.path.join(debug_output, 'extract_label_gray.png'), monochrome)
         cv2.imwrite(os.path.join(debug_output, 'color.png'), color)
         cv2.imwrite(os.path.join(debug_output, 'color_nolines.png'), color_nolines)
         cv2.imwrite(os.path.join(debug_output, 'center_masked.png'), center_masked)
@@ -201,6 +213,7 @@ def extract(
     debug_output=None,
     include_label_comparison=False,
     kernel_size=9,
+    iterations=1,
 ):
     '''
     extract data
@@ -214,6 +227,7 @@ def extract(
         include_label_comparison: should this func also export
             an image combining annotation image and segmentation image
         kernel_size: size of the kernel to use to generate segmentation mask
+        iterations: iterations of internal dilate and erode ops
     '''
     if debug_output is not None: os.makedirs(debug_output, exist_ok=True)
 
@@ -231,19 +245,19 @@ def extract(
     if include_label:
         assert label_exists(imgs[0]), f'{path} doen\'t seem to have a label'
         label = imgs[0]
-        label = extract_label(label, debug_output=debug_output, kernel_size=kernel_size)
+        label = extract_label(label, debug_output=debug_output, kernel_size=kernel_size, iterations=iterations)
         result['label'] = label
+    else: assert not label_exists(imgs[0])
 
     if include_label_comparison:
         assert include_label, 'label must be included to include label_comparison'
         result['label_comparison'] = np.concatenate([np.expand_dims(cv2.cvtColor(imgs[0], cv2.COLOR_BGR2GRAY), axis=-1), label], axis=1)
-    else: assert not label_exists(imgs[0])
 
     if output is not None: save_output(output, result)
     return result
 
 
-def extract_all(path, dry=False, debug=False, kernel_size=9):
+def extract_all(path, dry=False, debug=False, kernel_size=9, iterations=1):
     '''
     extract indivisual images (TRA, ADC, etc...) from the screenshots
     under the specified directory.
@@ -258,13 +272,14 @@ def extract_all(path, dry=False, debug=False, kernel_size=9):
             useful to make sure that it doesn't fail
         debug: should also output debug image
         kernel_size: kernel size to be used during segmentation map inference
+        iterations: iterations of dilate and erode ops
     '''
     assert os.path.exists(path)
     healthy_path = os.path.join(path, 'healthy')
     cancer_path = os.path.join(path, 'cancer')
     assert os.path.exists(healthy_path) and os.path.exists(cancer_path)
 
-    tasks = {'slice': [], 'exam': [], 'include_label': [], 'debug': [], 'dry': [], 'kernel_size': []}
+    tasks = {'slice': [], 'exam': [], 'include_label': [], 'debug': [], 'dry': [], 'kernel_size': [], 'iterations': []}
 
     # process healthy cases
     for exam, slices in tqdm(list_exams(healthy_path).items(), desc='healthy cases', leave=False):
@@ -275,6 +290,7 @@ def extract_all(path, dry=False, debug=False, kernel_size=9):
             tasks['dry'].append(dry)
             tasks['debug'].append(False)
             tasks['kernel_size'].append(kernel_size)
+            tasks['iterations'].append(iterations)
 
     # process cancer cases
     for exam, slices in tqdm(list_exams(cancer_path).items(), desc='cancer cases', leave=False):
@@ -285,20 +301,23 @@ def extract_all(path, dry=False, debug=False, kernel_size=9):
             tasks['dry'].append(dry)
             tasks['debug'].append(debug)
             tasks['kernel_size'].append(kernel_size)
+            tasks['iterations'].append(iterations)
 
     p_tqdm.p_map(
         process_slice,
-        tasks['slice'], tasks['exam'], tasks['dry'], tasks['include_label'], tasks['debug'], tasks['kernel_size'],
+        tasks['slice'], tasks['exam'], tasks['dry'], tasks['include_label'],
+        tasks['debug'], tasks['kernel_size'], tasks['iterations'],
     )
     return
 
-def process_slice(slice_, exam, dry, include_label, debug, kernel_size):
+def process_slice(slice_, exam, dry, include_label, debug, kernel_size, iterations):
     results = extract(
         os.path.join(exam, slice_),
         None,
         include_label=include_label,
         include_label_comparison=debug,
         kernel_size=kernel_size,
+        iterations=iterations,
     )
     for kind, img in results.items():
         kind_dir = os.path.join(exam, kind)
