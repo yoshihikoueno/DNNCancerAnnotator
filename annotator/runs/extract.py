@@ -19,6 +19,7 @@ from scipy import signal
 import dsargparse
 from tqdm import tqdm
 import p_tqdm
+import tensorflow as tf
 
 
 def get_orthogonal_detector(size=200):
@@ -61,6 +62,7 @@ def detect_internals(
     box_size=(708, 850),
     nboxes_horizontal=3,
     debug_output=None,
+    use_tensorflow=False,
 ):
     '''
     detect starting points of 6 internal images
@@ -76,7 +78,14 @@ def detect_internals(
     filtered = gray == separator_value
     conv_filter = get_orthogonal_detector(conv_filter_size)
 
-    conv_result = signal.convolve2d(filtered, np.flip(conv_filter), 'valid')
+    if use_tensorflow:
+        conv_result = tf.nn.conv2d(
+            tf.expand_dims(tf.expand_dims(tf.constant(filtered, dtype=tf.float16), 0), -1),
+            tf.expand_dims(tf.expand_dims(tf.constant(conv_filter, dtype=tf.float16), -1), -1),
+            1,
+            'VALID',
+        ).numpy()[0, :, :, 0]
+    else: conv_result = signal.convolve2d(filtered, np.flip(conv_filter), 'valid')
     corners = conv_result == (conv_filter_size * 2 - 1)
     xs, ys = np.where(corners)
     if len(xs) > 0:
@@ -214,6 +223,7 @@ def extract(
     include_label_comparison=False,
     kernel_size=9,
     iterations=1,
+    use_tensorflow=False,
 ):
     '''
     extract data
@@ -228,12 +238,13 @@ def extract(
             an image combining annotation image and segmentation image
         kernel_size: size of the kernel to use to generate segmentation mask
         iterations: iterations of internal dilate and erode ops
+        use_tensorflow: should use tensorflow to apply Conv2D
     '''
     if debug_output is not None: os.makedirs(debug_output, exist_ok=True)
 
     collective_img = cv2.imread(path)
     assert collective_img is not None, f'failed to load {path}'
-    try: boxes = detect_internals(collective_img, debug_output=debug_output)
+    try: boxes = detect_internals(collective_img, debug_output=debug_output, use_tensorflow=use_tensorflow)
     except ValueError: raise ValueError(f'Failed to detect corners: {path}')
     imgs = extract_images(collective_img, boxes)
 
@@ -257,7 +268,7 @@ def extract(
     return result
 
 
-def extract_all(path, dry=False, debug=False, kernel_size=9, iterations=1):
+def extract_all(path, dry=False, debug=False, kernel_size=9, iterations=1, use_tensorflow=False):
     '''
     extract indivisual images (TRA, ADC, etc...) from the screenshots
     under the specified directory.
@@ -273,13 +284,17 @@ def extract_all(path, dry=False, debug=False, kernel_size=9, iterations=1):
         debug: should also output debug image
         kernel_size: kernel size to be used during segmentation map inference
         iterations: iterations of dilate and erode ops
+        use_tensorflow: should use tensorlfow to apply conv2d
     '''
     assert os.path.exists(path)
     healthy_path = os.path.join(path, 'healthy')
     cancer_path = os.path.join(path, 'cancer')
     assert os.path.exists(healthy_path) and os.path.exists(cancer_path)
 
-    tasks = {'slice': [], 'exam': [], 'include_label': [], 'debug': [], 'dry': [], 'kernel_size': [], 'iterations': []}
+    tasks = {
+        'slice': [], 'exam': [], 'include_label': [], 'debug': [], 'dry': [],
+        'kernel_size': [], 'iterations': [], 'use_tensorflow': [],
+    }
 
     # process healthy cases
     for exam, slices in tqdm(list_exams(healthy_path).items(), desc='healthy cases', leave=False):
@@ -291,6 +306,7 @@ def extract_all(path, dry=False, debug=False, kernel_size=9, iterations=1):
             tasks['debug'].append(False)
             tasks['kernel_size'].append(kernel_size)
             tasks['iterations'].append(iterations)
+            tasks['use_tensorflow'].append(use_tensorflow)
 
     # process cancer cases
     for exam, slices in tqdm(list_exams(cancer_path).items(), desc='cancer cases', leave=False):
@@ -302,15 +318,16 @@ def extract_all(path, dry=False, debug=False, kernel_size=9, iterations=1):
             tasks['debug'].append(debug)
             tasks['kernel_size'].append(kernel_size)
             tasks['iterations'].append(iterations)
+            tasks['use_tensorflow'].append(use_tensorflow)
 
     p_tqdm.p_map(
         process_slice,
         tasks['slice'], tasks['exam'], tasks['dry'], tasks['include_label'],
-        tasks['debug'], tasks['kernel_size'], tasks['iterations'],
+        tasks['debug'], tasks['kernel_size'], tasks['iterations'], tasks['use_tensorflow'],
     )
     return
 
-def process_slice(slice_, exam, dry, include_label, debug, kernel_size, iterations):
+def process_slice(slice_, exam, dry, include_label, debug, kernel_size, iterations, use_tensorflow):
     results = extract(
         os.path.join(exam, slice_),
         None,
@@ -318,6 +335,7 @@ def process_slice(slice_, exam, dry, include_label, debug, kernel_size, iteratio
         include_label_comparison=debug,
         kernel_size=kernel_size,
         iterations=iterations,
+        use_tensorflow=use_tensorflow,
     )
     for kind, img in results.items():
         kind_dir = os.path.join(exam, kind)
