@@ -151,20 +151,19 @@ def get_center_mask(size, radius=130, dtype=np.uint8):
     return mask
 
 
-def label_exists(label_img, minLineLength=3):
+def label_exists(label_img):
     '''checks if a label image contains annotations'''
     monochrome = get_monochrome_pixels(label_img)
     color = np.logical_not(monochrome)
     color = (np.expand_dims(color, -1) * 255).astype(np.uint8)
-
-    result = cv2.HoughLinesP(color, 1, np.pi / 180 / 2, 100, minLineLength=minLineLength)
-    return result is not None
+    center_masked = np.logical_and(get_center_mask(color.shape), color).astype(np.uint8) * 255
+    return np.sum(center_masked) > 0
 
 
 def extract_label(
     label_img,
     line_eraser_thickness=3,
-    minLineLength=3,
+    minLineLength=100,
     debug_output=None,
     kernel_size=9,
     iterations=1,
@@ -176,10 +175,13 @@ def extract_label(
     color = np.logical_not(monochrome)
     color = (np.expand_dims(color, -1) * 255).astype(np.uint8)
 
-    lines = cv2.HoughLinesP(color, 1, np.pi / 180 / 2, 100, minLineLength=minLineLength)[0]
     color_nolines = color.copy()
-    for x0, y0, x1, y1 in lines:
-        cv2.line(color_nolines, (x0, y0), (x1, y1), 0, line_eraser_thickness)
+
+    hough_result = cv2.HoughLinesP(color, 0.5, np.pi / 720, 50, minLineLength=minLineLength)
+    if hough_result is not None:
+        lines = hough_result[:, 0, :]
+        for x0, y0, x1, y1 in lines:
+            cv2.line(color_nolines, (x0, y0), (x1, y1), 0, line_eraser_thickness)
 
     center_masked = np.logical_and(get_center_mask(color_nolines.shape), color_nolines).astype(np.uint8) * 255
 
@@ -221,8 +223,8 @@ def extract(
     include_label=False,
     debug_output=None,
     include_label_comparison=False,
-    kernel_size=9,
-    iterations=1,
+    kernel_size=5,
+    iterations=7,
     use_tensorflow=False,
 ):
     '''
@@ -268,7 +270,7 @@ def extract(
     return result
 
 
-def extract_all(path, dry=False, debug=False, kernel_size=9, iterations=1, use_tensorflow=False):
+def extract_all(path, dry=False, debug=False, kernel_size=5, iterations=7, use_tensorflow=False):
     '''
     extract indivisual images (TRA, ADC, etc...) from the screenshots
     under the specified directory.
