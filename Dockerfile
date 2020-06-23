@@ -1,4 +1,4 @@
-from tensorflow/tensorflow:2.1.1
+from tensorflow/tensorflow:2.1.1-gpu
 run apt update
 run apt install -y git python3-pip libsm6 libxext6 libxrender-dev
 run git clone --single-branch --branch restructure https://github.com/yoshihikoueno/DNNCancerAnnotator
