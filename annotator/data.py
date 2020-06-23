@@ -51,9 +51,17 @@ import tensorflow as tf
 from tqdm import tqdm
 
 # customs
+from .utils import dataset as ds_utils
 
 
-def train_ds(path, batch_size, buffer_size, repeat=True, slice_types=('TRA', 'ADC', 'DWI', 'DCEE', 'DCEL', 'label')):
+def train_ds(
+    path,
+    batch_size,
+    buffer_size,
+    repeat=True,
+    slice_types=('TRA', 'ADC', 'DWI', 'DCEE', 'DCEL', 'label'),
+    normalize_exams=True,
+):
     '''
     generate dataset for training
 
@@ -62,8 +70,11 @@ def train_ds(path, batch_size, buffer_size, repeat=True, slice_types=('TRA', 'AD
         batch_size: batch size
         buffer_size: buffer_size
         repeat: should ds be repeated
+        slice_types: types of slices to include
+        normalize_exams: whether the resulting dataset contain
+            the same number of slices from each exam
     '''
-    ds = base(path, slice_types=slice_types)
+    ds = base(path, slice_types=slice_types, normalize_exams=normalize_exams)
     ds = augment(ds)
     ds = to_feature_label(ds, slice_types=slice_types)
     ds = ds.shuffle(buffer_size)
@@ -95,7 +106,7 @@ def predict_ds(path):
     return ds
 
 
-def base(path, slice_types, output_size=(512, 512), dtype=tf.float32):
+def base(path, slice_types, output_size=(512, 512), dtype=tf.float32, normalize_exams=True):
     '''
     generate base dataset
     '''
@@ -109,8 +120,9 @@ def base(path, slice_types, output_size=(512, 512), dtype=tf.float32):
         partial(
             tf_prepare_combined_slices,
             slice_types=slice_types,
-            return_type='dataset',
+            return_type='infinite_dataset' if normalize_exams else 'dataset',
         ),
+        cycle_length=ds_utils.count(ds),
         num_parallel_calls=tf.data.experimental.AUTOTUNE,
     )
     ds = ds.map(
@@ -122,8 +134,8 @@ def base(path, slice_types, output_size=(512, 512), dtype=tf.float32):
         ),
         tf.data.experimental.AUTOTUNE,
     )
-    ds = ds.map(lambda x: tf.reshape(x, [*x.shape[:-1], len(slice_types)]))
-    ds = ds.map(lambda x: tf.cast(x, dtype=dtype))
+    ds = ds.map(lambda x: tf.reshape(x, [*x.shape[:-1], len(slice_types)]), tf.data.experimental.AUTOTUNE)
+    ds = ds.map(lambda x: tf.cast(x, dtype=dtype), tf.data.experimental.AUTOTUNE)
     return ds
 
 
@@ -139,6 +151,8 @@ def tf_prepare_combined_slices(exam_dir, slice_types, return_type='array'):
         return tf.data.Dataset.from_tensor_slices(
             tf_prepare_combined_slices(exam_dir, slice_types=slice_types, return_type='array')
         )
+    elif return_type == 'infinite_dataset':
+        return tf_prepare_combined_slices(exam_dir, slice_types=slice_types, return_type='dataset').repeat(None)
     else: raise NotImplementedError
 
 

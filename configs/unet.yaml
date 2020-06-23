@@ -13,3 +13,4 @@ deploy_options:
 data_options:
     batch_size: 4
     buffer_size: 2048
+    normalize_exams: true
