@@ -42,9 +42,13 @@ Expected directory structure
 
 # built in
 import os
+import pdb
+from glob import glob
+from functools import partial
 
 # external
 import tensorflow as tf
+from tqdm import tqdm
 
 # customs
 
@@ -63,10 +67,12 @@ def train_ds(path, batch_size, buffer_size, repeat=True, slice_types=('TRA', 'AD
     ds = augment(ds)
     ds = to_feature_label(ds, slice_types=slice_types)
     ds = ds.shuffle(buffer_size)
-    if repeat: ds = ds.repeat(None)
+    if repeat:
+        ds = ds.repeat(None)
     ds = ds.batch(batch_size)
     ds = ds.prefetch(tf.data.experimental.AUTOTUNE)
     return ds
+
 
 def eval_ds(path, batch_size):
     '''
@@ -78,6 +84,7 @@ def eval_ds(path, batch_size):
     ds = ds.prefetch(tf.data.experimental.AUTOTUNE)
     return ds
 
+
 def predict_ds(path):
     '''
     generate dataset for prediction
@@ -87,18 +94,68 @@ def predict_ds(path):
     ds = ds.batch(1)
     return ds
 
-def base(path, slice_types):
+
+def base(path, slice_types, output_size=(512, 512)):
     '''
     generate base dataset
     '''
     if os.path.splitext(path) == '.tfrecords':
-        return base_from_tfrecords()
+        return base_from_tfrecords(path)
     assert os.path.isdir(path)
 
-    pattern = os.path.join(path, *'*' * 2)
+    pattern = os.path.join(path, *'*' * 3)
     ds = tf.data.Dataset.list_files(pattern)
-    ds = ds.map(parse_exam, tf.data.experimental.AUTOTUNE)
+    ds = ds.flat_map(
+        partial(
+            tf_prepare_combined_slices,
+            slice_types=slice_types,
+            return_type='dataset',
+        )
+    )
+    ds = ds.map(
+        lambda image: tf.image.crop_to_bounding_box(
+            image,
+            ((tf.shape(image)[:2] - output_size) // 2)[0],
+            ((tf.shape(image)[:2] - output_size) // 2)[1],
+            *output_size,
+        ),
+        tf.data.experimental.AUTOTUNE,
+    )
+    ds = ds.map(lambda x: tf.reshape(x, [*x.shape[:-1], len(slice_types)]))
     return ds
+
+
+def tf_prepare_combined_slices(exam_dir, slice_types, return_type='array'):
+    return_type = return_type.lower()
+    if return_type == 'array':
+        return tf.py_function(
+            partial(prepare_combined_slices, slice_types=slice_types),
+            [exam_dir],
+            tf.uint8,
+        )
+    elif return_type == 'dataset':
+        return tf.data.Dataset.from_tensor_slices(
+            tf_prepare_combined_slices(exam_dir, slice_types=slice_types, return_type='array')
+        )
+    else: raise NotImplementedError
+
+
+def prepare_combined_slices(exam_dir, slice_types):
+    if isinstance(exam_dir, str): pass
+    elif isinstance(exam_dir, tf.Tensor): exam_dir = exam_dir.numpy().decode()
+    else: raise NotImplementedError
+    exam_data = parse_exam(exam_dir, slice_types=slice_types)
+    slice_names = exam_data['TRA'].keys()
+
+    slices = tf.stack([tf.stack([exam_data[type_][slice_] for type_ in slice_types], axis=-1) for slice_ in slice_names])
+    return slices
+
+
+def get_category_from_exam_path(exam_dir):
+    category = exam_dir.split(os.path.sep)[-3]
+    assert category in ('healthy', 'cancer'), f'Unknown category {category}: {exam_dir}'
+    return category
+
 
 def parse_exam(exam_dir, slice_types, decoder=tf.image.decode_image):
     '''
@@ -111,6 +168,7 @@ def parse_exam(exam_dir, slice_types, decoder=tf.image.decode_image):
 
     Returns:
         dict: {
+            'category': 'cancer' or 'healthy',
             'path': exam_dir,
             'patientID': patient ID,
             'examID': exam ID,
@@ -124,52 +182,85 @@ def parse_exam(exam_dir, slice_types, decoder=tf.image.decode_image):
         }
     '''
     result = {'path': exam_dir}
+    result['category'] = get_category_from_exam_path(exam_dir)
     result['patientID'], result['examID'] = getID_from_exam_path(exam_dir)
 
-    slices_per_type = {
-        slice_type: set(os.listdir(os.path.join(exam_dir, slice_types)))
-        for slice_type in slice_types
-    }
+    if result['category'] == 'cancer':
+        slices_per_type = {
+            slice_type: set(os.listdir(os.path.join(exam_dir, slice_type)))
+            for slice_type in slice_types
+        }
+    elif result['category'] == 'healthy':
+        slices_per_type = {
+            slice_type: set(os.listdir(os.path.join(exam_dir, slice_type)))
+            for slice_type in slice_types if slice_type != 'label'
+        }
+        slices_per_type['label'] = slices_per_type['TRA']
+    else:
+        raise NotImplementedError
+
     common_slices = set.intersection(*map(
-        lambda slices: set(map(lambda name: int(os.path.splitext(name)[0]), slices)),
+        lambda slices: set(
+            map(lambda name: os.path.splitext(name)[0], slices)),
         slices_per_type.values(),
     ))
     assert common_slices, f'Not enough slices in {exam_dir}'
 
+    for slice_type in slice_types:
+        slices_per_type[slice_type] = list(
+            filter(lambda x: os.path.splitext(x)[0], slices_per_type[slice_type]))
+
     result['nslices'] = len(common_slices)
-    for slice_type, names in slice_types.items():
-        result[slice_type] = {int(os.path.splitext(name)[0]): decoder(os.path.join(exam_dir, name)) for name in names}
+
+    def wrapper(func):
+        def _func(x):
+            # print(x)
+            x = tf.io.read_file(x)
+            return func(x)
+        return _func
+    decoder = wrapper(decoder)
+
+    for slice_type, names in slices_per_type.items():
+        if (slice_type == 'label') and (result['category'] == 'healthy'):
+            result[slice_type] = {
+                os.path.splitext(name)[0]: tf.zeros_like(decoder(os.path.join(exam_dir, 'TRA', name)))[:, :, 0]
+                for name in slices_per_type['TRA']
+            }
+        else:
+            result[slice_type] = {
+                os.path.splitext(name)[0]: decoder(os.path.join(exam_dir, slice_type, name))[:, :, 0] for name in names
+            }
     return result
+
 
 def getID_from_exam_path(exam_path):
     '''
     parse patientID and examID from given exam_path
     '''
-    patient_id, exam_id = map(int, os.path.normpath(exam_path).strip(os.path.sep).split(os.path.sep)[-2:])
+    patient_id, exam_id = map(int, os.path.normpath(
+        exam_path).strip(os.path.sep).split(os.path.sep)[-2:])
     return patient_id, exam_id
+
 
 def base_from_tfrecords(path):
     raise NotImplementedError
     return
 
+
 def augment(ds, methods=None):
     return ds
+
 
 def to_feature_label(ds, slice_types):
     '''
     convert ds containing dicts to ds containing tuple(feature, tuple)
     '''
-    feature_slice_types = tuple(e for e in slice_types if e != 'label')
+    feature_slice_indices = [i for i in range(len(slice_types)) if slice_types[i] != 'label']
+    label_index = slice_types.index('label')
 
-    def convert(dict_):
-        assert dict_['nslices'] > 0, f'Found invalid record in ds: {dict_}'
-        if dict_['nslices'] > 1: raise NotImplementedError
-
-        label = dict_['label']
-        feature = tf.concat(
-            list(map(dict_.get, feature_slice_types)),
-            axis=2,
-        )
+    def convert(combined_slices):
+        feature = tf.gather(combined_slices, feature_slice_indices, axis=-1)
+        label = combined_slices[:, :, label_index]
         return feature, label
 
     ds = ds.map(convert, tf.data.experimental.AUTOTUNE)
