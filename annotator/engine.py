@@ -35,9 +35,10 @@ class TFKerasModel():
         callbacks = []
         if save_path is not None:
             ckpt_path = os.path.join(save_path, 'checkpoints', 'ckpt-{epoch}.hdf5')
+            os.makedirs(os.path.dirname(ckpt_path), exist_ok=True)
             callbacks.append(tf.keras.callbacks.ModelCheckpoint(ckpt_path, save_freq=save_freq))
 
-            tfevents_path = os.path.join(save_path, 'tfevents', 'ckpt-{epoch}.hdf5')
+            tfevents_path = os.path.join(save_path, 'tfevents')
             callbacks.append(tf.keras.callbacks.TensorBoard(tfevents_path, update_freq=save_freq))
 
         if early_stop_steps is not None:
