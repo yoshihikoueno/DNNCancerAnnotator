@@ -8,5 +8,5 @@ cmd python3 -m annotator train\
     --config configs/unet.yaml\
     --save_path /kw_resources/results/annotation/db3/temp\
     --data_path /kw_resources/datasets/projects/annotation/db3/train\
-    --max_steps 20000\
+    --max_steps 200000\
     --save_freq 50
