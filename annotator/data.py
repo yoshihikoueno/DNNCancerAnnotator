@@ -105,12 +105,13 @@ def base(path, slice_types, output_size=(512, 512), dtype=tf.float32):
 
     pattern = os.path.join(path, *'*' * 3)
     ds = tf.data.Dataset.list_files(pattern)
-    ds = ds.flat_map(
+    ds = ds.interleave(
         partial(
             tf_prepare_combined_slices,
             slice_types=slice_types,
             return_type='dataset',
-        )
+        ),
+        num_parallel_calls=tf.data.experimental.AUTOTUNE,
     )
     ds = ds.map(
         lambda image: tf.image.crop_to_bounding_box(
