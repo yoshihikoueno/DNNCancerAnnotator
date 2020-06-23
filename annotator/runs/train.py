@@ -6,6 +6,7 @@ interface for training models
 import pdb
 import os
 import argparse
+import pdb
 
 # external
 import dsargparse
@@ -19,7 +20,7 @@ from ..utils import load
 
 
 def train(
-    model_config,
+    config,
     save_path,
     data_path,
     max_steps,
@@ -32,10 +33,10 @@ def train(
     then train a model, finally dump reults.
 
     Args:
-        model_config: model configuration
+        config: configuration file path
         save_path: where to save weights/configs/results
         data_path: path to the data root dir
-        max_steps: max training steps
+        max_steps (int): max training steps
         early_stop_steps: steps to train without improvements
             None(default) disables this feature
         save_freq: interval of checkpoints
@@ -45,17 +46,17 @@ def train(
     dump.dump_options(
         os.path.join(save_path, 'options.json'),
         format_='json',
-        model_config=model_config,
+        config=config,
         save_path=save_path,
         data_path=data_path,
     )
 
-    ds = data.train_ds(data_path)
-    model_config = load.load_model_config(model_config)
-    model = engine.TFKerasModel(model_config)
+    config = load.load_config(config)
+    ds = data.train_ds(data_path, **config['data_options'])
+    model = engine.TFKerasModel(config)
     results = model.train(
         ds,
-        save_path=os.path.join(save_path, 'checkpoints'),
+        save_path=os.path.join(save_path),
         max_steps=max_steps,
         early_stop_steps=early_stop_steps,
         save_freq=save_freq,

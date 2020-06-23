@@ -13,9 +13,9 @@ import yaml
 # customs
 
 
-def load_model_config(path):
+def load_config(path):
     '''
-    Load model configs.
+    Load configs.
     This function can load different types of formats.
     The file format is determined by its extension.
 
