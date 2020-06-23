@@ -62,7 +62,7 @@ def train(
     )
 
     dump.dump_train_results(
-        os.path.join(save_path, 'resutls.yaml'),
+        os.path.join(save_path, 'results.yaml'),
         results,
         format_='yaml',
     )
