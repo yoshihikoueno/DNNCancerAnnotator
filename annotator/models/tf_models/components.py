@@ -110,7 +110,7 @@ class Upsample(Layer):
 
     def __call__(self, inputs, reference, training):
         tconv0 = self.conv_transpose(inputs, training=training)
-        assert all(map(lambda x, y: x >= y, reference.shape, tconv0.shape))
+        assert all(map(lambda x, y: x >= y, reference.shape[1:], tconv0.shape[1:]))
         gap_half = (tf.shape(reference)[1:3] - tf.shape(tconv0)[1:3]) // 2
         cropped = tf.image.crop_to_bounding_box(reference, gap_half[0], gap_half[1], tf.shape(tconv0)[1], tf.shape(tconv0)[2])
         concatenated = tf.concat([tconv0, cropped], axis=-1)
