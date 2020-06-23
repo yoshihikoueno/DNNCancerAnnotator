@@ -6,7 +6,6 @@ interface for training models
 import pdb
 import os
 import argparse
-import pdb
 
 # external
 import dsargparse
