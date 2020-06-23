@@ -8,6 +8,7 @@ import json
 import os
 
 # external
+import yaml
 
 # custom
 
@@ -49,11 +50,22 @@ def dump_train_results(path, train_results, format_='pickle'):
     Returns:
         None
     '''
+    format_ = format_.lower()
     dir_ = os.path.dirname(path)
     os.makedirs(dir_, exist_ok=True)
 
+    dump_content = {
+        'epoch': train_results.epoch,
+        'history': train_results.history,
+        'params': train_results.params,
+        'model': type(train_results.model).__name__,
+    }
+
     if format_ == 'pickle':
         with open(path, 'wb') as f:
-            pickle.dump(train_results, f)
+            pickle.dump(dump_content, f)
+    elif format_ == 'yaml':
+        with open(path, 'w') as f:
+            yaml.safe_yaml(dump_content, f)
     else: raise NotImplementedError(f'Umimplemented format {format_}')
     return
