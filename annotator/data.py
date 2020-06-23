@@ -95,7 +95,7 @@ def predict_ds(path):
     return ds
 
 
-def base(path, slice_types, output_size=(512, 512)):
+def base(path, slice_types, output_size=(512, 512), dtype=tf.float32):
     '''
     generate base dataset
     '''
@@ -122,6 +122,7 @@ def base(path, slice_types, output_size=(512, 512)):
         tf.data.experimental.AUTOTUNE,
     )
     ds = ds.map(lambda x: tf.reshape(x, [*x.shape[:-1], len(slice_types)]))
+    ds = ds.map(lambda x: tf.cast(x, dtype=dtype))
     return ds
 
 
