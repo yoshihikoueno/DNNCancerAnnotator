@@ -1,5 +1,7 @@
 from tensorflow/tensorflow:2.1.1
-run git clone --single-branch --brach restructure https://github.com/yoshihikoueno/DNNCancerAnnotator
+run apt update
+run apt install -y git python3-pip
+run git clone --single-branch --branch restructure https://github.com/yoshihikoueno/DNNCancerAnnotator
 workdir DNNCancerAnnotator
 run pip3 install -r requirements.txt
 cmd python3 -m annotator train\
