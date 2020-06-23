@@ -66,6 +66,6 @@ def dump_train_results(path, train_results, format_='pickle'):
             pickle.dump(dump_content, f)
     elif format_ == 'yaml':
         with open(path, 'w') as f:
-            yaml.safe_yaml(dump_content, f)
+            yaml.safe_dump(dump_content, f)
     else: raise NotImplementedError(f'Umimplemented format {format_}')
     return
