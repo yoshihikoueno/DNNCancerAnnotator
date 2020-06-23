@@ -3,3 +3,4 @@ __pycache__/
 env/*
 *_pb2.py
 dockerfile
+/data/
