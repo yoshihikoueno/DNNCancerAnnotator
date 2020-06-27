@@ -110,21 +110,49 @@ def base(path, slice_types, output_size=(512, 512), dtype=tf.float32, normalize_
     '''
     generate base dataset
     '''
-    if os.path.splitext(path) == '.tfrecords':
-        return base_from_tfrecords(path)
-    assert os.path.isdir(path)
-
-    pattern = os.path.join(path, *'*' * 3)
-    ds = tf.data.Dataset.list_files(pattern)
-    ds = ds.interleave(
-        partial(
-            tf_prepare_combined_slices,
-            slice_types=slice_types,
-            return_type='infinite_dataset' if normalize_exams else 'dataset',
-        ),
-        cycle_length=ds_utils.count(ds),
-        num_parallel_calls=tf.data.experimental.AUTOTUNE,
-    )
+    if os.path.splitext(path)[1] == '.tfrecords':
+        ds = tf.data.TFRecordDataset(path, compression_type='GZIP')
+        ds = ds.map(
+            lambda x: tf.io.parse_single_example(x, {
+                'slices': tf.io.FixedLenFeature([], tf.string),
+                'patientID': tf.io.FixedLenFeature([], tf.int64),
+                'examID': tf.io.FixedLenFeature([], tf.int64),
+                'path': tf.io.FixedLenFeature([], tf.string),
+                'category': tf.io.FixedLenFeature([], tf.string),
+                'shape': tf.io.FixedLenFeature([4], tf.int64),
+            })
+        )
+        ds = ds.map(lambda x: {
+            'slices': tf.reshape(tf.io.parse_tensor(x['slices'], tf.uint8), x['shape']),
+            'patientID': x['patientID'],
+            'examID': x['examID'],
+            'path': x['path'],
+            'category': x['category'],
+        })
+        if normalize_exams:
+            cancer_ds = ds.filter(lambda x: x['category'] == 'cancer')
+            cancer_ds = cancer_ds.flat_map(lambda x: tf.data.Dataset.from_tensor_slices(x['slices'])).repeat(None)
+            healthy_ds = ds.filter(lambda x: x['category'] == 'healthy')
+            healthy_ds = healthy_ds.flat_map(lambda x: tf.data.Dataset.from_tensor_slices(x['slices'])).repeat(None)
+            ds = tf.data.Dataset.from_tensor_slices([0, 1]).interleave(
+                lambda x: cancer_ds if x == 1 else healthy_ds,
+                cycle_length=2,
+                num_parallel_calls=tf.data.experimental.AUTOTUNE,
+            )
+        else: ds = ds.map(lambda x: tf.data.Dataset.from_tensor_slices(x['slices']))
+    else:
+        assert os.path.isdir(path)
+        pattern = os.path.join(path, *'*' * 3)
+        ds = tf.data.Dataset.list_files(pattern)
+        ds = ds.interleave(
+            partial(
+                tf_prepare_combined_slices,
+                slice_types=slice_types,
+                return_type='infinite_dataset' if normalize_exams else 'dataset',
+            ),
+            cycle_length=ds_utils.count(ds),
+            num_parallel_calls=tf.data.experimental.AUTOTUNE,
+        )
     ds = ds.map(
         lambda image: tf.image.crop_to_bounding_box(
             image,
@@ -139,11 +167,37 @@ def base(path, slice_types, output_size=(512, 512), dtype=tf.float32, normalize_
     return ds
 
 
+def generate_tfrecords(path, output, slice_types=('TRA', 'ADC', 'DWI', 'DCEE', 'DCEL', 'label')):
+    '''
+    Generate TFRecords
+
+    Args:
+        path: path to the data directory
+        output: output path
+        slice_types: list of slices to be included
+    '''
+    pattern = os.path.join(path, *'*' * 3)
+    exams = glob(pattern)
+    with tf.io.TFRecordWriter(output, 'GZIP') as writer:
+        for exam in tqdm(exams, 'Generating TFRecords'):
+            exam_data = prepare_combined_slices(exam, slice_types)
+            example = tf.train.Example(features=tf.train.Features(feature={
+                'slices': tf.train.Feature(bytes_list=tf.train.BytesList(value=[tf.io.serialize_tensor(exam_data['slices']).numpy()])),
+                'patientID': tf.train.Feature(int64_list=tf.train.Int64List(value=[exam_data['patientID']])),
+                'examID': tf.train.Feature(int64_list=tf.train.Int64List(value=[exam_data['examID']])),
+                'path': tf.train.Feature(bytes_list=tf.train.BytesList(value=[exam_data['path'].encode()])),
+                'category': tf.train.Feature(bytes_list=tf.train.BytesList(value=[exam_data['category'].encode()])),
+                'shape': tf.train.Feature(int64_list=tf.train.Int64List(value=exam_data['slices'].shape)),
+            }))
+            writer.write(example.SerializeToString())
+    return
+
+
 def tf_prepare_combined_slices(exam_dir, slice_types, return_type='array'):
     return_type = return_type.lower()
     if return_type == 'array':
         return tf.py_function(
-            partial(prepare_combined_slices, slice_types=slice_types),
+            lambda x: partial(prepare_combined_slices, slice_types=slice_types)(x)['slices'],
             [exam_dir],
             tf.uint8,
         )
@@ -164,7 +218,13 @@ def prepare_combined_slices(exam_dir, slice_types):
     slice_names = exam_data['TRA'].keys()
 
     slices = tf.stack([tf.stack([exam_data[type_][slice_] for type_ in slice_types], axis=-1) for slice_ in slice_names])
-    return slices
+    return dict(
+        slices=slices,
+        category=exam_data['category'],
+        patientID=exam_data['patientID'],
+        examID=exam_data['examID'],
+        path=exam_data['path'],
+    )
 
 
 def get_category_from_exam_path(exam_dir):

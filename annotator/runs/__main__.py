@@ -23,6 +23,7 @@ def main(prog='python3 -m annotator.runs'):
     subparsers = parser.add_subparsers(help='command')
     subparsers.add_parser(train.train, add_arguments_auto=True)
     subparsers.add_parser(extract.extract_all, add_arguments_auto=True)
+    subparsers.add_parser(data.generate_tfrecords, add_arguments_auto=True)
     return parser.parse_and_run()
 
 
