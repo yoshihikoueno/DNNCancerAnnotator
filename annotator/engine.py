@@ -73,6 +73,7 @@ class TFKerasModel():
         assert 'deploy_options' in model_config
 
         model_name = model_config['model']
-        model = getattr(tf_models, model_name)(**model_config['model_options'])
+        with tf.distribute.MirroredStrategy().scope():
+            model = getattr(tf_models, model_name)(**model_config['model_options'])
         model.compile(**model_config['deploy_options'])
         return model
