@@ -112,7 +112,7 @@ def base(path, slice_types, output_size=(512, 512), dtype=tf.float32, normalize_
     generate base dataset
     '''
     if os.path.splitext(path)[1] == '.tfrecords':
-        ds = tf.data.TFRecordDataset(path, compression_type='GZIP')
+        ds = tf.data.TFRecordDataset(path, compression_type='GZIP', num_parallel_reads=4)
         ds = ds.map(
             lambda x: tf.io.parse_single_example(x, {
                 'slices': tf.io.FixedLenFeature([], tf.string),
