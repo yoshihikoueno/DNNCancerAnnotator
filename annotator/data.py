@@ -144,7 +144,13 @@ def base(path, slice_types, output_size=(512, 512), dtype=tf.float32, normalize_
     return ds
 
 
-def generate_tfrecords(path, output, category=None, slice_types=('TRA', 'ADC', 'DWI', 'DCEE', 'DCEL', 'label')):
+def generate_tfrecords(
+    path,
+    output,
+    category=None,
+    slice_types=('TRA', 'ADC', 'DWI', 'DCEE', 'DCEL', 'label'),
+    output_size=(512, 512),
+):
     '''
     Generate TFRecords
 
@@ -182,6 +188,23 @@ def generate_tfrecords(path, output, category=None, slice_types=('TRA', 'ADC', '
             'category': tf.string,
             'path': tf.string,
         },
+    )
+    ds = ds.map(
+        lambda exam_data: {
+            'slices': tf.map_fn(
+                lambda image: tf.image.crop_to_bounding_box(
+                    image,
+                    ((tf.shape(image)[:2] - output_size) // 2)[0],
+                    ((tf.shape(image)[:2] - output_size) // 2)[1],
+                    *output_size,),
+                exam_data['slices'],
+            ),
+            'patientID': exam_data['patientID'],
+            'examID': exam_data['examID'],
+            'category': exam_data['category'],
+            'path': exam_data['path'],
+        },
+        tf.data.experimental.AUTOTUNE,
     )
     if category is not None: ds = ds.filter(lambda x: x['category'] == category)
     ds = ds.map(
