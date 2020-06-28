@@ -34,7 +34,7 @@ def train(
     Args:
         config: configuration file path
         save_path: where to save weights/configs/results
-        data_path: path to the data root dir
+        data_path (list[str]): path to the data root dir
         max_steps (int): max training steps
         early_stop_steps: steps to train without improvements
             None(default) disables this feature
