@@ -49,6 +49,7 @@ from functools import partial
 # external
 import tensorflow as tf
 from tqdm import tqdm
+import p_tqdm
 
 # customs
 from .utils import dataset as ds_utils
@@ -139,7 +140,8 @@ def base(path, slice_types, output_size=(512, 512), dtype=tf.float32, normalize_
                 cycle_length=2,
                 num_parallel_calls=tf.data.experimental.AUTOTUNE,
             )
-        else: ds = ds.map(lambda x: tf.data.Dataset.from_tensor_slices(x['slices']))
+        else:
+            ds = ds.flat_map(lambda x: tf.data.Dataset.from_tensor_slices(x['slices']))
     else:
         assert os.path.isdir(path)
         pattern = os.path.join(path, *'*' * 3)
@@ -167,29 +169,58 @@ def base(path, slice_types, output_size=(512, 512), dtype=tf.float32, normalize_
     return ds
 
 
-def generate_tfrecords(path, output, slice_types=('TRA', 'ADC', 'DWI', 'DCEE', 'DCEL', 'label')):
+def generate_tfrecords(path, output, category=None, slice_types=('TRA', 'ADC', 'DWI', 'DCEE', 'DCEL', 'label')):
     '''
     Generate TFRecords
 
     Args:
         path: path to the data directory
         output: output path
+        category: category to include
+            default (None): include all
         slice_types: list of slices to be included
     '''
+    def serialize(slices, patientID, examID, path, category):
+        serialized = tf.py_function(
+            lambda slices, patientID, examID, path, category:
+                tf.train.Example(features=tf.train.Features(feature={
+                    'slices': tf.train.Feature(bytes_list=tf.train.BytesList(value=[tf.io.serialize_tensor(slices).numpy()])),
+                    'patientID': tf.train.Feature(int64_list=tf.train.Int64List(value=[patientID])),
+                    'examID': tf.train.Feature(int64_list=tf.train.Int64List(value=[examID])),
+                    'path': tf.train.Feature(bytes_list=tf.train.BytesList(value=[path.numpy()])),
+                    'category': tf.train.Feature(bytes_list=tf.train.BytesList(value=[category.numpy()])),
+                    'shape': tf.train.Feature(int64_list=tf.train.Int64List(value=slices.shape)),
+                })).SerializeToString(),
+            (slices, patientID, examID, path, category),
+            tf.string,
+        )
+        return serialized
+
     pattern = os.path.join(path, *'*' * 3)
     exams = glob(pattern)
-    with tf.io.TFRecordWriter(output, 'GZIP') as writer:
-        for exam in tqdm(exams, 'Generating TFRecords'):
-            exam_data = prepare_combined_slices(exam, slice_types)
-            example = tf.train.Example(features=tf.train.Features(feature={
-                'slices': tf.train.Feature(bytes_list=tf.train.BytesList(value=[tf.io.serialize_tensor(exam_data['slices']).numpy()])),
-                'patientID': tf.train.Feature(int64_list=tf.train.Int64List(value=[exam_data['patientID']])),
-                'examID': tf.train.Feature(int64_list=tf.train.Int64List(value=[exam_data['examID']])),
-                'path': tf.train.Feature(bytes_list=tf.train.BytesList(value=[exam_data['path'].encode()])),
-                'category': tf.train.Feature(bytes_list=tf.train.BytesList(value=[exam_data['category'].encode()])),
-                'shape': tf.train.Feature(int64_list=tf.train.Int64List(value=exam_data['slices'].shape)),
-            }))
-            writer.write(example.SerializeToString())
+    ds = tf.data.Dataset.from_generator(
+        lambda: tqdm(map(partial(prepare_combined_slices, slice_types=slice_types), exams), total=len(exams)),
+        output_types={
+            'slices': tf.uint8,
+            'patientID': tf.int64,
+            'examID': tf.int64,
+            'category': tf.string,
+            'path': tf.string,
+        },
+    )
+    if category is not None: ds = ds.filter(lambda x: x['category'] == category)
+    ds = ds.map(
+        lambda exam_data: serialize(
+            exam_data['slices'],
+            exam_data['patientID'],
+            exam_data['examID'],
+            exam_data['path'],
+            exam_data['category'],
+        ),
+        num_parallel_calls=tf.data.experimental.AUTOTUNE,
+    )
+    writer = tf.data.experimental.TFRecordWriter(output, 'GZIP')
+    writer.write(ds)
     return
 
 
