@@ -11,6 +11,6 @@ deploy_options:
     optimizer: adam
     loss: mse
 data_options:
-    batch_size: 4
-    buffer_size: 2048
+    batch_size: 8
+    buffer_size: 256
     normalize_exams: true

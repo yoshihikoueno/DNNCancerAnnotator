@@ -7,6 +7,8 @@ run pip3 install -r requirements.txt
 cmd python3 -m annotator train\
     --config configs/unet.yaml\
     --save_path /kw_resources/results/annotation/db3/temp\
-    --data_path /kw_resources/datasets/projects/annotation/db3/train.tfrecords\
+    --data_path\
+        /kw_resources/datasets/projects/annotation/db3/train/cancer.tfrecords\
+        /kw_resources/datasets/projects/annotation/db3/train/healthy.tfrecords\
     --max_steps 200000\
     --save_freq 50
