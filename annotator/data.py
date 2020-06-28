@@ -111,41 +111,16 @@ def base(path, slice_types, output_size=(512, 512), dtype=tf.float32, normalize_
     '''
     generate base dataset
     '''
-    if os.path.splitext(path)[1] == '.tfrecords':
-        ds = tf.data.TFRecordDataset(path, compression_type='GZIP', num_parallel_reads=4)
-        ds = ds.map(
-            lambda x: tf.io.parse_single_example(x, {
-                'slices': tf.io.FixedLenFeature([], tf.string),
-                'patientID': tf.io.FixedLenFeature([], tf.int64),
-                'examID': tf.io.FixedLenFeature([], tf.int64),
-                'path': tf.io.FixedLenFeature([], tf.string),
-                'category': tf.io.FixedLenFeature([], tf.string),
-                'shape': tf.io.FixedLenFeature([4], tf.int64),
-            })
-        )
-        ds = ds.map(lambda x: {
-            'slices': tf.reshape(tf.io.parse_tensor(x['slices'], tf.uint8), x['shape']),
-            'patientID': x['patientID'],
-            'examID': x['examID'],
-            'path': x['path'],
-            'category': x['category'],
-        })
-        if normalize_exams:
-            cancer_ds = ds.filter(lambda x: x['category'] == 'cancer')
-            cancer_ds = cancer_ds.flat_map(lambda x: tf.data.Dataset.from_tensor_slices(x['slices'])).repeat(None)
-            healthy_ds = ds.filter(lambda x: x['category'] == 'healthy')
-            healthy_ds = healthy_ds.flat_map(lambda x: tf.data.Dataset.from_tensor_slices(x['slices'])).repeat(None)
-            ds = tf.data.Dataset.from_tensor_slices([0, 1]).interleave(
-                lambda x: cancer_ds if x == 1 else healthy_ds,
-                cycle_length=2,
-                num_parallel_calls=tf.data.experimental.AUTOTUNE,
-            )
-        else:
-            ds = ds.flat_map(lambda x: tf.data.Dataset.from_tensor_slices(x['slices']))
+    if not isinstance(path, list): path = list(path)
+    if os.path.splitext(path[0])[1] == '.tfrecords':
+        assert all(map(lambda x: os.path.splitext(x)[1] == '.tfrecords', path))
+
+        ds = base_from_tfrecords(path, normalize=normalize_exams)
     else:
-        assert os.path.isdir(path)
-        pattern = os.path.join(path, *'*' * 3)
-        ds = tf.data.Dataset.list_files(pattern)
+        assert all(map(os.path.isdir, path))
+        pattern = list(map(lambda x: os.path.join(x, *'*' * 3), path))
+        ds = tf.data.Dataset.from_tensor_slices(pattern)
+        ds = ds.interleave(tf.data.Dataset.list_files)
         ds = ds.interleave(
             partial(
                 tf_prepare_combined_slices,
@@ -349,9 +324,46 @@ def getID_from_exam_path(exam_path):
     return patient_id, exam_id
 
 
-def base_from_tfrecords(path):
-    raise NotImplementedError
-    return
+def extract_slices_from_tfrecord(path):
+    ds = tf.data.TFRecordDataset(path, compression_type='GZIP')
+    ds = ds.map(
+        lambda x: tf.io.parse_single_example(x, {
+            'slices': tf.io.FixedLenFeature([], tf.string),
+            'patientID': tf.io.FixedLenFeature([], tf.int64),
+            'examID': tf.io.FixedLenFeature([], tf.int64),
+            'path': tf.io.FixedLenFeature([], tf.string),
+            'category': tf.io.FixedLenFeature([], tf.string),
+            'shape': tf.io.FixedLenFeature([4], tf.int64),
+        }),
+        num_parallel_calls=tf.data.experimental.AUTOTUNE,
+    )
+    ds = ds.map(
+        lambda x: {
+            'slices': tf.reshape(tf.io.parse_tensor(x['slices'], tf.uint8), x['shape']),
+            'patientID': x['patientID'],
+            'examID': x['examID'],
+            'path': x['path'],
+            'category': x['category'],
+        },
+        num_parallel_calls=tf.data.experimental.AUTOTUNE,
+    )
+    ds = ds.flat_map(lambda x: tf.data.Dataset.from_tensor_slices(x['slices']))
+    return ds
+
+
+def base_from_tfrecords(path: list, normalize=False):
+    ds = tf.data.Dataset.from_tensor_slices(path)
+    if normalize:
+        ds = ds.interleave(
+            lambda path: extract_slices_from_tfrecord(path).repeat(None),
+            num_parallel_calls=tf.data.experimental.AUTOTUNE,
+        )
+    else:
+        ds = ds.interleave(
+            lambda path: extract_slices_from_tfrecord(path),
+            num_parallel_calls=tf.data.experimental.AUTOTUNE,
+        )
+    return ds
 
 
 def augment(ds, methods=None):
