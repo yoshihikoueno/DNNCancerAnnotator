@@ -55,6 +55,9 @@ import p_tqdm
 from .utils import dataset as ds_utils
 
 
+_TFRECORD_COMPRESSION = None
+
+
 def train_ds(
     path,
     batch_size,
@@ -217,7 +220,7 @@ def generate_tfrecords(
         ),
         num_parallel_calls=tf.data.experimental.AUTOTUNE,
     )
-    writer = tf.data.experimental.TFRecordWriter(output, 'GZIP')
+    writer = tf.data.experimental.TFRecordWriter(output, _TFRECORD_COMPRESSION)
     writer.write(ds)
     return
 
@@ -348,7 +351,7 @@ def getID_from_exam_path(exam_path):
 
 
 def extract_slices_from_tfrecord(path):
-    ds = tf.data.TFRecordDataset(path, compression_type='GZIP')
+    ds = tf.data.TFRecordDataset(path, compression_type=_TFRECORD_COMPRESSION)
     ds = ds.map(
         lambda x: tf.io.parse_single_example(x, {
             'slices': tf.io.FixedLenFeature([], tf.string),
