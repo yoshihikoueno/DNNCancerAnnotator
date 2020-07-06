@@ -9,7 +9,8 @@ model_options:
     padding: same
 deploy_options:
     optimizer: adam
-    loss: mse
+    loss: weighted_crossentropy
+    enable_multigpu: false
 data_options:
     batch_size: 8
     buffer_size: 256
