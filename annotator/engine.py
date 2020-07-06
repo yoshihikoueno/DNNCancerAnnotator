@@ -13,6 +13,7 @@ from tensorflow import keras
 
 # customs
 from .models import tf_models
+from .utils import losses as custom_losses
 
 
 class TFKerasModel():
@@ -72,9 +73,19 @@ class TFKerasModel():
         assert 'model_options' in model_config
         assert 'deploy_options' in model_config
 
+        deploy_options = copy.deepcopy(model_config['deploy_options'])
+        enable_multigpu = deploy_options.pop('enable_multigpu', True)
+
         model_name = model_config['model']
-        # with tf.distribute.MirroredStrategy().scope():
-        #     model = getattr(tf_models, model_name)(**model_config['model_options'])
-        model = getattr(tf_models, model_name)(**model_config['model_options'])
-        model.compile(**model_config['deploy_options'])
+        if enable_multigpu:
+            with tf.distribute.MirroredStrategy().scope():
+                model = getattr(tf_models, model_name)(**model_config['model_options'])
+        else:
+            model = getattr(tf_models, model_name)(**model_config['model_options'])
+
+        loss = deploy_options.pop('loss', 'weighted_crossentropy')
+        if isinstance(loss, str) and hasattr(custom_losses, 'tf_' + loss):
+            loss = getattr(custom_losses, 'tf_' + loss)
+
+        model.compile(loss=loss, **deploy_options)
         return model

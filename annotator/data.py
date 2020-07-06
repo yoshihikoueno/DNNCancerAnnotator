@@ -144,6 +144,7 @@ def base(path, slice_types, output_size=(512, 512), dtype=tf.float32, normalize_
     )
     ds = ds.map(lambda x: tf.reshape(x, [*x.shape[:-1], len(slice_types)]), tf.data.experimental.AUTOTUNE)
     ds = ds.map(lambda x: tf.cast(x, dtype=dtype), tf.data.experimental.AUTOTUNE)
+    ds = ds.map(lambda x: x / 255.0, tf.data.experimental.AUTOTUNE)
     return ds
 
 
