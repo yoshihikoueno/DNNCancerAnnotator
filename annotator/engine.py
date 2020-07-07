@@ -15,6 +15,13 @@ from tensorflow import keras
 from .models import tf_models
 from .utils import losses as custom_losses
 
+def _set_model(self, model):
+    self.model = model
+    return
+
+
+tf.keras.callbacks.ModelCheckpoint.set_model = _set_model
+
 
 class TFKerasModel():
     '''
@@ -35,9 +42,10 @@ class TFKerasModel():
     def train(self, dataset, save_path=None, save_freq=100, max_steps=None, early_stop_steps=None):
         callbacks = []
         if save_path is not None:
-            ckpt_path = os.path.join(save_path, 'checkpoints', 'ckpt-{epoch}.hdf5')
+            ckpt_path = os.path.join(save_path, 'checkpoints', 'ckpt-{epoch}')
             os.makedirs(os.path.dirname(ckpt_path), exist_ok=True)
-            callbacks.append(tf.keras.callbacks.ModelCheckpoint(ckpt_path, save_freq=save_freq))
+            ckpt_saver = tf.keras.callbacks.ModelCheckpoint(ckpt_path, save_freq=save_freq)
+            callbacks.append(ckpt_saver)
 
             tfevents_path = os.path.join(save_path, 'tfevents')
             callbacks.append(tf.keras.callbacks.TensorBoard(tfevents_path, update_freq=save_freq))
@@ -83,9 +91,5 @@ class TFKerasModel():
         else:
             model = getattr(tf_models, model_name)(**model_config['model_options'])
 
-        loss = deploy_options.pop('loss', 'weighted_crossentropy')
-        if isinstance(loss, str) and hasattr(custom_losses, 'tf_' + loss):
-            loss = getattr(custom_losses, 'tf_' + loss)
-
-        model.compile(loss=loss, **deploy_options)
+        model.compile(**deploy_options)
         return model
