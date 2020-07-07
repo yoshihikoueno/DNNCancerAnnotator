@@ -45,3 +45,6 @@ def tf_get_positive_rate(label):
     assert_range = [tf.debugging.assert_greater_equal(positive_rate, 0.0), tf.debugging.assert_less_equal(positive_rate, 1.0)]
     with tf.control_dependencies(assert_range):
         return positive_rate
+
+
+tf.keras.utils.get_custom_objects().update(weighted_crossentropy=tf_weighted_crossentropy)
