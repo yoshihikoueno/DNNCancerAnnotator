@@ -29,6 +29,17 @@ class Downsample(Layer):
         **kargs,
     ):
         super().__init__(self, **kargs)
+        self.configs = dict(
+            filters=filters,
+            rate=rate,
+            kernel_size=kernel_size,
+            conv_stride=conv_stride,
+            bn=bn,
+            n_conv=n_conv,
+            trainable=trainable,
+            padding=padding,
+            activation=activation,
+        )
         self.padding = padding
         self.convs = [
             layers.Conv2D(
@@ -47,12 +58,18 @@ class Downsample(Layer):
         self.convchain = keras.Sequential(self.convs)
         return
 
+    def get_config(self):
+        config = super().get_config()
+        config.update(self.configs)
+        return config
+
     def build(self, input_shape):
         conv_output_shape = self.convchain.compute_output_shape(input_shape)
         pool_output_shape = self.pool.compute_output_shape(conv_output_shape)
+        self.built = True
         return conv_output_shape, pool_output_shape
 
-    def __call__(self, inputs, training):
+    def call(self, inputs, training):
         conv = self.convchain(inputs, training=training)
         half = self.pool(conv, training=training)
         return conv, half
@@ -73,6 +90,16 @@ class Upsample(Layer):
         **kargs,
     ):
         super().__init__(self, **kargs)
+        self.configs = dict(
+            filters=filters,
+            rate=rate,
+            kernel_size=kernel_size,
+            conv_stride=conv_stride,
+            bn=bn,
+            trainable=trainable,
+            n_conv=n_conv,
+            padding=padding,
+        )
         self.filters = filters
         self.rate = rate
         self.padding = padding
@@ -93,8 +120,12 @@ class Upsample(Layer):
             self.conv_layers = [layer for tup in zip(self.conv_layers, bn_layers) for layer in tup]
 
         self.convchain = keras.Sequential(self.conv_layers)
-
         return
+
+    def get_config(self):
+        config = super().get_config()
+        config.update(self.configs)
+        return config
 
     def build(self, input_shape, ref_shape):
         '''
@@ -108,7 +139,7 @@ class Upsample(Layer):
         output_shape = [*tconv_shape[:3], self.filters]
         return output_shape
 
-    def __call__(self, inputs, reference, training):
+    def call(self, inputs, reference, training):
         tconv0 = self.conv_transpose(inputs, training=training)
         assert all(map(lambda x, y: x >= y, reference.shape[1:], tconv0.shape[1:]))
         gap_half = (tf.shape(reference)[1:3] - tf.shape(tconv0)[1:3]) // 2
@@ -134,6 +165,18 @@ class Encoder(Layer):
         **kargs,
     ):
         super().__init__(self, **kargs)
+        self.configs = dict(
+            filters_first=filters_first,
+            n_downsample=n_downsample,
+            rate=rate,
+            kernel_size=kernel_size,
+            conv_stride=conv_stride,
+            bn=bn,
+            trainable=trainable,
+            n_conv=n_conv,
+            padding=padding,
+            **kargs,
+        )
         self.padding = padding
         self.downsamples = []
         next_filters = filters_first
@@ -153,15 +196,19 @@ class Encoder(Layer):
             next_filters = int(rate * next_filters)
         return
 
+    def get_config(self):
+        return self.configs
+
     def build(self, input_shape):
         ref_shapes = []
         output_shape = input_shape
         for downsample in self.downsamples:
             ref_shape, output_shape = downsample.build(output_shape)
             ref_shapes.append(ref_shape)
+        self.built = True
         return output_shape, ref_shapes
 
-    def __call__(self, inputs, training=True):
+    def call(self, inputs, training=True):
         res_list = list()
         next_inputs = inputs
 
@@ -188,6 +235,14 @@ class Decoder(Layer):
         **kargs,
     ):
         super().__init__(self, **kargs)
+        self.configs = dict(
+            rate=rate,
+            kernel_size=kernel_size,
+            conv_stride=conv_stride,
+            bn=bn,
+            trainable=trainable,
+            padding=padding,
+        )
         self.upsamples = []
         self.rate = rate
         self.kernel_size = kernel_size
@@ -196,6 +251,11 @@ class Decoder(Layer):
         self.trainable = trainable
         self.padding = padding
         return
+
+    def get_config(self):
+        config = super().get_config()
+        config.update(self.configs)
+        return config
 
     def build(self, inputs_shape, ref_shapes):
         for ref_shape in reversed(ref_shapes):
@@ -217,7 +277,7 @@ class Decoder(Layer):
         self.built = True
         return inputs_shape
 
-    def __call__(self, inputs, res_list, training):
+    def call(self, inputs, res_list, training):
         upsampled = inputs
         assert len(res_list) == len(self.upsamples), f'#References {len(res_list)} != #upsamples {len(self.upsamples)}'
         for reference, upsample_layer in zip(reversed(res_list), self.upsamples):

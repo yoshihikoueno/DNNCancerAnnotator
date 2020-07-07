@@ -31,6 +31,16 @@ class UNet(Layer):
         **kargs,
     ):
         super().__init__(**kargs)
+        self.configs = dict(
+            filters_first=filters_first,
+            n_downsample=n_downsample,
+            rate=rate,
+            kernel_size=kernel_size,
+            conv_stride=conv_stride,
+            bn=bn,
+            trainable=trainable,
+            padding=padding,
+        )
         self.encoder = components.Encoder(
             filters_first=filters_first,
             n_downsample=n_downsample,
@@ -51,19 +61,24 @@ class UNet(Layer):
         )
         return
 
+    def get_config(self):
+        config = super().get_config()
+        config.update(self.configs)
+        return config
+
     def build(self, input_shape):
         self.encoder_output_shape, self.ref_shapes = self.encoder.build(input_shape)
         decoder_out = self.decoder.build(self.encoder_output_shape, self.ref_shapes)
         self.built = True
         return decoder_out
 
-    def __call__(self, inputs, training=True):
+    def call(self, inputs, training=True):
         res_list, downsampled = self.encoder(inputs=inputs, training=training)
         output = self.decoder(inputs=downsampled, res_list=res_list, training=training)
         return output
 
 
-class UNetAnnotator(keras.Sequential):
+class UNetAnnotator(keras.Model):
     def __init__(
         self,
         n_filters_first,
@@ -90,6 +105,17 @@ class UNetAnnotator(keras.Sequential):
             padding: padding method used in internal components
             trainable: (bool) whether or not this block is trainable
         '''
+        super().__init__(**kargs)
+        self.configs = dict(
+            n_filters_first=n_filters_first,
+            n_downsample=n_downsample,
+            rate=rate,
+            kernel_size=kernel_size,
+            conv_stride=conv_stride,
+            bn=bn,
+            padding=padding,
+            **kargs,
+        )
         unet = UNet(
             filters_first=n_filters_first,
             n_downsample=n_downsample,
@@ -101,15 +127,21 @@ class UNetAnnotator(keras.Sequential):
             **kargs,
         )
         last_conv = layers.Conv2D(filters=1, kernel_size=1, padding=padding, **kargs)
-        super().__init__([unet, last_conv], **kargs)
         self.unet = unet
         self.padding = padding
         self.last_conv = last_conv
         return
 
+    def get_config(self):
+        return self.configs
+
     def build(self, input_shape):
         unet_out = self.unet.build(input_shape)
         self.last_conv.build(unet_out)
-        # self.built = True
-        super().build(input_shape)
+        self.built = True
         return
+
+    def call(self, x, training=True):
+        unet_out = self.unet(x, training=training)
+        output = self.last_conv(unet_out, training=training)
+        return output
