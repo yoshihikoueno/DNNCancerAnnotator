@@ -89,12 +89,23 @@ def train_ds(
     return ds
 
 
-def eval_ds(path, batch_size):
+def eval_ds(
+    path,
+    batch_size,
+    slice_types=('TRA', 'ADC', 'DWI', 'DCEE', 'DCEL', 'label'),
+):
     '''
-    generate dataset for evaluation
+    generate dataset for training
+
+    Args:
+        path: train data path
+        batch_size: batch size
+        slice_types: types of slices to include
+        normalize_exams: whether the resulting dataset contain
+            the same number of slices from each exam
     '''
-    ds = base(path)
-    ds = to_feature_label(ds)
+    ds = base(path, slice_types=slice_types, normalize_exams=False)
+    ds = to_feature_label(ds, slice_types=slice_types)
     ds = ds.batch(batch_size)
     ds = ds.prefetch(tf.data.experimental.AUTOTUNE)
     return ds
