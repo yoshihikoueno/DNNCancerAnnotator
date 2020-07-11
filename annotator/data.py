@@ -93,6 +93,7 @@ def eval_ds(
     path,
     batch_size,
     slice_types=('TRA', 'ADC', 'DWI', 'DCEE', 'DCEL', 'label'),
+    include_meta=False,
 ):
     '''
     generate dataset for training
@@ -100,12 +101,13 @@ def eval_ds(
     Args:
         path: train data path
         batch_size: batch size
+        include_meta: whether output ds should contain meta info
         slice_types: types of slices to include
         normalize_exams: whether the resulting dataset contain
             the same number of slices from each exam
     '''
-    ds = base(path, slice_types=slice_types, normalize_exams=False)
-    ds = to_feature_label(ds, slice_types=slice_types)
+    ds = base(path, slice_types=slice_types, normalize_exams=False, include_meta=include_meta)
+    ds = to_feature_label(ds, slice_types=slice_types, include_meta=include_meta)
     ds = ds.batch(batch_size)
     ds = ds.prefetch(tf.data.experimental.AUTOTUNE)
     return ds
@@ -121,7 +123,7 @@ def predict_ds(path):
     return ds
 
 
-def base(path, slice_types, output_size=(512, 512), dtype=tf.float32, normalize_exams=True):
+def base(path, slice_types, output_size=(512, 512), dtype=tf.float32, normalize_exams=True, include_meta=False):
     '''
     generate base dataset
     '''
@@ -129,7 +131,7 @@ def base(path, slice_types, output_size=(512, 512), dtype=tf.float32, normalize_
     if os.path.splitext(path[0])[1] == '.tfrecords':
         assert all(map(lambda x: os.path.splitext(x)[1] == '.tfrecords', path))
 
-        ds = base_from_tfrecords(path, normalize=normalize_exams)
+        ds = base_from_tfrecords(path, normalize=normalize_exams, include_meta=include_meta)
     else:
         assert all(map(os.path.isdir, path))
         pattern = list(map(lambda x: os.path.join(x, *'*' * 3), path))
@@ -362,7 +364,7 @@ def getID_from_exam_path(exam_path):
     return patient_id, exam_id
 
 
-def extract_slices_from_tfrecord(path):
+def extract_slices_from_tfrecord(path, include_meta=True):
     ds = tf.data.TFRecordDataset(path, compression_type=_TFRECORD_COMPRESSION)
     ds = ds.map(
         lambda x: tf.io.parse_single_example(x, {
@@ -385,20 +387,39 @@ def extract_slices_from_tfrecord(path):
         },
         num_parallel_calls=tf.data.experimental.AUTOTUNE,
     )
-    ds = ds.flat_map(lambda x: tf.data.Dataset.from_tensor_slices(x['slices']))
+    if include_meta:
+        ds = ds.flat_map(
+            lambda x: tf.data.Dataset.zip(
+                (
+                    tf.data.Dataset.from_tensor_slices(x['slices']),
+                    tf.data.Dataset.from_tensors(x['patientID']).repeat(None),
+                    tf.data.Dataset.from_tensors(x['examID']).repeat(None),
+                    tf.data.Dataset.from_tensors(x['path']).repeat(None),
+                    tf.data.Dataset.from_tensors(x['category']).repeat(None),
+                )
+            ))
+        ds = ds.map(lambda slice_, patientID, examID, path, category: {
+            'slice': slice_,
+            'patientID': patientID,
+            'examID': examID,
+            'path': path,
+            'category': category,
+        }, tf.data.experimental.AUTOTUNE)
+    else:
+        ds = ds.flat_map(lambda x: tf.data.Dataset.from_tensor_slices(x['slices']))
     return ds
 
 
-def base_from_tfrecords(path: list, normalize=False):
+def base_from_tfrecords(path: list, normalize=False, include_meta=False):
     ds = tf.data.Dataset.from_tensor_slices(path)
     if normalize:
         ds = ds.interleave(
-            lambda path: extract_slices_from_tfrecord(path).repeat(None),
+            lambda path: extract_slices_from_tfrecord(path, include_meta=include_meta).repeat(None),
             num_parallel_calls=tf.data.experimental.AUTOTUNE,
         )
     else:
         ds = ds.interleave(
-            lambda path: extract_slices_from_tfrecord(path),
+            lambda path: extract_slices_from_tfrecord(path, include_meta=include_meta),
             num_parallel_calls=tf.data.experimental.AUTOTUNE,
         )
     return ds
@@ -408,17 +429,26 @@ def augment(ds, methods=None):
     return ds
 
 
-def to_feature_label(ds, slice_types):
+def to_feature_label(ds, slice_types, include_meta=False):
     '''
     convert ds containing dicts to ds containing tuple(feature, tuple)
     '''
     feature_slice_indices = [i for i in range(len(slice_types)) if slice_types[i] != 'label']
     label_index = slice_types.index('label')
 
-    def convert(combined_slices):
-        feature = tf.gather(combined_slices, feature_slice_indices, axis=-1)
-        label = combined_slices[:, :, label_index]
-        return feature, label
+    def convert(data):
+        if include_meta:
+            combined_slices = data['slice']
+            feature = tf.gather(combined_slices, feature_slice_indices, axis=-1)
+            label = combined_slices[:, :, label_index]
+            data.update({'x': feature, 'y': label})
+            data.pop('slice')
+            return data
+        else:
+            combined_slices = data
+            feature = tf.gather(combined_slices, feature_slice_indices, axis=-1)
+            label = combined_slices[:, :, label_index]
+            return feature, label
 
     ds = ds.map(convert, tf.data.experimental.AUTOTUNE)
     return ds
