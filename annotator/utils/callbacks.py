@@ -51,17 +51,19 @@ class Visualizer(Callback):
         super().__init__()
         return
 
-    def on_epoch_end(self):
-        with tf.summary.create_file_writer(self.save_dir).as_default():
+    def on_epoch_end(self, *args):
+        with tf.summary.create_file_writer(os.path.join(self.save_dir, self.tag)).as_default():
             for batch in tqdm(self.data, desc='visualizing'):
                 batch_output = self.model.predict(batch['x'])
                 for features, label, path, output in zip(batch['x'], batch['y'], batch['path'], batch_output):
                     image = self.generate_image(features, label, output)
-                    tf.summary.image(f'{self.tag}/{path}', image, step=self.model._train_step)
+                    tf.summary.image(path.numpy().decode(), image, step=self.model._train_counter)
         return
 
     def generate_image(self, features, label, output, axis=1):
         assert len(features.shape) == 3
         horizontal_features = tf.concat(tf.unstack(features, axis=-1), axis=axis)
-        image = tf.concat([horizontal_features, label, output], axis=axis)
+        image = tf.concat([horizontal_features, label, tf.squeeze(output, axis=-1)], axis=axis)
+        image = tf.expand_dims(image, 0)
+        image = tf.expand_dims(image, -1)
         return image
