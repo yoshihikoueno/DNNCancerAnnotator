@@ -25,6 +25,8 @@ def train(
     max_steps,
     early_stop_steps=None,
     save_freq=500,
+    validate=False,
+    val_data_path=None,
 ):
     '''
     Train a model with specified configs.
@@ -40,6 +42,8 @@ def train(
             None(default) disables this feature
         save_freq: interval of checkpoints
             default: 500 steps
+        validate: also validate the model on the validation dataset
+        val_data_path (list[str]): path to the validation dataset
     '''
 
     dump.dump_options(
@@ -51,7 +55,12 @@ def train(
     )
 
     config = load.load_config(config)
-    ds = data.train_ds(data_path, **config['data_options'])
+    ds = data.train_ds(data_path, **config['data_options']['train'])
+    if validate:
+        assert val_data_path is not None
+        val_ds = data.eval_ds(val_data_path, **config['data_options']['eval'])
+    else: val_ds = None
+
     model = engine.TFKerasModel(config)
     results = model.train(
         ds,
@@ -59,6 +68,7 @@ def train(
         max_steps=max_steps,
         early_stop_steps=early_stop_steps,
         save_freq=save_freq,
+        val_data=val_ds,
     )
 
     dump.dump_train_results(
