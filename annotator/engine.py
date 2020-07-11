@@ -42,7 +42,17 @@ class TFKerasModel():
         self.model = self.from_config(model_config)
         return
 
-    def train(self, dataset, val_data=None, save_path=None, save_freq=100, max_steps=None, early_stop_steps=None):
+    def train(
+        self,
+        dataset,
+        val_data=None,
+        save_path=None,
+        save_freq=100,
+        max_steps=None,
+        early_stop_steps=None,
+        visualization=None,
+    ):
+        if visualization is None: visualization = dict()
         callbacks = []
         if save_path is not None:
             ckpt_path = os.path.join(save_path, 'checkpoints', 'ckpt-{epoch}')
@@ -52,6 +62,8 @@ class TFKerasModel():
 
             tfevents_path = os.path.join(save_path, 'tfevents')
             callbacks.append(tf.keras.callbacks.TensorBoard(tfevents_path, update_freq=save_freq))
+            for tag, viz_ds in visualization.items():
+                callbacks.append(custom_callbacks.Visualizer(tag, viz_ds, save_freq, tfevents_path))
 
         if early_stop_steps is not None:
             stopper = tf.keras.callbacks.EarlyStopping(patience=early_stop_steps, verbose=1)
