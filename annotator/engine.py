@@ -11,12 +11,12 @@ from collections import OrderedDict
 # external
 import tensorflow as tf
 from tensorflow import keras
-import tensorflow_addons as tfa
 from tqdm import tqdm
 
 # customs
 from .models import tf_models
 from .utils import losses as custom_losses
+from .utils import callbacks as custom_callbacks
 
 def _set_model(self, model):
     self.model = model
@@ -57,7 +57,7 @@ class TFKerasModel():
             stopper = tf.keras.callbacks.EarlyStopping(patience=early_stop_steps, verbose=1)
             callbacks.append(stopper)
 
-        callbacks.append(tfa.callbacks.TQDMProgressBar(show_epoch_progress=False))
+        callbacks.append(custom_callbacks.TFProgress())
 
         results = self.model.fit(
             dataset,
@@ -66,7 +66,7 @@ class TFKerasModel():
             steps_per_epoch=1,
             epochs=max_steps,
             validation_freq=save_freq,
-            verbose=2,
+            verbose=0,
         )
         return results
 
