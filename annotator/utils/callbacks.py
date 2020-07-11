@@ -52,13 +52,18 @@ class Visualizer(Callback):
         return
 
     def on_epoch_end(self, *args):
+        if self.get_current_step() % self.freq != 0: return
         with tf.summary.create_file_writer(os.path.join(self.save_dir, self.tag)).as_default():
             for batch in tqdm(self.data, desc='visualizing'):
                 batch_output = self.model.predict(batch['x'])
                 for features, label, path, output in zip(batch['x'], batch['y'], batch['path'], batch_output):
                     image = self.generate_image(features, label, output)
-                    tf.summary.image(path.numpy().decode(), image, step=self.model._train_counter)
+                    tf.summary.image(path.numpy().decode(), image, step=self.get_current_step())
         return
+
+    def get_current_step(self):
+        step = self.model._train_counter
+        return step
 
     def generate_image(self, features, label, output, axis=1):
         assert len(features.shape) == 3
