@@ -27,6 +27,7 @@ def train(
     save_freq=500,
     validate=False,
     val_data_path=None,
+    visualize=False,
 ):
     '''
     Train a model with specified configs.
@@ -44,6 +45,7 @@ def train(
             default: 500 steps
         validate: also validate the model on the validation dataset
         val_data_path (list[str]): path to the validation dataset
+        visualize (bool): should visualize results
     '''
 
     dump.dump_options(
@@ -61,6 +63,13 @@ def train(
         val_ds = data.eval_ds(val_data_path, **config['data_options']['eval'])
     else: val_ds = None
 
+    if visualize:
+        visualization = {
+            'train': data.eval_ds(data_path, **config['data_options']['eval'], include_meta=True),
+            'val': data.eval_ds(val_data_path, **config['data_options']['eval'], include_meta=True),
+        }
+    else: visualization = {}
+
     model = engine.TFKerasModel(config)
     results = model.train(
         ds,
@@ -69,6 +78,7 @@ def train(
         early_stop_steps=early_stop_steps,
         save_freq=save_freq,
         val_data=val_ds,
+        visualization=visualization,
     )
 
     dump.dump_train_results(
