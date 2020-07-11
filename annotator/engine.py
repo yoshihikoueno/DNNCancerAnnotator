@@ -6,10 +6,12 @@ provides abstraction of DNN library
 import copy
 import os
 import pdb
+from collections import OrderedDict
 
 # external
 import tensorflow as tf
 from tensorflow import keras
+from tqdm import tqdm
 
 # customs
 from .models import tf_models
@@ -39,7 +41,7 @@ class TFKerasModel():
         self.model = self.from_config(model_config)
         return
 
-    def train(self, dataset, save_path=None, save_freq=100, max_steps=None, early_stop_steps=None):
+    def train(self, dataset, val_data=None, save_path=None, save_freq=100, max_steps=None, early_stop_steps=None):
         callbacks = []
         if save_path is not None:
             ckpt_path = os.path.join(save_path, 'checkpoints', 'ckpt-{epoch}')
@@ -54,12 +56,38 @@ class TFKerasModel():
             stopper = tf.keras.callbacks.EarlyStopping(patience=early_stop_steps, verbose=1)
             callbacks.append(stopper)
 
-        results = self.model.fit(dataset, callbacks=callbacks, steps_per_epoch=1, epochs=max_steps)
+        results = self.model.fit(
+            dataset,
+            validation_data=val_data,
+            callbacks=callbacks,
+            steps_per_epoch=1,
+            epochs=max_steps,
+            validation_freq=save_freq,
+        )
         return results
 
-    def eval(self, dataset):
-        results = self.model.evaluate(dataset)
-        return results
+    def eval(self, dataset, save_path, ckpt_path, step=None, daemon=False):
+        if daemon: raise NotImplementedError
+        assert not os.path.exists(save_path)
+        assert os.path.exists(ckpt_path)
+
+        ckpts = self.list_ckpts(ckpt_path)
+        if step is None:
+            for step_, ckpt_path_ in tqdm(ckpts):
+                self.eval(dataset, save_path, ckpt_path_, step=step_, daemon=False)
+            return
+        else:
+            results = self.model.evaluate(dataset)
+            return results
+
+    def list_ckpts(self, save_path):
+        assert os.path.exists(save_path)
+        files = os.listdir(save_path)
+        files = list(filter(lambda x: x.startswith('ckpt-'), files))
+        id_ckptpath = list(map(lambda x: (int(x[5:]), os.path.join(save_path, x)), files))
+        id_ckptpath = sorted(id_ckptpath, key=lambda x: x[0])
+        ckpts = OrderedDict(id_ckptpath)
+        return ckpts
 
     def predict(self, dataset):
         results = self.model.predict(dataset)
@@ -69,8 +97,8 @@ class TFKerasModel():
         self.model.save(path)
         return self
 
-    def load(self, path, fileformat):
-        self.model.load(path)
+    def load(self, path):
+        self.model = tf.keras.models.load_model(path)
         return self
 
     def _saving_hook(self):
