@@ -146,18 +146,41 @@ def base(path, slice_types, output_size=(512, 512), dtype=tf.float32, normalize_
             cycle_length=ds_utils.count(ds),
             num_parallel_calls=tf.data.experimental.AUTOTUNE,
         )
-    ds = ds.map(
-        lambda image: tf.image.crop_to_bounding_box(
-            image,
-            ((tf.shape(image)[:2] - output_size) // 2)[0],
-            ((tf.shape(image)[:2] - output_size) // 2)[1],
-            *output_size,
-        ),
-        tf.data.experimental.AUTOTUNE,
-    )
-    ds = ds.map(lambda x: tf.reshape(x, [*x.shape[:-1], len(slice_types)]), tf.data.experimental.AUTOTUNE)
-    ds = ds.map(lambda x: tf.cast(x, dtype=dtype), tf.data.experimental.AUTOTUNE)
-    ds = ds.map(lambda x: x / 255.0, tf.data.experimental.AUTOTUNE)
+    if include_meta:
+        tf.data.Dataset.partial_map = partial_map
+        ds = ds.partial_map(
+            'slice',
+            lambda image: tf.image.crop_to_bounding_box(
+                image,
+                ((tf.shape(image)[:2] - output_size) // 2)[0],
+                ((tf.shape(image)[:2] - output_size) // 2)[1],
+                *output_size,
+            ),
+        )
+        ds = ds.partial_map('slice', lambda x: tf.reshape(x, [*x.shape[:-1], len(slice_types)]))
+        ds = ds.partial_map('slice', lambda x: tf.cast(x, dtype=dtype))
+        ds = ds.partial_map('slice', lambda x: x / 255.0)
+    else:
+        ds = ds.map(
+            lambda image: tf.image.crop_to_bounding_box(
+                image,
+                ((tf.shape(image)[:2] - output_size) // 2)[0],
+                ((tf.shape(image)[:2] - output_size) // 2)[1],
+                *output_size,
+            ),
+            tf.data.experimental.AUTOTUNE,
+        )
+        ds = ds.map(lambda x: tf.reshape(x, [*x.shape[:-1], len(slice_types)]), tf.data.experimental.AUTOTUNE)
+        ds = ds.map(lambda x: tf.cast(x, dtype=dtype), tf.data.experimental.AUTOTUNE)
+        ds = ds.map(lambda x: x / 255.0, tf.data.experimental.AUTOTUNE)
+    return ds
+
+
+def partial_map(ds, key, func):
+    def wrapped_func(data):
+        data.update({key: func(data[key])})
+        return data
+    ds = ds.map(wrapped_func, tf.data.experimental.AUTOTUNE)
     return ds
 
 
