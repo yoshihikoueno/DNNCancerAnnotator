@@ -15,4 +15,4 @@ cmd NCCL_DEBUG=WARN NCCL_SHM_DISABLE=1 python3 -m annotator train\
     --val_data_path\
         /kw_resources/datasets/projects/annotation/db3/val/cancer.tfrecords\
         /kw_resources/datasets/projects/annotation/db3/val/healthy.tfrecords\
-    --validation
+    --validate
