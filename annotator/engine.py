@@ -11,6 +11,7 @@ from collections import OrderedDict
 # external
 import tensorflow as tf
 from tensorflow import keras
+import tensorflow_addons as tfa
 from tqdm import tqdm
 
 # customs
@@ -56,6 +57,8 @@ class TFKerasModel():
             stopper = tf.keras.callbacks.EarlyStopping(patience=early_stop_steps, verbose=1)
             callbacks.append(stopper)
 
+        callbacks.append(tfa.callbacks.TQDMProgressBar(show_epoch_progress=False))
+
         results = self.model.fit(
             dataset,
             validation_data=val_data,
@@ -63,6 +66,7 @@ class TFKerasModel():
             steps_per_epoch=1,
             epochs=max_steps,
             validation_freq=save_freq,
+            verbose=2,
         )
         return results
 
