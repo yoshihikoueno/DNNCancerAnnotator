@@ -19,10 +19,11 @@ def tf_weighted_crossentropy(label, pred, weight=None, weight_add=0, weight_mul=
     '''
     if weight is None:
         positive_rate = tf_get_positive_rate(label)
-        weight = 1 / (positive_rate + 1)
+        weight = 1 / positive_rate if positive_rate > 0.0 else 1.0
 
-    weight = weight_mul * weight + weight_add
-    weight_mask = label * weight
+    weight = weight_mul * weight + weight_add - 1.0
+    with tf.control_dependencies([tf.debugging.assert_greater_equal(weight, 0.0)]):
+        weight_mask = label * weight + tf.ones_like(label)
 
     label = tf.stack([label == 0, label == 1], axis=-1)
     pred = tf.stack([1 - pred, pred], axis=-1)
