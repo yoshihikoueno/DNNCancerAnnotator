@@ -67,19 +67,26 @@ class Visualizer(Callback):
             list(map(self.process_batch, tqdm(self.data, desc='visualizing', total=self.data_size)))
         return
 
+    @tf.function
     def process_batch(self, batch):
         batch_output = self.model(batch['x'])
         tf.map_fn(
             lambda x: self.make_summary(x[0], x[1], x[2], x[3]),
             (batch['x'], batch['y'], batch['path'], batch_output),
             dtype=tf.bool,
+            parallel_iterations=cpu_count(),
         )
         return
 
     def make_summary(self, features, label, path, output):
         image = self.generate_image(features, label, output)
         image = tf.image.resize(image, tf.cast(tf.cast(tf.shape(image)[1:3], tf.float32) * self.ratio, tf.int32))
-        tf.summary.image(path.numpy().decode(), image, step=self.get_current_step())
+        # tf.summary.image(path.numpy().decode(), image, step=self.get_current_step())
+        tf.py_function(
+            lambda path: tf.summary.image(path.numpy().decode(), image, step=self.get_current_step()),
+            [path],
+            [tf.bool],
+        )
         return True
 
     def get_current_step(self):
