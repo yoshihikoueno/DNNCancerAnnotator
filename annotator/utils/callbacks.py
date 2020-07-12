@@ -7,6 +7,7 @@ import pdb
 import os
 import sys
 import pprint
+from multiprocessing import cpu_count
 
 # external
 import tensorflow as tf
@@ -41,25 +42,45 @@ class TFProgress(Callback):
 
 
 class Visualizer(Callback):
-    def __init__(self, tag: str, data: tf.data.Dataset, freq: int, save_dir: str):
+    def __init__(self, tag: str, data: tf.data.Dataset, freq: int, save_dir: str, ratio=0.5):
         self.params = None
         self.model = None
         self.tag = tag
         self.data = data
+        self.data_size = None
         self.freq = freq
         self.save_dir = save_dir
+        self.ratio = ratio
         super().__init__()
+        self.set_data_size()
+        return
+
+    def set_data_size(self):
+        count = 0
+        for _ in self.data: count += 1
+        self.data_size = count
         return
 
     def on_epoch_end(self, *args):
         if self.get_current_step() % self.freq != 0: return
         with tf.summary.create_file_writer(os.path.join(self.save_dir, self.tag)).as_default():
-            for batch in tqdm(self.data, desc='visualizing'):
-                batch_output = self.model.predict(batch['x'])
-                for features, label, path, output in zip(batch['x'], batch['y'], batch['path'], batch_output):
-                    image = self.generate_image(features, label, output)
-                    tf.summary.image(path.numpy().decode(), image, step=self.get_current_step())
+            list(map(self.process_batch, tqdm(self.data, desc='visualizing', total=self.data_size)))
         return
+
+    def process_batch(self, batch):
+        batch_output = self.model(batch['x'])
+        tf.map_fn(
+            lambda x: self.make_summary(x[0], x[1], x[2], x[3]),
+            (batch['x'], batch['y'], batch['path'], batch_output),
+            dtype=tf.bool,
+        )
+        return
+
+    def make_summary(self, features, label, path, output):
+        image = self.generate_image(features, label, output)
+        image = tf.image.resize(image, tf.cast(tf.cast(tf.shape(image)[1:3], tf.float32) * self.ratio, tf.int32))
+        tf.summary.image(path.numpy().decode(), image, step=self.get_current_step())
+        return True
 
     def get_current_step(self):
         step = self.model._train_counter
