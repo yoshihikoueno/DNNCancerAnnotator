@@ -83,7 +83,7 @@ class Visualizer(Callback):
         image = tf.image.resize(image, tf.cast(tf.cast(tf.shape(image)[1:3], tf.float32) * self.ratio, tf.int32))
         # tf.summary.image(path.numpy().decode(), image, step=self.get_current_step())
         tf.py_function(
-            lambda path: tf.summary.image(path.numpy().decode(), image, step=self.get_current_step()),
+            lambda path: tf.summary.image('path' + path.numpy().decode(), image, step=self.get_current_step()),
             [path],
             [tf.bool],
         )
