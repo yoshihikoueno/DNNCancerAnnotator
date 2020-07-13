@@ -7,6 +7,7 @@ import copy
 import os
 import pdb
 from collections import OrderedDict
+from functools import partial
 
 # external
 import tensorflow as tf
@@ -134,6 +135,14 @@ class TFKerasModel():
                 model = getattr(tf_models, model_name)(**model_config['model_options'])
         else:
             model = getattr(tf_models, model_name)(**model_config['model_options'])
+
+        if isinstance(deploy_options.get('loss', None), dict):
+            loss_config = deploy_options.pop('loss')
+            loss_name = loss_config['name']
+            loss_option = loss_config.get('option', {})
+            loss = tf.keras.utils.get_registered_object(loss_name)
+            loss = partial(loss, **loss_option)
+            deploy_options['loss'] = loss
 
         model.compile(**deploy_options)
         return model
