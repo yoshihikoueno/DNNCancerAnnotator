@@ -51,6 +51,7 @@ class Visualizer(Callback):
         self.freq = freq
         self.save_dir = save_dir
         self.ratio = ratio
+        self.writer = None
         super().__init__()
         self.set_data_size()
         return
@@ -63,31 +64,47 @@ class Visualizer(Callback):
 
     def on_epoch_end(self, *args):
         if self.get_current_step() % self.freq != 0: return
-        with tf.summary.create_file_writer(os.path.join(self.save_dir, self.tag)).as_default():
+        if self.writer is None: self.writer = tf.summary.create_file_writer(os.path.join(self.save_dir, self.tag))
+        with self.writer.as_default():
             list(map(self.process_batch, tqdm(self.data, desc='visualizing', total=self.data_size)))
+        self.writer.flush()
+        return
+
+    def on_train_end(self, *args):
+        if self.writer is None: return
+        self.writer.close()
+        self.writer = None
+        return
+
+    def process_batch(self, batch):
+        consts = self.make_summary_batch(batch)
+        for tag, image, step in zip(*consts):
+            result = tf.summary.image(tag.numpy().decode(), image, step=step)
+            assert result
         return
 
     @tf.function
-    def process_batch(self, batch):
+    def make_summary_batch(self, batch):
         batch_output = self.model(batch['x'])
-        tf.map_fn(
-            lambda x: self.make_summary(x[0], x[1], x[2], x[3]),
+        results = tf.map_fn(
+            lambda x: self.make_summary_constructor(x[0], x[1], x[2], x[3]),
             (batch['x'], batch['y'], batch['path'], batch_output),
-            dtype=tf.bool,
+            dtype=(tf.string, tf.float32, tf.int64),
             parallel_iterations=cpu_count(),
         )
-        return
+        return results
+
+    @tf.function
+    def make_summary_constructor(self, features, label, path, output):
+        image = self.generate_image(features, label, output)
+        image = tf.image.resize(image, tf.cast(tf.cast(tf.shape(image)[1:3], tf.float32) * self.ratio, tf.int32))
+        return tf.strings.join(['path', path]), image, self.get_current_step()
 
     def make_summary(self, features, label, path, output):
         image = self.generate_image(features, label, output)
         image = tf.image.resize(image, tf.cast(tf.cast(tf.shape(image)[1:3], tf.float32) * self.ratio, tf.int32))
-        # tf.summary.image(path.numpy().decode(), image, step=self.get_current_step())
-        tf.py_function(
-            lambda path: tf.summary.image('path' + path.numpy().decode(), image, step=self.get_current_step()),
-            [path],
-            [tf.bool],
-        )
-        return True
+        tf.summary.image('path' + path.numpy().decode(), image, step=self.get_current_step())
+        return
 
     def get_current_step(self):
         step = self.model._train_counter
