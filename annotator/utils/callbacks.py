@@ -8,6 +8,7 @@ import os
 import sys
 import pprint
 from multiprocessing import cpu_count
+from concurrent.futures import ThreadPoolExecutor
 
 # external
 import tensorflow as tf
@@ -78,10 +79,15 @@ class Visualizer(Callback):
 
     def process_batch(self, batch):
         consts = self.make_summary_batch(batch)
-        for tag, image, step in zip(*consts):
-            result = tf.summary.image(tag.numpy().decode(), image, step=step)
-            assert result
+        with ThreadPoolExecutor() as e:
+            results = list(e.map(self._emit, *consts))
+        assert tf.reduce_all(results)
         return
+
+    def _emit(self, tag, image, step):
+        with self.writer.as_default():
+            result = tf.summary.image(tag.numpy().decode(), image, step=step)
+        return result
 
     @tf.function
     def make_summary_batch(self, batch):
