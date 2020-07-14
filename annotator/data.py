@@ -419,14 +419,16 @@ def extract_slices_from_tfrecord(path, include_meta=True):
                     tf.data.Dataset.from_tensors(x['examID']).repeat(None),
                     tf.data.Dataset.from_tensors(x['path']).repeat(None),
                     tf.data.Dataset.from_tensors(x['category']).repeat(None),
+                    tf.data.experimental.Counter(),
                 )
             ))
-        ds = ds.map(lambda slice_, patientID, examID, path, category: {
+        ds = ds.map(lambda slice_, patientID, examID, path, category, sliceID: {
             'slice': slice_,
             'patientID': patientID,
             'examID': examID,
             'path': path,
             'category': category,
+            'sliceID': sliceID,
         }, tf.data.experimental.AUTOTUNE)
     else:
         ds = ds.flat_map(lambda x: tf.data.Dataset.from_tensor_slices(x['slices']))
