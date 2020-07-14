@@ -13,6 +13,7 @@ import tensorflow as tf
 # custom
 
 
+@tf.function
 def tf_weighted_crossentropy(label, pred, weight=None, weight_add=0, weight_mul=1):
     '''
     calculates weighted loss
@@ -45,6 +46,7 @@ class TFWeightedCrossentropy(tf.keras.losses.Loss):
         super().__init__(name='weighted_crossentropy')
         return
 
+    @tf.function
     def call(self, y_true, y_pred):
         loss = tf_weighted_crossentropy(y_true, y_pred, **self.config)
         return loss
