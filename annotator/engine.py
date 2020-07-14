@@ -140,8 +140,8 @@ class TFKerasModel():
             loss_config = deploy_options.pop('loss')
             loss_name = loss_config['name']
             loss_option = loss_config.get('option', {})
-            loss = tf.keras.utils.get_registered_object(loss_name)
-            loss = partial(loss, **loss_option)
+            loss_class = tf.keras.utils.get_registered_object(loss_name)
+            loss = loss_class(**loss_option)
             deploy_options['loss'] = loss
 
         model.compile(**deploy_options)
