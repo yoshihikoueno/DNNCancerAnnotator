@@ -66,7 +66,7 @@ def train(
     if visualize:
         visualization = {
             'train': data.eval_ds(data_path, **config['data_options']['eval'], include_meta=True),
-            'val': data.eval_ds(val_data_path, **config['data_options']['eval'], include_meta=True),
+            'validate': data.eval_ds(val_data_path, **config['data_options']['eval'], include_meta=True),
         }
     else: visualization = {}
 
