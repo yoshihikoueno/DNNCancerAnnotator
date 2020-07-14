@@ -10,7 +10,7 @@ model_options:
 deploy_options:
     optimizer: adam
     loss:
-        name: weighted_crossentropy
+        name: WeightedCrossentropy
         option:
             weight_mul: 3.0
     enable_multigpu: false
