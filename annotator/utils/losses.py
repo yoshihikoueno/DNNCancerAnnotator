@@ -26,7 +26,7 @@ def tf_weighted_crossentropy(label, pred, weight=None, weight_add=0, weight_mul=
         weight_mask = label * weight + tf.ones_like(label)
 
     label = tf.stack([label == 0, label == 1], axis=-1)
-    pred = tf.stack([1 - pred, pred], axis=-1)
+    pred = tf.concat([1 - pred, pred], axis=-1)
 
     bce = tf.keras.losses.BinaryCrossentropy()
     loss = bce(label, pred, sample_weight=weight_mask)
