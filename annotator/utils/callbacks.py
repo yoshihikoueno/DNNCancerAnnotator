@@ -105,7 +105,7 @@ class Visualizer(Callback):
         image = self.generate_image(features, label, output)
         image = tf.image.resize(image, tf.cast(tf.cast(tf.shape(image)[1:3], tf.float32) * self.ratio, tf.int32))
         sliceID = tf.strings.as_string(sliceID)
-        return tf.strings.join(['path', path, sliceID]), image, self.get_current_step()
+        return tf.strings.join(['path:', path, ',sliceID:', sliceID]), image, self.get_current_step()
 
     def make_summary(self, features, label, path, output):
         image = self.generate_image(features, label, output)
