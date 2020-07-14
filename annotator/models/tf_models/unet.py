@@ -141,6 +141,7 @@ class UNetAnnotator(keras.Model):
         self.built = True
         return
 
+    @tf.function
     def call(self, x, training=True):
         unet_out = self.unet(x, training=training)
         output = self.last_conv(unet_out, training=training)
