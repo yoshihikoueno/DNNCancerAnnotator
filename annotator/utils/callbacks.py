@@ -93,18 +93,19 @@ class Visualizer(Callback):
     def make_summary_batch(self, batch):
         batch_output = self.model(batch['x'])
         results = tf.map_fn(
-            lambda x: self.make_summary_constructor(x[0], x[1], x[2], x[3]),
-            (batch['x'], batch['y'], batch['path'], batch_output),
+            lambda x: self.make_summary_constructor(x[0], x[1], x[2], x[3], x[4]),
+            (batch['x'], batch['y'], batch['path'], batch['sliceID'], batch_output),
             dtype=(tf.string, tf.float32, tf.int64),
             parallel_iterations=cpu_count(),
         )
         return results
 
     @tf.function
-    def make_summary_constructor(self, features, label, path, output):
+    def make_summary_constructor(self, features, label, path, sliceID, output):
         image = self.generate_image(features, label, output)
         image = tf.image.resize(image, tf.cast(tf.cast(tf.shape(image)[1:3], tf.float32) * self.ratio, tf.int32))
-        return tf.strings.join(['path', path]), image, self.get_current_step()
+        sliceID = tf.strings.as_string(sliceID)
+        return tf.strings.join(['path', path, sliceID]), image, self.get_current_step()
 
     def make_summary(self, features, label, path, output):
         image = self.generate_image(features, label, output)
