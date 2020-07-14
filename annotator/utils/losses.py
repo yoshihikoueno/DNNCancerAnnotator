@@ -33,6 +33,28 @@ def tf_weighted_crossentropy(label, pred, weight=None, weight_add=0, weight_mul=
     return loss
 
 
+class TFWeightedCrossentropy(tf.keras.losses.Loss):
+    def __init__(self, weight=None, weight_add=0.0, weight_mul=1.0):
+        self.weight = weight
+        self.weight_add = weight_add
+        self.weight_mul = weight_mul
+
+        self.config = dict(
+            weight=weight, weight_add=weight_add, weight_mul=weight_mul,
+        )
+        super().__init__(name='weighted_crossentropy')
+        return
+
+    def call(self, y_true, y_pred):
+        loss = tf_weighted_crossentropy(y_true, y_pred, **self.config)
+        return loss
+
+    def get_config(self):
+        config = super().get_config()
+        config.update(self.config)
+        return config
+
+
 def tf_get_positive_rate(label):
     max_value = tf.reduce_max(label)
     min_value = tf.reduce_min(label)
@@ -49,3 +71,4 @@ def tf_get_positive_rate(label):
 
 
 tf.keras.utils.get_custom_objects().update(weighted_crossentropy=tf_weighted_crossentropy)
+tf.keras.utils.get_custom_objects().update(WeightedCrossentropy=TFWeightedCrossentropy)
