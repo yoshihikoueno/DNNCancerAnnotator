@@ -65,6 +65,7 @@ def train_ds(
     repeat=True,
     slice_types=('TRA', 'ADC', 'DWI', 'DCEE', 'DCEL', 'label'),
     normalize_exams=True,
+    output_size=(512, 512),
 ):
     '''
     generate dataset for training
@@ -77,8 +78,15 @@ def train_ds(
         slice_types: types of slices to include
         normalize_exams: whether the resulting dataset contain
             the same number of slices from each exam
+        output_size: size of images in the dataset
+            images will be centrally cropped to match the size
     '''
-    ds = base(path, slice_types=slice_types, normalize_exams=normalize_exams)
+    ds = base(
+        path,
+        output_size=output_size,
+        slice_types=slice_types,
+        normalize_exams=normalize_exams,
+    )
     ds = augment(ds)
     ds = to_feature_label(ds, slice_types=slice_types)
     ds = ds.shuffle(buffer_size)
@@ -94,6 +102,7 @@ def eval_ds(
     batch_size,
     slice_types=('TRA', 'ADC', 'DWI', 'DCEE', 'DCEL', 'label'),
     include_meta=False,
+    output_size=(512, 512),
 ):
     '''
     generate dataset for training
@@ -105,8 +114,16 @@ def eval_ds(
         slice_types: types of slices to include
         normalize_exams: whether the resulting dataset contain
             the same number of slices from each exam
+        output_size: size of images in the dataset
+            images will be centrally cropped to match the size
     '''
-    ds = base(path, slice_types=slice_types, normalize_exams=False, include_meta=include_meta)
+    ds = base(
+        path,
+        slice_types=slice_types,
+        normalize_exams=False,
+        include_meta=include_meta,
+        output_size=output_size,
+    )
     ds = to_feature_label(ds, slice_types=slice_types, include_meta=include_meta)
     ds = ds.batch(batch_size)
     ds = ds.prefetch(tf.data.experimental.AUTOTUNE)
