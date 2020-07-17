@@ -116,7 +116,7 @@ class Visualizer(Callback):
         return
 
     def set_current_step(self, step):
-        self.set_current_step = step
+        self.current_step = step
         return
 
     def get_current_step(self):
