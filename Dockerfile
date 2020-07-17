@@ -1,7 +1,7 @@
 from tensorflow/tensorflow:2.3.0rc1-gpu
 run apt update
 run apt install -y git python3-pip libsm6 libxext6 libxrender-dev
-run git clone --single-branch --branch restructure https://github.com/yoshihikoueno/DNNCancerAnnotator
+run git clone --single-branch --branch master https://github.com/yoshihikoueno/DNNCancerAnnotator
 workdir DNNCancerAnnotator
 run pip3 install -r requirements.txt
 cmd NCCL_DEBUG=WARN NCCL_SHM_DISABLE=1 python3 -m annotator train\
