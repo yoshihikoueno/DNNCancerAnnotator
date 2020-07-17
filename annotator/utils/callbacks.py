@@ -32,7 +32,8 @@ class TFProgress(Callback):
     def on_epoch_end(self, epoch, logs={}):
         tqdm.write(f'Epoch:{epoch}\n' + pprint.pformat(logs))
         if self.progbar is None: return
-        self.progbar.update(1)
+        self.progbar.n = epoch + 1
+        self.progbar.last_print_n = epoch + 1
         return
 
     def on_train_end(self, logs={}):
@@ -63,7 +64,8 @@ class Visualizer(Callback):
         self.data_size = count
         return
 
-    def on_epoch_end(self, *args):
+    def on_epoch_end(self, epoch, logs=None):
+        self.set_current_step(epoch)
         if self.get_current_step() % self.freq != 0: return
         if self.writer is None: self.writer = tf.summary.create_file_writer(os.path.join(self.save_dir, self.tag))
         with self.writer.as_default():
@@ -113,8 +115,12 @@ class Visualizer(Callback):
         tf.summary.image('path' + path.numpy().decode(), image, step=self.get_current_step())
         return
 
+    def set_current_step(self, step):
+        self.set_current_step = step
+        return
+
     def get_current_step(self):
-        step = self.model._train_counter
+        step = self.current_step
         return step
 
     def generate_image(self, features, label, output, axis=1):
