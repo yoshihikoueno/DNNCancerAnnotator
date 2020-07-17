@@ -468,6 +468,14 @@ def base_from_tfrecords(path: list, normalize=False, include_meta=False):
 
 
 def augment(ds, methods=None):
+    ds = augment_random_flip(augment_random_flip)
+    return ds
+
+def augment_random_flip(ds):
+    ds = ds.map(
+        tf.image.random_flip_left_right,
+        num_parallel_calls=tf.data.experimental.AUTOTUNE,
+    )
     return ds
 
 
