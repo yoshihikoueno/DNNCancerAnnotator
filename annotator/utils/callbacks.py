@@ -86,9 +86,9 @@ class Visualizer(Callback):
         assert tf.reduce_all(results)
         return
 
-    def _emit(self, tag, image, step):
+    def _emit(self, tag, image):
         with self.writer.as_default():
-            result = tf.summary.image(tag.numpy().decode(), image, step=step)
+            result = tf.summary.image(tag.numpy().decode(), image, step=self.current_step)
         return result
 
     @tf.function
@@ -97,7 +97,7 @@ class Visualizer(Callback):
         results = tf.map_fn(
             lambda x: self.make_summary_constructor(x[0], x[1], x[2], x[3], x[4]),
             (batch['x'], batch['y'], batch['path'], batch['sliceID'], batch_output),
-            dtype=(tf.string, tf.float32, tf.int64),
+            dtype=(tf.string, tf.float32),
             parallel_iterations=cpu_count(),
         )
         return results
@@ -107,7 +107,7 @@ class Visualizer(Callback):
         image = self.generate_image(features, label, output)
         image = tf.image.resize(image, tf.cast(tf.cast(tf.shape(image)[1:3], tf.float32) * self.ratio, tf.int32))
         sliceID = tf.strings.as_string(sliceID)
-        return tf.strings.join(['path:', path, ',sliceID:', sliceID]), image, self.get_current_step()
+        return tf.strings.join(['path:', path, ',sliceID:', sliceID]), image
 
     def make_summary(self, features, label, path, output):
         image = self.generate_image(features, label, output)
