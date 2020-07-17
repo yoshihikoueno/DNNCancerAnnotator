@@ -97,7 +97,7 @@ class Visualizer(Callback):
         results = tf.map_fn(
             lambda x: self.make_summary_constructor(x[0], x[1], x[2], x[3], x[4]),
             (batch['x'], batch['y'], batch['path'], batch['sliceID'], batch_output),
-            dtype=(tf.string, tf.float32, tf.int32),
+            dtype=(tf.string, tf.float32, tf.int64),
             parallel_iterations=cpu_count(),
         )
         return results
@@ -120,7 +120,7 @@ class Visualizer(Callback):
         return
 
     def get_current_step(self):
-        step = self.current_step
+        step = tf.cast(self.current_step, tf.int64)
         return step
 
     def generate_image(self, features, label, output, axis=1):
