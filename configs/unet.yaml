@@ -19,5 +19,7 @@ data_options:
         batch_size: 8
         buffer_size: 256
         normalize_exams: true
+        output_size: [256, 256]
     eval:
         batch_size: 64
+        output_size: [256, 256]
