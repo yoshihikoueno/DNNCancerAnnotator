@@ -40,6 +40,7 @@ class TFKerasModel():
         Args:
             model_config (dict):m model configuration
         '''
+        self.model_config = copy.deepcopy(model_config)
         self.model = self.from_config(model_config)
         return
 
@@ -58,7 +59,7 @@ class TFKerasModel():
         if save_path is not None:
             ckpt_path = os.path.join(save_path, 'checkpoints', 'ckpt-{epoch}')
             os.makedirs(os.path.dirname(ckpt_path), exist_ok=True)
-            ckpt_saver = tf.keras.callbacks.ModelCheckpoint(ckpt_path, save_freq=save_freq)
+            ckpt_saver = tf.keras.callbacks.ModelCheckpoint(ckpt_path, save_freq=save_freq, save_weights_only=True)
             callbacks.append(ckpt_saver)
 
             tfevents_path = os.path.join(save_path, 'tfevents')
@@ -115,11 +116,14 @@ class TFKerasModel():
         return self
 
     def load(self, path):
-        self.model = tf.keras.models.load_model(path)
+        self.model.load_weights(path)
         return self
 
     def _saving_hook(self):
         return
+
+    def get_config(self):
+        return self.model_config
 
     def from_config(self, model_config):
         assert 'model' in model_config
