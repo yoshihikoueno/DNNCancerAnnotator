@@ -135,6 +135,11 @@ class UNetAnnotator(keras.Model):
     def get_config(self):
         return self.configs
 
+    @classmethod
+    def from_config(cls, config):
+        instance = cls(**config)
+        return instance
+
     def build(self, input_shape):
         unet_out = self.unet.build(input_shape)
         self.last_conv.build(unet_out)

@@ -41,7 +41,7 @@ class Downsample(Layer):
             activation=activation,
         )
         self.padding = padding
-        self.convs = [
+        convs = [
             layers.Conv2D(
                 filters, kernel_size, strides=conv_stride, padding=self.padding, activation=activation, trainable=trainable,
             )
@@ -52,10 +52,10 @@ class Downsample(Layer):
 
         if bn:
             self.batchnorms = [layers.BatchNormalization(trainable=trainable) for i in range(n_conv)]
-            self.convs = [layer for tup in zip(self.convs, self.batchnorms) for layer in tup]
+            convs = [layer for tup in zip(convs, self.batchnorms) for layer in tup]
             self.pool = keras.Sequential([self.pool, layers.BatchNormalization(trainable=trainable)])
 
-        self.convchain = keras.Sequential(self.convs)
+        self.convchain = keras.Sequential(convs)
         return
 
     def get_config(self):
@@ -64,7 +64,9 @@ class Downsample(Layer):
         return config
 
     def build(self, input_shape):
+        self.convchain.build(input_shape)
         conv_output_shape = self.convchain.compute_output_shape(input_shape)
+        self.pool.build(conv_output_shape)
         pool_output_shape = self.pool.compute_output_shape(conv_output_shape)
         self.built = True
         return conv_output_shape, pool_output_shape
@@ -131,6 +133,10 @@ class Upsample(Layer):
         '''
             input_shapes: [ (inputs.shape), (reference.shape) ]
         '''
+        self.conv_transpose.build(input_shape)
+        conv_output_shape = self.conv_transpose.compute_output_shape(input_shape)
+        convchain_input_shape = (*conv_output_shape[:3], + conv_output_shape[3] + ref_shape[3])
+        self.convchain.build(convchain_input_shape)
         self.built = True
         return
 
