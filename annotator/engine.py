@@ -8,6 +8,9 @@ import os
 import pdb
 from collections import OrderedDict
 from functools import partial
+import logging
+import re
+import itertools
 
 # external
 import tensorflow as tf
@@ -42,28 +45,56 @@ class TFKerasModel():
         '''
         self.model_config = copy.deepcopy(model_config)
         self.model = self.from_config(model_config)
+        self.current_step = 0
+        self.ckpt_pattern = 'ckpt-{epoch}'
+        return
+
+    def get_ckpts(self, base_path):
+        regex_pattern = fr'^{self.ckpt_pattern}\.index$'.format(epoch=r'(\d+)')
+        files = os.listdir(base_path)
+        ckpts_files = list(filter(
+            lambda x: re.match(regex_pattern, x),
+            files,
+        ))
+        ckpt_steps = list(map(lambda x: int(re.sub(regex_pattern, r'\1', x)), ckpts_files))
+        ckpts_paths = list(map(lambda x: os.path.join(base_path, x[:-len('.index')]), ckpts_files))
+        ckpts = dict(zip(ckpt_steps, ckpts_paths))
+        return ckpts
+
+    def _auto_resume(self, base_path):
+        if not os.path.exists(base_path): return
+        ckpts = self.get_ckpts(base_path)
+        if not ckpts: return
+        latest_step = max(ckpts.keys())
+        latest_ckpt = ckpts[latest_step]
+        self.model.load_weights(latest_ckpt).assert_consumed()
+        self.current_step = latest_step
+        logging.warn(f'Resumed from {latest_step}')
         return
 
     def train(
         self,
-        dataset,
+        dataset: tf.data.Dataset,
         val_data=None,
         save_path=None,
         save_freq=100,
         max_steps=None,
         early_stop_steps=None,
         visualization=None,
+        auto_resume=True,
     ):
+        self.model.build(dataset.element_spec[0].shape)
+        if auto_resume: self._auto_resume(os.path.join(save_path, 'checkpoints'))
         if visualization is None: visualization = dict()
         callbacks = []
         if save_path is not None:
-            ckpt_path = os.path.join(save_path, 'checkpoints', 'ckpt-{epoch}')
+            ckpt_path = os.path.join(save_path, 'checkpoints', self.ckpt_pattern)
             os.makedirs(os.path.dirname(ckpt_path), exist_ok=True)
             ckpt_saver = tf.keras.callbacks.ModelCheckpoint(ckpt_path, save_freq=save_freq, save_weights_only=True)
             callbacks.append(ckpt_saver)
 
             tfevents_path = os.path.join(save_path, 'tfevents')
-            callbacks.append(tf.keras.callbacks.TensorBoard(tfevents_path, update_freq=save_freq))
+            callbacks.append(tf.keras.callbacks.TensorBoard(tfevents_path, update_freq='epoch'))
             for tag, viz_ds in visualization.items():
                 callbacks.append(custom_callbacks.Visualizer(tag, viz_ds, save_freq, tfevents_path))
 
@@ -80,6 +111,7 @@ class TFKerasModel():
             steps_per_epoch=1,
             epochs=max_steps,
             validation_freq=save_freq,
+            initial_epoch=self.current_step,
             verbose=0,
         )
         return results
@@ -147,6 +179,17 @@ class TFKerasModel():
             loss_class = tf.keras.utils.get_registered_object(loss_name)
             loss = loss_class(**loss_option)
             deploy_options['loss'] = loss
+
+        # workaround to fix opimizer bug in tensorflow
+        if deploy_options['optimizer'] == 'adam':
+            deploy_options['optimizer'] = tf.keras.optimizers.Adam(
+                learning_rate=tf.Variable(0.001),
+                beta_1=tf.Variable(0.9),
+                beta_2=tf.Variable(0.999),
+                epsilon=tf.Variable(1e-7),
+            )
+            deploy_options['optimizer'].iterations
+            deploy_options['optimizer'].decay = tf.Variable(0.0)
 
         model.compile(**deploy_options)
         return model
