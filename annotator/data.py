@@ -93,7 +93,7 @@ def train_ds(
         methods={
             augment_random_crop: dict(output_size=output_size),
             augment_random_flip: {},
-            augment_random_contrast: {},
+            augment_random_contrast: dict(target_channels=list(range(len(slice_types[:-1])))),
             augment_random_warp: {},
         },
     )
@@ -506,12 +506,30 @@ def solve_augment_method(method_str):
     return method
 
 
-def augment_random_contrast(ds, lower=0.8, upper=1.2):
+def augment_random_contrast(ds, target_channels, lower=0.8, upper=1.2):
     ds = ds.map(
-        lambda image: tf.image.random_contrast(image, lower=lower, upper=upper),
+        lambda image: random_contrast(image, lower=lower, upper=upper, target_channels=target_channels),
         num_parallel_calls=tf.data.experimental.AUTOTUNE,
     )
     return ds
+
+
+def random_contrast(image, lower, upper, target_channels):
+    non_target_channels = [i for i in range(image.shape[-1]) if i not in target_channels]
+
+    target = tf.gather(image, target_channels, axis=2)
+    non_target = tf.gather(image, non_target_channels, axis=2)
+    target_out = tf.image.random_contrast(target, lower=lower, upper=upper)
+    image = tf.concat([target_out, non_target], axis=2)
+    indices = list(map(
+        lambda xy: xy[1],
+        sorted(
+            zip(target_channels + non_target_channels, range(1000)),
+            key=lambda xy: xy[0],
+        ),
+    ))
+    image = tf.gather(image, indices, axis=2)
+    return image
 
 
 def augment_random_hue(ds, max_delta=0.2):
