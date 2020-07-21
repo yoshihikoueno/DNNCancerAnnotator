@@ -548,12 +548,22 @@ def augment_random_flip(ds):
     return ds
 
 
-def augment_random_warp(ds, **options):
-    '''apply augmentation based on image warping'''
+def augment_random_warp(ds: tf.data.Dataset, process_in_batch=10, **options) -> tf.data.Dataset:
+    '''apply augmentation based on image warping
+
+    Args:
+        process_in_batch: the number of images to apply warping in a batch
+            None to disable this feature
+        options: options to be passed to random_warp function
+    '''
+    if process_in_batch is not None:
+        ds = ds.batch(process_in_batch)
     ds = ds.map(
-        lambda image: random_warp(image, **options),
+        lambda image: random_warp(image, process_in_batch=process_in_batch, **options),
         num_parallel_calls=tf.data.experimental.AUTOTUNE,
     )
+    if process_in_batch is not None:
+        ds = ds.unbatch()
     return ds
 
 
@@ -581,7 +591,7 @@ def random_crop(image, output_size=(512, 512), stddev=4, max_=6, min_=-6):
     return image
 
 
-def random_warp(image, n_points=100, width_index=0, height_index=1, max_diff=5, stddev=2.0):
+def random_warp(image, n_points=100, max_diff=5, stddev=2.0, process_in_batch=None):
     '''
     this function will perfom data augmentation
     using Non-affine transformation, namely
@@ -591,23 +601,28 @@ def random_warp(image, n_points=100, width_index=0, height_index=1, max_diff=5, 
     Args:
         image: input image
         n_points: the num of points to take for image warping
-        width_index: index of width, set this to 1 if batched 0 otherwise normally
-        height_index: index of height
         max_diff: maximum movement of pixels
     Return:
         warped image
     '''
+    if process_in_batch is not None:
+        width_index, height_index, n_images = 1, 2, process_in_batch
+        image = tf.reshape(image, [n_images, *image.get_shape()[1:]])
+    else:
+        width_index, height_index, n_images = 0, 1, 1
+
     width = tf.shape(image)[width_index]
     height = tf.shape(image)[height_index]
 
     with tf.control_dependencies([tf.assert_equal(width, height)]):
-        raw = tf.random.uniform([1, n_points, 2], 0.0, tf.cast(width, tf.float32), dtype=tf.float32)
-        diff = tf.random.normal([1, n_points, 2], mean=0.0, stddev=stddev, dtype=tf.float32)
+        raw = tf.random.uniform([n_images, n_points, 2], 0.0, tf.cast(width, tf.float32), dtype=tf.float32)
+        diff = tf.random.normal([n_images, n_points, 2], mean=0.0, stddev=stddev, dtype=tf.float32)
         # ensure that diff is not too big
         diff = tf.clip_by_value(diff, tf.cast(-max_diff, tf.float32), tf.cast(max_diff, tf.float32))
 
-    # expand dimension to meet the requirement of sparse_image_warp
-    image = tf.expand_dims(image, 0)
+    if process_in_batch is None:
+        # expand dimension to meet the requirement of sparse_image_warp
+        image = tf.expand_dims(image, 0)
 
     image = tfa.image.sparse_image_warp(
         image=image,
@@ -617,8 +632,9 @@ def random_warp(image, n_points=100, width_index=0, height_index=1, max_diff=5, 
     # sparse_image_warp function will return a tuple
     # (warped image, flow_field)
 
-    # shrink dimension
-    image = image[0, :, :, :]
+    if process_in_batch is None:
+        # shrink dimension
+        image = image[0, :, :, :]
     return image
 
 
