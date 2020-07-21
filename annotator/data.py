@@ -50,6 +50,7 @@ from functools import partial
 import tensorflow as tf
 from tqdm import tqdm
 import p_tqdm
+import tensorflow_addons as tfa
 
 # customs
 from .utils import dataset as ds_utils
@@ -65,7 +66,7 @@ def train_ds(
     repeat=True,
     slice_types=('TRA', 'ADC', 'DWI', 'DCEE', 'DCEL', 'label'),
     normalize_exams=True,
-    output_size=(512, 512),
+    output_size=(256, 256),
 ):
     '''
     generate dataset for training
@@ -83,11 +84,19 @@ def train_ds(
     '''
     ds = base(
         path,
-        output_size=output_size,
+        output_size=(512, 512),
         slice_types=slice_types,
         normalize_exams=normalize_exams,
     )
-    ds = augment(ds)
+    ds = augment(
+        ds,
+        methods={
+            augment_random_crop: dict(output_size=output_size),
+            augment_random_flip: {},
+            augment_random_contrast: {},
+            augment_random_warp: {},
+        },
+    )
     ds = to_feature_label(ds, slice_types=slice_types)
     ds = ds.shuffle(buffer_size)
     if repeat:
@@ -165,7 +174,7 @@ def base(path, slice_types, output_size=(512, 512), dtype=tf.float32, normalize_
         )
     if include_meta:
         tf.data.Dataset.partial_map = partial_map
-        ds = ds.partial_map(
+        if output_size is not None: ds = ds.partial_map(
             'slice',
             lambda image: tf.image.crop_to_bounding_box(
                 image,
@@ -178,7 +187,7 @@ def base(path, slice_types, output_size=(512, 512), dtype=tf.float32, normalize_
         ds = ds.partial_map('slice', lambda x: tf.cast(x, dtype=dtype))
         ds = ds.partial_map('slice', lambda x: x / 255.0)
     else:
-        ds = ds.map(
+        if output_size is not None: ds = ds.map(
             lambda image: tf.image.crop_to_bounding_box(
                 image,
                 ((tf.shape(image)[:2] - output_size) // 2)[0],
@@ -468,8 +477,50 @@ def base_from_tfrecords(path: list, normalize=False, include_meta=False):
 
 
 def augment(ds, methods=None):
-    ds = augment_random_flip(ds)
+    if methods is None:
+        methods = {
+            augment_random_crop: {},
+            augment_random_flip: {},
+            augment_random_contrast: {},
+            augment_random_warp: {},
+        }
+    else:
+        assert isinstance(methods, dict)
+        methods = dict(map(
+            lambda name, config: (solve_augment_method(name), config),
+            methods.keys(), methods.values(),
+        ))
+
+    for op, config in methods.items(): ds = op(ds, **config)
     return ds
+
+
+def solve_augment_method(method_str):
+    '''
+    check if the specified augment method exists
+    and if it's really an augment method.
+    '''
+    if callable(method_str): return method_str
+    method_str.startswith('augment_')
+    method = vars[method_str]
+    return method
+
+
+def augment_random_contrast(ds, lower=0.8, upper=1.2):
+    ds = ds.map(
+        lambda image: tf.image.random_contrast(image, lower=lower, upper=upper),
+        num_parallel_calls=tf.data.experimental.AUTOTUNE,
+    )
+    return ds
+
+
+def augment_random_hue(ds, max_delta=0.2):
+    ds = ds.map(
+        lambda image: tf.image.random_hue(image, max_delta=max_delta),
+        num_parallel_calls=tf.data.experimental.AUTOTUNE,
+    )
+    return ds
+
 
 def augment_random_flip(ds):
     ds = ds.map(
@@ -477,6 +528,80 @@ def augment_random_flip(ds):
         num_parallel_calls=tf.data.experimental.AUTOTUNE,
     )
     return ds
+
+
+def augment_random_warp(ds, **options):
+    '''apply augmentation based on image warping'''
+    ds = ds.map(
+        lambda image: random_warp(image, **options),
+        num_parallel_calls=tf.data.experimental.AUTOTUNE,
+    )
+    return ds
+
+
+def augment_random_crop(ds, **options):
+    '''apply augmentation based on image warping'''
+    ds = ds.map(
+        lambda image: random_crop(image, **options),
+        num_parallel_calls=tf.data.experimental.AUTOTUNE,
+    )
+    return ds
+
+
+def random_crop(image, output_size=(512, 512), stddev=4, max_=6, min_=-6):
+    """
+    performs augmentation by cropping/resizing
+    given image
+    """
+    diff = tf.clip_by_value(tf.cast(tf.random.normal([2], stddev=stddev), tf.int32), min_, max_)
+    image = tf.image.crop_to_bounding_box(
+        image,
+        ((tf.shape(image)[:2] - output_size) // 2 + diff)[0],
+        ((tf.shape(image)[:2] - output_size) // 2 + diff)[1],
+        *output_size,
+    )
+    return image
+
+
+def random_warp(image, n_points=100, width_index=0, height_index=1, max_diff=5, stddev=2.0):
+    '''
+    this function will perfom data augmentation
+    using Non-affine transformation, namely
+    image warping.
+    Currently, only square images are supported
+
+    Args:
+        image: input image
+        n_points: the num of points to take for image warping
+        width_index: index of width, set this to 1 if batched 0 otherwise normally
+        height_index: index of height
+        max_diff: maximum movement of pixels
+    Return:
+        warped image
+    '''
+    width = tf.shape(image)[width_index]
+    height = tf.shape(image)[height_index]
+
+    with tf.control_dependencies([tf.assert_equal(width, height)]):
+        raw = tf.random.uniform([1, n_points, 2], 0.0, tf.cast(width, tf.float32), dtype=tf.float32)
+        diff = tf.random.normal([1, n_points, 2], mean=0.0, stddev=stddev, dtype=tf.float32)
+        # ensure that diff is not too big
+        diff = tf.clip_by_value(diff, tf.cast(-max_diff, tf.float32), tf.cast(max_diff, tf.float32))
+
+    # expand dimension to meet the requirement of sparse_image_warp
+    image = tf.expand_dims(image, 0)
+
+    image = tfa.image.sparse_image_warp(
+        image=image,
+        source_control_point_locations=raw,
+        dest_control_point_locations=raw + diff,
+    )[0]
+    # sparse_image_warp function will return a tuple
+    # (warped image, flow_field)
+
+    # shrink dimension
+    image = image[0, :, :, :]
+    return image
 
 
 def to_feature_label(ds, slice_types, include_meta=False):
