@@ -20,6 +20,8 @@ data_options:
         buffer_size: 256
         normalize_exams: true
         output_size: [256, 256]
+        slice_types: ['TRA', 'ADC', 'DWI', 'DCEE', 'DCEL', 'label']
     eval:
         batch_size: 64
         output_size: [256, 256]
+        slice_types: ['TRA', 'ADC', 'DWI', 'DCEE', 'DCEL', 'label']

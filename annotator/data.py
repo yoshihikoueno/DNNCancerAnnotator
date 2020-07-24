@@ -157,7 +157,7 @@ def base(path, slice_types, output_size=(512, 512), dtype=tf.float32, normalize_
     if os.path.splitext(path[0])[1] == '.tfrecords':
         assert all(map(lambda x: os.path.splitext(x)[1] == '.tfrecords', path))
 
-        ds = base_from_tfrecords(path, normalize=normalize_exams, include_meta=include_meta)
+        ds = base_from_tfrecords(path, normalize=normalize_exams, include_meta=include_meta, output_slice_types=slice_types)
     else:
         assert all(map(os.path.isdir, path))
         pattern = list(map(lambda x: os.path.join(x, *'*' * 3), path))
@@ -237,6 +237,8 @@ def generate_tfrecords(
                     'path': tf.train.Feature(bytes_list=tf.train.BytesList(value=[path.numpy()])),
                     'category': tf.train.Feature(bytes_list=tf.train.BytesList(value=[category.numpy()])),
                     'shape': tf.train.Feature(int64_list=tf.train.Int64List(value=slices.shape)),
+                    'slice_types': tf.train.Feature(
+                        bytes_list=tf.train.BytesList(value=list(map(lambda x: x.encode(), slice_types)))),
                 })).SerializeToString(),
             (slices, patientID, examID, path, category),
             tf.string,
@@ -413,7 +415,16 @@ def getID_from_exam_path(exam_path):
     return patient_id, exam_id
 
 
-def extract_slices_from_tfrecord(path, include_meta=True):
+def extract_slices_from_tfrecord(path, output_slice_types=None, include_meta=True):
+    '''
+    extract data from tfrecords
+
+    Args:
+        path: path to the tfrecord file
+        output_slice_types: (optional) list of slices included in output
+            default (None): output what is recorded in tfrecord file
+        include_meta: whether output should include meta information in addition to slices
+    '''
     ds = tf.data.TFRecordDataset(path, compression_type=_TFRECORD_COMPRESSION)
     ds = ds.map(
         lambda x: tf.io.parse_single_example(x, {
@@ -423,6 +434,7 @@ def extract_slices_from_tfrecord(path, include_meta=True):
             'path': tf.io.FixedLenFeature([], tf.string),
             'category': tf.io.FixedLenFeature([], tf.string),
             'shape': tf.io.FixedLenFeature([4], tf.int64),
+            'slice_types': tf.io.FixedLenSequenceFeature([], tf.string, allow_missing=True),
         }),
         num_parallel_calls=tf.data.experimental.AUTOTUNE,
     )
@@ -433,6 +445,23 @@ def extract_slices_from_tfrecord(path, include_meta=True):
             'examID': x['examID'],
             'path': x['path'],
             'category': x['category'],
+            'slice_types': tf.reshape(x['slice_types'], [x['shape'][-1]]),
+        },
+        num_parallel_calls=tf.data.experimental.AUTOTUNE,
+    )
+
+    def get_indices(slice_types, output_slice_types):
+        indices = tf.squeeze(tf.map_fn(lambda x: tf.where(x == slice_types), tf.constant(output_slice_types), dtype=tf.int64))
+        return indices
+
+    ds = ds.map(
+        lambda x: {
+            'slices': tf.gather(x['slices'], get_indices(x['slice_types'], output_slice_types), axis=3),
+            'patientID': x['patientID'],
+            'examID': x['examID'],
+            'path': x['path'],
+            'category': x['category'],
+            'slice_types': x['slice_types'],
         },
         num_parallel_calls=tf.data.experimental.AUTOTUNE,
     )
@@ -445,15 +474,17 @@ def extract_slices_from_tfrecord(path, include_meta=True):
                     tf.data.Dataset.from_tensors(x['examID']).repeat(None),
                     tf.data.Dataset.from_tensors(x['path']).repeat(None),
                     tf.data.Dataset.from_tensors(x['category']).repeat(None),
+                    tf.data.Dataset.from_tensors(x['slice_types']).repeat(None),
                     tf.data.experimental.Counter(),
                 )
             ))
-        ds = ds.map(lambda slice_, patientID, examID, path, category, sliceID: {
+        ds = ds.map(lambda slice_, patientID, examID, path, category, slice_types, sliceID: {
             'slice': slice_,
             'patientID': patientID,
             'examID': examID,
             'path': path,
             'category': category,
+            'slice_types': slice_types,
             'sliceID': sliceID,
         }, tf.data.experimental.AUTOTUNE)
     else:
@@ -461,16 +492,24 @@ def extract_slices_from_tfrecord(path, include_meta=True):
     return ds
 
 
-def base_from_tfrecords(path: list, normalize=False, include_meta=False):
+def base_from_tfrecords(path: list, normalize=False, include_meta=False, output_slice_types=None):
     ds = tf.data.Dataset.from_tensor_slices(path)
     if normalize:
         ds = ds.interleave(
-            lambda path: extract_slices_from_tfrecord(path, include_meta=include_meta).repeat(None),
+            lambda path: extract_slices_from_tfrecord(
+                path,
+                output_slice_types=output_slice_types,
+                include_meta=include_meta,
+            ).repeat(None),
             num_parallel_calls=tf.data.experimental.AUTOTUNE,
         )
     else:
         ds = ds.interleave(
-            lambda path: extract_slices_from_tfrecord(path, include_meta=include_meta),
+            lambda path: extract_slices_from_tfrecord(
+                path,
+                output_slice_types=output_slice_types,
+                include_meta=include_meta,
+            ),
             num_parallel_calls=tf.data.experimental.AUTOTUNE,
         )
     return ds
