@@ -53,9 +53,20 @@ class Visualizer(Callback):
         self.freq = freq
         self.save_dir = save_dir
         self.ratio = ratio
-        self.writer = None
+        self._writer = None
+        self._owned_writer = True
         super().__init__()
         self.set_data_size()
+        return
+
+    @property
+    def writer(self):
+        return self._writer
+
+    @writer.setter
+    def writer(self, writer):
+        self._writer = writer
+        self._owned_writer = False
         return
 
     def set_data_size(self):
@@ -67,7 +78,7 @@ class Visualizer(Callback):
     def on_epoch_end(self, epoch, logs=None):
         self.set_current_step(epoch)
         if self.get_current_step() % self.freq != 0: return
-        if self.writer is None: self.writer = tf.summary.create_file_writer(os.path.join(self.save_dir, self.tag))
+        if self.writer is None: self._writer = tf.summary.create_file_writer(os.path.join(self.save_dir, self.tag))
         with self.writer.as_default():
             list(map(self.process_batch, tqdm(self.data, desc='visualizing', total=self.data_size)))
         self.writer.flush()
@@ -75,8 +86,9 @@ class Visualizer(Callback):
 
     def on_train_end(self, *args):
         if self.writer is None: return
-        self.writer.close()
-        self.writer = None
+        if self._owned_writer: self.writer.close()
+        self._writer = None
+        self._owned_writer = True
         return
 
     def process_batch(self, batch):
