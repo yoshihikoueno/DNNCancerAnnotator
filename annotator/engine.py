@@ -94,9 +94,16 @@ class TFKerasModel():
             callbacks.append(ckpt_saver)
 
             tfevents_path = os.path.join(save_path, 'tfevents')
-            callbacks.append(tf.keras.callbacks.TensorBoard(tfevents_path, update_freq='epoch'))
+            tb_callback = tf.keras.callbacks.TensorBoard(tfevents_path, update_freq='epoch')
+            tb_callback.set_model(self.model)
+            callbacks.append(tb_callback)
             for tag, viz_ds in visualization.items():
-                callbacks.append(custom_callbacks.Visualizer(tag, viz_ds, save_freq, tfevents_path))
+                viz_callback = custom_callbacks.Visualizer(tag, viz_ds, save_freq, tfevents_path)
+
+                # if tb_callback already have a writer for it, reuse it
+                try: viz_callback.writer = getattr(tb_callback, f'_{tag}_writer')
+                except AttributeError: pass
+                callbacks.append(viz_callback)
 
         if early_stop_steps is not None:
             stopper = tf.keras.callbacks.EarlyStopping(patience=early_stop_steps, verbose=1)
