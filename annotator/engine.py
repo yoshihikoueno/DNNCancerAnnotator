@@ -44,7 +44,7 @@ class TFKerasModel():
             model_config (dict):m model configuration
         '''
         self.model_config = copy.deepcopy(model_config)
-        self.model = self.from_config(model_config)
+        self.model: tf.keras.Model = self.from_config(model_config)
         self.current_step = 0
         self.ckpt_pattern = 'ckpt-{epoch}'
         return
@@ -58,7 +58,7 @@ class TFKerasModel():
         ))
         ckpt_steps = list(map(lambda x: int(re.sub(regex_pattern, r'\1', x)), ckpts_files))
         ckpts_paths = list(map(lambda x: os.path.join(base_path, x[:-len('.index')]), ckpts_files))
-        ckpts = dict(zip(ckpt_steps, ckpts_paths))
+        ckpts = OrderedDict(sorted(zip(ckpt_steps, ckpts_paths), key=lambda x: x[0]))
         return ckpts
 
     def _auto_resume(self, base_path):
@@ -123,19 +123,21 @@ class TFKerasModel():
         )
         return results
 
-    def eval(self, dataset, save_path, ckpt_path, step=None, daemon=False):
-        if daemon: raise NotImplementedError
-        assert not os.path.exists(save_path)
-        assert os.path.exists(ckpt_path)
+    def eval(self, dataset, viz_ds, save_path, tag='val', avoid_overwrite=False):
+        self.model.build(dataset.element_spec[0].shape)
+        ckpt_path = os.path.join(save_path, 'checkpoints')
 
-        ckpts = self.list_ckpts(ckpt_path)
-        if step is None:
-            for step_, ckpt_path_ in tqdm(ckpts):
-                self.eval(dataset, save_path, ckpt_path_, step=step_, daemon=False)
-            return
-        else:
-            results = self.model.evaluate(dataset)
-            return results
+        tfevents_path = os.path.join(save_path, 'tfevents')
+        if os.path.exists(os.path.join(tfevents_path, tag)):
+            if avoid_overwrite:
+                while os.path.exists(os.path.join(tfevents_path, tag)): tag += '_'
+            else: raise ValueError(f'tag: {tag} already exists.')
+        viz_callback = custom_callbacks.Visualizer(tag, viz_ds, 1, tfevents_path)
+        for ckpt_step, ckpt_path_ in tqdm(self.get_ckpts(ckpt_path).items(), desc='checkpoints'):
+            viz_callback.current_step = ckpt_step
+            self.load(ckpt_path_)
+            self.model.evaluate(dataset, callbacks=[viz_callback], verbose=0, return_dict=True)
+        return
 
     def list_ckpts(self, save_path):
         assert os.path.exists(save_path)
@@ -164,7 +166,7 @@ class TFKerasModel():
     def get_config(self):
         return self.model_config
 
-    def from_config(self, model_config):
+    def from_config(self, model_config) -> tf.keras.Model:
         assert 'model' in model_config
         assert 'model_options' in model_config
         assert 'deploy_options' in model_config
