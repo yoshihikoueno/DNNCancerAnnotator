@@ -20,6 +20,7 @@ from tqdm import tqdm
 # customs
 from .models import tf_models
 from .utils import losses as custom_losses
+from .utils import metrics as custom_metrics
 from .utils import callbacks as custom_callbacks
 
 def _set_model(self, model):
@@ -188,6 +189,8 @@ class TFKerasModel():
             loss_class = tf.keras.utils.get_registered_object(loss_name)
             loss = loss_class(**loss_option)
             deploy_options['loss'] = loss
+
+        deploy_options['metrics'] = list(map(custom_metrics.solve_metric, deploy_options.get('metrics', [])))
 
         # workaround to fix opimizer bug in tensorflow
         if deploy_options['optimizer'] == 'adam':
