@@ -61,10 +61,16 @@ class Visualizer(Callback):
 
     @property
     def writer(self):
+        if self._writer is None:
+            self._writer = tf.summary.create_file_writer(os.path.join(self.save_dir, self.tag))
+            self._owned_writer = True
         return self._writer
 
     @writer.setter
     def writer(self, writer):
+        if self._writer is not None and self._owned_writer:
+            self._writer.close()
+            self._writer = None
         self._writer = writer
         self._owned_writer = False
         return
@@ -78,10 +84,37 @@ class Visualizer(Callback):
     def on_epoch_end(self, epoch, logs=None):
         self.set_current_step(epoch)
         if self.get_current_step() % self.freq != 0: return
-        if self.writer is None: self._writer = tf.summary.create_file_writer(os.path.join(self.save_dir, self.tag))
+        self.record_visuals()
+        return
+
+    def record_visuals(self):
         with self.writer.as_default():
             list(map(self.process_batch, tqdm(self.data, desc='visualizing', total=self.data_size)))
         self.writer.flush()
+        return
+
+    def __del__(self, *args, **kargs):
+        if self._writer is not None and self._owned_writer:
+            self._writer.close()
+            self._writer = None
+        return
+
+    def record_logs(self, logs):
+        epoch = self.get_current_step()
+        with self.writer.as_default():
+            for summary_name, value in logs.items():
+                tf.summary.scalar(summary_name, value, epoch)
+        self.writer.flush()
+        return
+
+    def record_all(self, epoch, logs=None):
+        if logs is not None: self.record_logs(epoch, logs)
+        self.record_visuals(epoch)
+        return
+
+    def on_test_end(self, logs={}):
+        self.record_visuals()
+        self.record_logs(logs)
         return
 
     def on_train_end(self, *args):
