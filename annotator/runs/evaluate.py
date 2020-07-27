@@ -1,5 +1,5 @@
 '''
-interface for training models
+interface for evaluating models
 '''
 
 # built-in
@@ -19,24 +19,33 @@ from ..utils import load
 
 
 def evaluate(
+    config,
     save_path,
     data_path,
+    tag,
+    avoid_overwrite=False,
 ):
     '''
-    Evaluate a model with specified configs.
-    This funciton will first dump the input arguments,
-    then train a model, finally dump reults.
+    Evaluate a model with specified configs
+    for every checkpoints available.
 
     Args:
-        save_path: from where to load weights/configs/results
+        config: configuration file path
+        save_path: where to find weights/configs/results
         data_path (list[str]): path to the data root dir
+        tag: save tag
+        avoid_overwrite (bool): should `save_path` altered when a directory already
+            exists at the original `save_path` to avoid overwriting.
     '''
-
-    config = load.load_config(os.path.join(save_path, 'options.json'))
+    config = load.load_config(config)
     ds = data.eval_ds(data_path, **config['data_options']['eval'])
+    viz_ds = data.eval_ds(data_path, **config['data_options']['eval'], include_meta=True)
+
     model = engine.TFKerasModel(config)
     results = model.eval(
-        ds,
+        ds, viz_ds,
+        tag=tag,
         save_path=os.path.join(save_path),
+        avoid_overwrite=avoid_overwrite,
     )
     return results
