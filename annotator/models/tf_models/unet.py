@@ -126,7 +126,7 @@ class UNetAnnotator(keras.Model):
             padding=padding,
             **kargs,
         )
-        last_conv = layers.Conv2D(filters=1, kernel_size=1, padding=padding, **kargs)
+        last_conv = layers.Conv2D(filters=1, kernel_size=1, activation='sigmoid', padding=padding, **kargs)
         self.unet = unet
         self.padding = padding
         self.last_conv = last_conv
