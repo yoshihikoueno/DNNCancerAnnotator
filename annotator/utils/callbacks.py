@@ -136,7 +136,6 @@ class Visualizer(Callback):
 
     def record_pr_curve(self):
         data = self.get_internal_metrics_results()
-        pdb.set_trace()
         summary_pb = summary_lib.v1.pr_curve_raw_data_pb(
             **data,
             num_thresholds=self.pr_nthreshold,
