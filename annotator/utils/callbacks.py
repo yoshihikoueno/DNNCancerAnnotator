@@ -173,7 +173,7 @@ class Visualizer(Callback):
         assert len(features.shape) == 3
         horizontal_features = tf.concat(tf.unstack(features, axis=-1), axis=axis)
         pred = tf.squeeze(output, axis=-1)
-        if self.threshold is not None: pred = tf.cast(pred > self.threshold, pred.dtype)
+        if self.prediction_threshold is not None: pred = tf.cast(pred > self.prediction_threshold, pred.dtype)
         image = tf.concat([horizontal_features, label, pred], axis=axis)
         image = tf.expand_dims(image, 0)
         image = tf.expand_dims(image, -1)
