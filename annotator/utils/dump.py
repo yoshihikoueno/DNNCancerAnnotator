@@ -9,11 +9,12 @@ import os
 
 # external
 import yaml
+from ruamel.yaml import YAML
 
 # custom
 
 
-def dump_options(path, format_='json', **options):
+def dump_options(path, **options):
     '''
     Dump options to file.
 
@@ -25,12 +26,16 @@ def dump_options(path, format_='json', **options):
     Returns:
         None
     '''
+    format_ = os.path.splitext(path)[1][1:]
     dir_ = os.path.dirname(path)
     os.makedirs(dir_, exist_ok=True)
 
     if format_ == 'json':
         with open(path, 'w') as f:
             json.dump(options, f)
+    elif format_ == 'yaml':
+        with open(path, 'w') as f:
+            YAML(typ='safe').dump(options, f)
     elif format_ == 'pickle':
         with open(path, 'wb') as f:
             pickle.dump(options, f)

@@ -47,16 +47,14 @@ def train(
         val_data_path (list[str]): path to the validation dataset
         visualize (bool): should visualize results
     '''
-
+    config = load.load_config(config)
     dump.dump_options(
-        os.path.join(save_path, 'options.json'),
-        format_='json',
+        os.path.join(save_path, 'options.yaml'),
         config=config,
         save_path=save_path,
         data_path=data_path,
     )
 
-    config = load.load_config(config)
     ds = data.train_ds(data_path, **config['data_options']['train'])
     if validate:
         assert val_data_path is not None
