@@ -16,8 +16,10 @@ deploy_options:
     metrics:
         - Precision:
             thresholds: 0.80
+            name: "pixel/precision"
         - Recall:
             thresholds: 0.80
+            name: "pixel/recall"
         - AUC:
             curve: "PR"
             name: "pixel/AUPRC"
