@@ -14,18 +14,24 @@ from ruamel.yaml import YAML
 # custom
 
 
-def dump_options(path, **options):
+def dump_options(path, avoid_overwrite=False, **options):
     '''
     Dump options to file.
 
     Args:
         path: path to the output file
-        format_: output file format
+        avoid_overwrite: whether this function should rename
+            target path if a file already exists in the specified path
         options: options to be dumped
 
     Returns:
         None
     '''
+    while os.path.exists(path):
+        base = os.path.basename(path)
+        new_base = '{}_{}'.format(*os.path.splitext(base))
+        path = os.path.join(os.path.dirname(path), new_base)
+
     format_ = os.path.splitext(path)[1][1:]
     dir_ = os.path.dirname(path)
     os.makedirs(dir_, exist_ok=True)

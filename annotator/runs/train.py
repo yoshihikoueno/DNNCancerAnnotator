@@ -50,6 +50,7 @@ def train(
     config = load.load_config(config)
     dump.dump_options(
         os.path.join(save_path, 'options.yaml'),
+        avoid_overwrite=True,
         config=config,
         save_path=save_path,
         data_path=data_path,
