@@ -37,7 +37,7 @@ def evaluate(
         tag: save tag
         avoid_overwrite (bool): should `save_path` altered when a directory already
             exists at the original `save_path` to avoid overwriting.
-        prediction_threshold: threshold to apply onto the predicted segmentation mask
+        prediction_threshold (float): threshold to apply onto the predicted segmentation mask
             default(None): disable threshold
     '''
     config = load.load_config(config)
