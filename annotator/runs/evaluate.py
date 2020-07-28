@@ -24,6 +24,7 @@ def evaluate(
     data_path,
     tag,
     avoid_overwrite=False,
+    prediction_threshold=None,
 ):
     '''
     Evaluate a model with specified configs
@@ -36,6 +37,8 @@ def evaluate(
         tag: save tag
         avoid_overwrite (bool): should `save_path` altered when a directory already
             exists at the original `save_path` to avoid overwriting.
+        prediction_threshold: threshold to apply onto the predicted segmentation mask
+            default(None): disable threshold
     '''
     config = load.load_config(config)
     ds = data.eval_ds(data_path, **config['data_options']['eval'])

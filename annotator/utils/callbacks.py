@@ -44,7 +44,7 @@ class TFProgress(Callback):
 
 
 class Visualizer(Callback):
-    def __init__(self, tag: str, data: tf.data.Dataset, freq: int, save_dir: str, ratio=0.5):
+    def __init__(self, tag: str, data: tf.data.Dataset, freq: int, save_dir: str, ratio=0.5, prediction_threshold=None):
         self.params = None
         self.model = None
         self.tag = tag
@@ -55,6 +55,7 @@ class Visualizer(Callback):
         self.ratio = ratio
         self._writer = None
         self._owned_writer = True
+        self.prediction_threshold = prediction_threshold
         super().__init__()
         self.set_data_size()
         return
@@ -171,7 +172,9 @@ class Visualizer(Callback):
     def generate_image(self, features, label, output, axis=1):
         assert len(features.shape) == 3
         horizontal_features = tf.concat(tf.unstack(features, axis=-1), axis=axis)
-        image = tf.concat([horizontal_features, label, tf.squeeze(output, axis=-1)], axis=axis)
+        pred = tf.squeeze(output, axis=-1)
+        if self.threshold is not None: pred = tf.cast(pred > self.threshold, pred.dtype)
+        image = tf.concat([horizontal_features, label, pred], axis=axis)
         image = tf.expand_dims(image, 0)
         image = tf.expand_dims(image, -1)
         return image
