@@ -64,6 +64,7 @@ class Visualizer(Callback):
             and ratio is 0.5, then the output images will have size (128, 128).
         prediction_threshold: threshold to apply against predicted segmentation
         pr_nthreshold: the number of thresholds to use for PR curve
+        ignore_test: whether this callback should do nothing for test events
     '''
     def __init__(
         self,
@@ -74,6 +75,7 @@ class Visualizer(Callback):
         ratio=0.5,
         prediction_threshold=None,
         pr_nthreshold=200,
+        ignore_test=True,
     ):
         self.params = None
         self.model = None
@@ -86,6 +88,7 @@ class Visualizer(Callback):
         self._writer = None
         self._owned_writer = True
         self.pr_nthreshold = pr_nthreshold
+        self.ignore_test = ignore_test
         self.per_epoch_resources = {}
         self.prediction_threshold = prediction_threshold
         self.internal_metics = [
@@ -182,6 +185,7 @@ class Visualizer(Callback):
         return
 
     def on_test_end(self, logs={}):
+        if self.ignore_test: return
         self.prepare_internal_metrics()
         self.record_visuals()
         self.record_pr_curve()

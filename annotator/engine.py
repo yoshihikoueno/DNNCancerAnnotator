@@ -133,7 +133,7 @@ class TFKerasModel():
             if avoid_overwrite:
                 while os.path.exists(os.path.join(tfevents_path, tag)): tag += '_'
             else: raise ValueError(f'tag: {tag} already exists.')
-        viz_callback = custom_callbacks.Visualizer(tag, viz_ds, 1, tfevents_path)
+        viz_callback = custom_callbacks.Visualizer(tag, viz_ds, 1, tfevents_path, ignore_test=False)
         for ckpt_step, ckpt_path_ in tqdm(self.get_ckpts(ckpt_path).items(), desc='checkpoints'):
             viz_callback.current_step = ckpt_step
             self.load(ckpt_path_)
