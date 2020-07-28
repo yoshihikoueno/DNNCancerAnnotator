@@ -14,12 +14,16 @@ deploy_options:
         option:
             weight_mul: 3.0
     metrics:
-        Precision:
+        - Precision:
             thresholds: 0.80
-        Recall:
+        - Recall:
             thresholds: 0.80
-        AUC:
+        - AUC:
             curve: "PR"
+            name: "pixel/AUPRC"
+        - AUC:
+            curve: "ROC"
+            name: "pixel/AUROC"
     enable_multigpu: false
 data_options:
     train:
