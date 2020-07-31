@@ -26,6 +26,12 @@ deploy_options:
         - AUC:
             curve: "ROC"
             name: "pixel/AUROC"
+        - FBetaScore:
+            beta: 1.0
+            name: "pixel/F1-score"
+        - FBetaScore:
+            beta: 2.0
+            name: "pixel/F2-score"
     enable_multigpu: false
 data_options:
     train:
