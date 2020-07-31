@@ -27,9 +27,11 @@ deploy_options:
             curve: "ROC"
             name: "pixel/AUROC"
         - FBetaScore:
+            thresholds: 0.80
             beta: 1.0
             name: "pixel/F1-score"
         - FBetaScore:
+            thresholds: 0.80
             beta: 2.0
             name: "pixel/F2-score"
     enable_multigpu: false

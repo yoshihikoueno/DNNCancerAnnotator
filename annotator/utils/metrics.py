@@ -28,13 +28,14 @@ def solve_metric(metric_spec):
     return instance
 
 class FBetaScore(tf.keras.metrics.Metric):
-    def __init__(self, beta, epsilon=1e-07, **kargs):
+    def __init__(self, beta, thresholds, epsilon=1e-07, **kargs):
         super().__init__(**kargs)
         assert beta > 0
         self.beta = beta
         self.epsilon = epsilon
-        self.precision = tf.keras.metrics.Precision()
-        self.recall = tf.keras.metrics.Recall()
+        self.thresholds = thresholds
+        self.precision = tf.keras.metrics.Precision(thresholds=self.thresholds)
+        self.recall = tf.keras.metrics.Recall(thresholds=self.thresholds)
         return
 
     def update_state(self, y_true, y_pred, sample_weight=None):
@@ -56,7 +57,7 @@ class FBetaScore(tf.keras.metrics.Metric):
     def get_config(self):
         """Returns the serializable config of the metric."""
         config = super().get_config()
-        config.update({'beta': self.beta, 'epsilon': self.epsilon})
+        config.update({'beta': self.beta, 'epsilon': self.epsilon, 'thresholds': self.thresholds})
         return config
 
 
