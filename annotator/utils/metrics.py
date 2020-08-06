@@ -192,3 +192,5 @@ class RegionBasedPrecision(tf.keras.metrics.Metric):
 
 tf.keras.utils.get_custom_objects().update(FBetaScore=FBetaScore)
 tf.keras.utils.get_custom_objects().update(RegionBasedRecall=RegionBasedRecall)
+tf.keras.utils.get_custom_objects().update(RegionBasedPrecision=RegionBasedPrecision)
+tf.keras.utils.get_custom_objects().update(RegionBasedFBetaScore=RegionBasedFBetaScore)
