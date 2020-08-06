@@ -37,6 +37,10 @@ class FBetaScore(tf.keras.metrics.Metric):
         self.beta = beta
         self.epsilon = epsilon
         self.thresholds = thresholds
+        self.prepare_precision_recall()
+        return
+
+    def prepare_precision_recall(self):
         self.precision = tf.keras.metrics.Precision(thresholds=self.thresholds)
         self.recall = tf.keras.metrics.Recall(thresholds=self.thresholds)
         return
@@ -64,41 +68,21 @@ class FBetaScore(tf.keras.metrics.Metric):
         return config
 
 
-class RegionBasedFBetaScore(tf.keras.metrics.Metric):
+class RegionBasedFBetaScore(FBetaScore):
     def __init__(self, beta, thresholds, IoU_threshold=0.30, epsilon=1e-07, **kargs):
-        super().__init__(**kargs)
-        assert beta > 0
-        self.beta = beta
-        self.epsilon = epsilon
-        self.thresholds = thresholds
         self.IoU_threshold = IoU_threshold
-        self.precision = RegionBasedPrecision(threshold=self.thresholds, IoU_threshold=IoU_threshold)
-        self.recall = RegionBasedRecall(threshold=self.thresholds, IoU_threshold=IoU_threshold)
+        super().__init__(beta=beta, thresholds=thresholds, epsilon=epsilon, **kargs)
         return
 
-    def update_state(self, y_true, y_pred, sample_weight=None):
-        self.precision.update_state(y_true, y_pred, sample_weight=sample_weight)
-        self.recall.update_state(y_true, y_pred, sample_weight=sample_weight)
-        return
-
-    def result(self):
-        precision = self.precision.result()
-        recall = self.recall.result()
-        score = (1 + self.beta**2) * precision * recall / (self.beta**2 * precision + recall + self.epsilon)
-        return score
-
-    def reset_states(self):
-        self.precision.reset_states()
-        self.recall.reset_states()
+    def prepare_precision_recall(self):
+        self.precision = RegionBasedPrecision(threshold=self.thresholds, IoU_threshold=self.IoU_threshold)
+        self.recall = RegionBasedRecall(threshold=self.thresholds, IoU_threshold=self.IoU_threshold)
         return
 
     def get_config(self):
         """Returns the serializable config of the metric."""
         config = super().get_config()
-        config.update({
-            'beta': self.beta, 'epsilon': self.epsilon,
-            'thresholds': self.thresholds, 'IoU_threshold': self.IoU_threshold,
-        })
+        config.update({'IoU_threshold': self.IoU_threshold})
         return config
 
 
