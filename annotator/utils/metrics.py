@@ -75,8 +75,8 @@ class RegionBasedFBetaScore(FBetaScore):
         return
 
     def prepare_precision_recall(self):
-        self.precision = RegionBasedPrecision(threshold=self.thresholds, IoU_threshold=self.IoU_threshold)
-        self.recall = RegionBasedRecall(threshold=self.thresholds, IoU_threshold=self.IoU_threshold)
+        self.precision = RegionBasedPrecision(threshold=self.thresholds, IoU_threshold=self.IoU_threshold, epsilon=self.epsilon)
+        self.recall = RegionBasedRecall(threshold=self.thresholds, IoU_threshold=self.IoU_threshold, epsilon=self.epsilon)
         return
 
     def get_config(self):
@@ -87,11 +87,12 @@ class RegionBasedFBetaScore(FBetaScore):
 
 
 class RegionBasedRecall(tf.keras.metrics.Metric):
-    def __init__(self, threshold, IoU_threshold=0.30, **kargs):
+    def __init__(self, threshold, IoU_threshold=0.30, epsilon=1e-07, **kargs):
         super().__init__(**kargs)
         assert threshold > 0
         self.threshold = threshold
         self.IoU_threshold = IoU_threshold
+        self.epsilon = epsilon
 
         self.tp_count = self.add_weight(
             'tp_count', dtype=tf.int32, initializer=tf.zeros_initializer)
@@ -104,7 +105,8 @@ class RegionBasedRecall(tf.keras.metrics.Metric):
         y_pred = tf.squeeze(tf.cast(y_pred > self.threshold, y_pred.dtype), -1)
         y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.int32)
 
-        for single_label, single_pred in y_true_pred:
+        for single_label_pred in y_true_pred:
+            single_label, single_pred = single_label_pred[0], single_label_pred[1]
             indiced_label = tf.one_hot(tfa.image.connected_components(single_label), tf.reduce_max(single_label) + 1)[:, :, 1:]
             indiced_label = tf.cast(tf.transpose(indiced_label, [2, 0, 1]), tf.bool)
             indiced_pred = tf.one_hot(tfa.image.connected_components(single_pred), tf.reduce_max(single_pred) + 1)[:, :, 1:]
@@ -128,22 +130,24 @@ class RegionBasedRecall(tf.keras.metrics.Metric):
         return iou
 
     def result(self):
-        result = self.tp_count / (self.tp_count + self.fn_count)
+        result = tf.cast(self.tp_count, tf.float32) / (tf.cast(self.tp_count + self.fn_count, tf.float32) + self.epsilon)
         return result
 
     def get_config(self):
         configs = super().get_config()
         configs['threshold'] = self.threshold
         configs['IoU_threshold'] = self.IoU_threshold
+        configs['epsilon'] = self.epsilon
         return configs
 
 
 class RegionBasedPrecision(tf.keras.metrics.Metric):
-    def __init__(self, threshold, IoU_threshold=0.30, **kargs):
+    def __init__(self, threshold, IoU_threshold=0.30, epsilon=1e-07, **kargs):
         super().__init__(**kargs)
         assert threshold > 0
         self.threshold = threshold
         self.IoU_threshold = IoU_threshold
+        self.epsilon = epsilon
 
         self.tp_count = self.add_weight(
             'tp_count', dtype=tf.int32, initializer=tf.zeros_initializer)
@@ -156,7 +160,8 @@ class RegionBasedPrecision(tf.keras.metrics.Metric):
         y_pred = tf.squeeze(tf.cast(y_pred > self.threshold, y_pred.dtype), -1)
         y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.int32)
 
-        for single_label, single_pred in y_true_pred:
+        for single_label_pred in y_true_pred:
+            single_label, single_pred = single_label_pred[0], single_label_pred[1]
             indiced_label = tf.one_hot(tfa.image.connected_components(single_label), tf.reduce_max(single_label) + 1)[:, :, 1:]
             indiced_label = tf.cast(tf.transpose(indiced_label, [2, 0, 1]), tf.bool)
             indiced_pred = tf.one_hot(tfa.image.connected_components(single_pred), tf.reduce_max(single_pred) + 1)[:, :, 1:]
@@ -180,13 +185,14 @@ class RegionBasedPrecision(tf.keras.metrics.Metric):
         return iou
 
     def result(self):
-        result = self.tp_count / (self.tp_count + self.fp_count)
+        result = tf.cast(self.tp_count, tf.float32) / (tf.cast(self.tp_count + self.fp_count, tf.float32) + self.epsilon)
         return result
 
     def get_config(self):
         configs = super().get_config()
         configs['threshold'] = self.threshold
         configs['IoU_threshold'] = self.IoU_threshold
+        configs['epsilon'] = self.epsilon
         return configs
 
 
