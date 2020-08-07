@@ -19,10 +19,10 @@ from ..utils import load
 
 
 def evaluate(
-    config,
     save_path,
     data_path,
     tag,
+    config=None,
     avoid_overwrite=False,
     prediction_threshold=None,
 ):
@@ -31,15 +31,17 @@ def evaluate(
     for every checkpoints available.
 
     Args:
-        config: configuration file path
         save_path: where to find weights/configs/results
         data_path (list[str]): path to the data root dir
         tag: save tag
+        config (str): configuration file path
+            None (default): load config from save_path
         avoid_overwrite (bool): should `save_path` altered when a directory already
             exists at the original `save_path` to avoid overwriting.
         prediction_threshold (float): threshold to apply onto the predicted segmentation mask
             default(None): disable threshold
     '''
+    if config is None: config = os.path.join(save_path, 'options.yaml')
     config = load.load_config(config)
     ds = data.eval_ds(data_path, **config['data_options']['eval'])
     viz_ds = data.eval_ds(data_path, **config['data_options']['eval'], include_meta=True)
