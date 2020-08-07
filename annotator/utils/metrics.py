@@ -101,7 +101,7 @@ class RegionBasedRecall(tf.keras.metrics.Metric):
 
     def update_state(self, y_true, y_pred, sample_weight=None):
         if sample_weight is not None: raise NotImplementedError
-        y_pred = tf.cast(y_pred > self.threshold, y_pred.dtype)
+        y_pred = tf.squeeze(tf.cast(y_pred > self.threshold, y_pred.dtype), -1)
         y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.int32)
 
         for single_label, single_pred in y_true_pred:
@@ -153,7 +153,7 @@ class RegionBasedPrecision(tf.keras.metrics.Metric):
 
     def update_state(self, y_true, y_pred, sample_weight=None):
         if sample_weight is not None: raise NotImplementedError
-        y_pred = tf.cast(y_pred > self.threshold, y_pred.dtype)
+        y_pred = tf.squeeze(tf.cast(y_pred > self.threshold, y_pred.dtype), -1)
         y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.int32)
 
         for single_label, single_pred in y_true_pred:
