@@ -135,7 +135,7 @@ class TFKerasModel():
             else: raise ValueError(f'tag: {tag} already exists.')
         viz_callback = custom_callbacks.Visualizer(tag, viz_ds, 1, tfevents_path, ignore_test=False)
         for ckpt_step, ckpt_path_ in tqdm(self.get_ckpts(ckpt_path).items(), desc='checkpoints'):
-            viz_callback.current_step = ckpt_step
+            viz_callback.set_current_step(ckpt_step)
             self.load(ckpt_path_)
             self.model.evaluate(dataset, callbacks=[viz_callback], verbose=0, return_dict=True)
         return
