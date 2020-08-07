@@ -41,8 +41,10 @@ def evaluate(
         prediction_threshold (float): threshold to apply onto the predicted segmentation mask
             default(None): disable threshold
     '''
-    if config is None: config = os.path.join(save_path, 'options.yaml')
-    config = load.load_config(config)
+    if config is None:
+        config = os.path.join(save_path, 'options.yaml')
+        config = load.load_config(config)['config']
+    else: config = load.load_config(config)
     ds = data.eval_ds(data_path, **config['data_options']['eval'])
     viz_ds = data.eval_ds(data_path, **config['data_options']['eval'], include_meta=True)
 
