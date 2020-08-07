@@ -34,6 +34,24 @@ deploy_options:
             thresholds: 0.80
             beta: 2.0
             name: "pixel/F2-score"
+        - RegionBasedPrecision:
+            threshold: 0.80
+            IoU_threshold: 0.30
+            name: "region/precision"
+        - RegionBasedRecall:
+            threshold: 0.80
+            IoU_threshold: 0.30
+            name: "region/recall"
+        - RegionBasedFBetaScore:
+            thresholds: 0.80
+            IoU_threshold: 0.30
+            beta: 1.0
+            name: "region/F1-score"
+        - RegionBasedFBetaScore:
+            thresholds: 0.80
+            IoU_threshold: 0.30
+            beta: 2.0
+            name: "region/F2-score"
     enable_multigpu: false
 data_options:
     train:
