@@ -139,13 +139,14 @@ class Visualizer(Callback):
 
     def record_pr_curve(self):
         data = self.get_internal_metrics_results()
-        summary_pb = summary_lib.v1.pr_curve_raw_data_pb(
-            **data,
-            num_thresholds=self.pr_nthreshold,
-            name='pixel/PR_curve',
-        )
-        with self.writer.as_default():
-            tf.summary.experimental.write_raw_pb(summary_pb.SerializeToString(), step=self.get_current_step())
+        for type_, data_ in data.items():
+            summary_pb = summary_lib.v1.pr_curve_raw_data_pb(
+                **data_,
+                num_thresholds=self.pr_nthreshold,
+                name=f'{type_}/PR_curve',
+            )
+            with self.writer.as_default():
+                tf.summary.experimental.write_raw_pb(summary_pb.SerializeToString(), step=self.get_current_step())
         return
 
     def __del__(self, *args, **kargs):
@@ -156,24 +157,31 @@ class Visualizer(Callback):
 
     def prepare_internal_metrics(self):
         thresholds = [i / float(self.pr_nthreshold - 1) for i in range(self.pr_nthreshold)]
-        self.per_epoch_resources['pixel']['true_positive_counts'] = tf.keras.metrics.TruePositives(thresholds)
-        self.per_epoch_resources['pixel']['true_negative_counts'] = tf.keras.metrics.TrueNegatives(thresholds)
-        self.per_epoch_resources['pixel']['false_positive_counts'] = tf.keras.metrics.FalsePositives(thresholds)
-        self.per_epoch_resources['pixel']['false_negative_counts'] = tf.keras.metrics.FalseNegatives(thresholds)
-        self.per_epoch_resources['pixel']['recall'] = tf.keras.metrics.Recall(thresholds)
-        self.per_epoch_resources['pixel']['precision'] = tf.keras.metrics.Precision(thresholds)
+        self.per_epoch_resources['pr_curve'] = {
+            'pixel': {
+                'true_positive_counts': tf.keras.metrics.TruePositives(thresholds),
+                'true_negative_counts': tf.keras.metrics.TrueNegatives(thresholds),
+                'false_positive_counts': tf.keras.metrics.FalsePositives(thresholds),
+                'false_negative_counts': tf.keras.metrics.FalseNegatives(thresholds),
+                'recall': tf.keras.metrics.Recall(thresholds),
+                'precision': tf.keras.metrics.Precision(thresholds),
+            },
+        }
         return
 
     def update_internal_metrics(self, y_true, y_pred):
         assert all(map(lambda x: x in self.per_epoch_resources, self.internal_metics))
-        for metric in self.internal_metics:
-            self.per_epoch_resources['pixel'][metric].update_state(y_true, y_pred)
+        for type_ in self.per_epoch_resources['pr_curve']:
+            for metric in self.internal_metics:
+                self.per_epoch_resources['pr_curve'][type_][metric].update_state(y_true, y_pred)
         return
 
     def get_internal_metrics_results(self):
         return {
-            metric: self.per_epoch_resources['pixel'][metric].result()
-            for metric in self.internal_metics
+            type_: {
+                metric: self.per_epoch_resources['pr_curve'][type_][metric].result()
+                for metric in self.internal_metics
+            } for type_ in self.per_epoch_resources['pr_curve']
         }
 
     def record_logs(self, logs):
