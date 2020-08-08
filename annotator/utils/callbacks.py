@@ -170,7 +170,6 @@ class Visualizer(Callback):
         return
 
     def update_internal_metrics(self, y_true, y_pred):
-        assert all(map(lambda x: x in self.per_epoch_resources, self.internal_metics))
         for type_ in self.per_epoch_resources['pr_curve']:
             for metric in self.internal_metics:
                 self.per_epoch_resources['pr_curve'][type_][metric].update_state(y_true, y_pred)
