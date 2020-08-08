@@ -156,23 +156,23 @@ class Visualizer(Callback):
 
     def prepare_internal_metrics(self):
         thresholds = [i / float(self.pr_nthreshold - 1) for i in range(self.pr_nthreshold)]
-        self.per_epoch_resources['true_positive_counts'] = tf.keras.metrics.TruePositives(thresholds)
-        self.per_epoch_resources['true_negative_counts'] = tf.keras.metrics.TrueNegatives(thresholds)
-        self.per_epoch_resources['false_positive_counts'] = tf.keras.metrics.FalsePositives(thresholds)
-        self.per_epoch_resources['false_negative_counts'] = tf.keras.metrics.FalseNegatives(thresholds)
-        self.per_epoch_resources['recall'] = tf.keras.metrics.Recall(thresholds)
-        self.per_epoch_resources['precision'] = tf.keras.metrics.Precision(thresholds)
+        self.per_epoch_resources['pixel']['true_positive_counts'] = tf.keras.metrics.TruePositives(thresholds)
+        self.per_epoch_resources['pixel']['true_negative_counts'] = tf.keras.metrics.TrueNegatives(thresholds)
+        self.per_epoch_resources['pixel']['false_positive_counts'] = tf.keras.metrics.FalsePositives(thresholds)
+        self.per_epoch_resources['pixel']['false_negative_counts'] = tf.keras.metrics.FalseNegatives(thresholds)
+        self.per_epoch_resources['pixel']['recall'] = tf.keras.metrics.Recall(thresholds)
+        self.per_epoch_resources['pixel']['precision'] = tf.keras.metrics.Precision(thresholds)
         return
 
     def update_internal_metrics(self, y_true, y_pred):
         assert all(map(lambda x: x in self.per_epoch_resources, self.internal_metics))
         for metric in self.internal_metics:
-            self.per_epoch_resources[metric].update_state(y_true, y_pred)
+            self.per_epoch_resources['pixel'][metric].update_state(y_true, y_pred)
         return
 
     def get_internal_metrics_results(self):
         return {
-            metric: self.per_epoch_resources[metric].result()
+            metric: self.per_epoch_resources['pixel'][metric].result()
             for metric in self.internal_metics
         }
 
@@ -230,12 +230,6 @@ class Visualizer(Callback):
         image = tf.image.resize(image, tf.cast(tf.cast(tf.shape(image)[1:3], tf.float32) * self.ratio, tf.int32))
         sliceID = tf.strings.as_string(sliceID)
         return tf.strings.join(['path:', path, ',sliceID:', sliceID]), image
-
-    def make_summary(self, features, label, path, output):
-        image = self.generate_image(features, label, output)
-        image = tf.image.resize(image, tf.cast(tf.cast(tf.shape(image)[1:3], tf.float32) * self.ratio, tf.int32))
-        tf.summary.image('path' + path.numpy().decode(), image, step=self.get_current_step())
-        return
 
     def set_current_step(self, step):
         self.per_epoch_resources['step'] = step
