@@ -100,6 +100,7 @@ class RegionBasedRecall(tf.keras.metrics.Metric):
             'fn_count', dtype=tf.int32, initializer=tf.zeros_initializer)
         return
 
+    @tf.function
     def update_state(self, y_true, y_pred, sample_weight=None):
         if sample_weight is not None: raise NotImplementedError
         y_pred = tf.squeeze(tf.cast(y_pred > self.threshold, y_pred.dtype), -1)
@@ -155,6 +156,7 @@ class RegionBasedPrecision(tf.keras.metrics.Metric):
             'fp_count', dtype=tf.int32, initializer=tf.zeros_initializer)
         return
 
+    @tf.function
     def update_state(self, y_true, y_pred, sample_weight=None):
         if sample_weight is not None: raise NotImplementedError
         y_pred = tf.squeeze(tf.cast(y_pred > self.threshold, y_pred.dtype), -1)
@@ -208,6 +210,7 @@ class RegionBasedTruePositives(tf.keras.metrics.Metric):
             'tp_count', dtype=tf.int32, initializer=tf.zeros_initializer)
         return
 
+    @tf.function
     def update_state(self, y_true, y_pred, sample_weight=None):
         if sample_weight is not None: raise NotImplementedError
         y_pred = tf.squeeze(tf.cast(y_pred > self.threshold, y_pred.dtype), -1)
@@ -260,6 +263,7 @@ class RegionBasedFalsePostives(tf.keras.metrics.Metric):
             'fp_count', dtype=tf.int32, initializer=tf.zeros_initializer)
         return
 
+    @tf.function
     def update_state(self, y_true, y_pred, sample_weight=None):
         if sample_weight is not None: raise NotImplementedError
         y_pred = tf.squeeze(tf.cast(y_pred > self.threshold, y_pred.dtype), -1)
@@ -313,6 +317,7 @@ class RegionBasedFalseNegatives(tf.keras.metrics.Metric):
             'fn_count', dtype=tf.int32, initializer=tf.zeros_initializer)
         return
 
+    @tf.function
     def update_state(self, y_true, y_pred, sample_weight=None):
         if sample_weight is not None: raise NotImplementedError
         y_pred = tf.squeeze(tf.cast(y_pred > self.threshold, y_pred.dtype), -1)
