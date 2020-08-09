@@ -35,11 +35,11 @@ deploy_options:
             beta: 2.0
             name: "pixel/F2-score"
         - RegionBasedPrecision:
-            threshold: 0.80
+            thresholds: 0.80
             IoU_threshold: 0.30
             name: "region/precision"
         - RegionBasedRecall:
-            threshold: 0.80
+            thresholds: 0.80
             IoU_threshold: 0.30
             name: "region/recall"
         - RegionBasedFBetaScore:

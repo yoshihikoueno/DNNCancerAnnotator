@@ -10,6 +10,7 @@ from multiprocessing import cpu_count
 # external
 import tensorflow as tf
 import tensorflow_addons as tfa
+import numpy as np
 
 
 def solve_metric(metric_spec):
@@ -68,6 +69,77 @@ class FBetaScore(tf.keras.metrics.Metric):
         return config
 
 
+class _RegionBasedMetric():
+    @tf.function
+    def _separate_predictions(self, single_label, single_pred):
+        indiced_label = tf.one_hot(tfa.image.connected_components(single_label), tf.reduce_max(single_label) + 1)[:, :, 1:]
+        indiced_label = tf.cast(tf.transpose(indiced_label, [2, 0, 1]), tf.bool)
+        indiced_pred = tf.one_hot(tfa.image.connected_components(single_pred), tf.reduce_max(single_pred) + 1)[:, :, 1:]
+        indiced_pred = tf.cast(tf.transpose(indiced_pred, [2, 0, 1]), tf.bool)
+        return indiced_label, indiced_pred
+
+    @tf.function
+    def _IoU(self, cancer_label, cancer_pred):
+        intersection = tf.reduce_sum(tf.cast(cancer_label & cancer_pred, tf.float32))
+        union = tf.reduce_sum(tf.cast(cancer_label | cancer_pred, tf.float32))
+        iou = intersection / union
+        return iou
+
+
+class _RegionBasedMetricMultiThresholds(tf.keras.metrics.Metric, _RegionBasedMetric):
+    def __init__(self, thresholds, IoU_threshold=0.30, epsilon=1e-07, **kargs):
+        super().__init__(**kargs)
+        self.check_validity()
+        self.thresholds = thresholds
+        self.IoU_threshold = IoU_threshold
+        self.epsilon = epsilon
+        if self.is_multi_thresholds:
+            self.instances = [type(self)(x, IoU_threshold, epsilon, **kargs) for x in thresholds]
+        else:
+            self.init(thresholds, IoU_threshold, epsilon, **kargs)
+        return
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        if self.is_multi_thresholds:
+            [x.update_state(y_true, y_pred, sample_weight) for x in self.instances]
+        else: self._update_state(y_true, y_pred, sample_weight)
+        return
+
+    def reset_states(self):
+        if self.is_multi_thresholds:
+            [x.reset_states() for x in self.instances]
+        else: self._reset_states()
+        return
+
+    def get_config(self):
+        configs = super().get_config()
+        configs['thresholds'] = self.thresholds
+        configs['IoU_threshold'] = self.IoU_threshold
+        configs['epsilon'] = self.epsilon
+        return configs
+
+    def result(self):
+        if self.is_multi_thresholds:
+            results = [x.result() for x in self.instances]
+        else:
+            results = self._result()
+        return results
+
+    def _reset_states(self):
+        super().reset_states()
+        return
+
+    def check_validity(self):
+        assert hasattr(self, 'init')
+        assert hasattr(self, '_update_state')
+        assert hasattr(self, '_result')
+        return
+
+    @property
+    def is_multi_thresholds(self):
+        return not np.isscalar(self.thresholds)
+
+
 class RegionBasedFBetaScore(FBetaScore):
     def __init__(self, beta, thresholds, IoU_threshold=0.30, epsilon=1e-07, **kargs):
         self.IoU_threshold = IoU_threshold
@@ -75,8 +147,8 @@ class RegionBasedFBetaScore(FBetaScore):
         return
 
     def prepare_precision_recall(self):
-        self.precision = RegionBasedPrecision(threshold=self.thresholds, IoU_threshold=self.IoU_threshold, epsilon=self.epsilon)
-        self.recall = RegionBasedRecall(threshold=self.thresholds, IoU_threshold=self.IoU_threshold, epsilon=self.epsilon)
+        self.precision = RegionBasedPrecision(thresholds=self.thresholds, IoU_threshold=self.IoU_threshold, epsilon=self.epsilon)
+        self.recall = RegionBasedRecall(thresholds=self.thresholds, IoU_threshold=self.IoU_threshold, epsilon=self.epsilon)
         return
 
     def get_config(self):
@@ -86,32 +158,23 @@ class RegionBasedFBetaScore(FBetaScore):
         return config
 
 
-class RegionBasedRecall(tf.keras.metrics.Metric):
-    def __init__(self, threshold, IoU_threshold=0.30, epsilon=1e-07, **kargs):
-        super().__init__(**kargs)
+class RegionBasedRecall(_RegionBasedMetricMultiThresholds):
+    def init(self, threshold, IoU_threshold=0.30, epsilon=1e-07, **kargs):
         assert threshold > 0
         self.threshold = threshold
-        self.IoU_threshold = IoU_threshold
-        self.epsilon = epsilon
-
-        self.tp_count = self.add_weight(
-            'tp_count', dtype=tf.int32, initializer=tf.zeros_initializer)
-        self.fn_count = self.add_weight(
-            'fn_count', dtype=tf.int32, initializer=tf.zeros_initializer)
+        self.tp_count = self.add_weight('tp_count', dtype=tf.int32, initializer=tf.zeros_initializer)
+        self.fn_count = self.add_weight('fn_count', dtype=tf.int32, initializer=tf.zeros_initializer)
         return
 
     @tf.function
-    def update_state(self, y_true, y_pred, sample_weight=None):
+    def _update_state(self, y_true, y_pred, sample_weight=None):
         if sample_weight is not None: raise NotImplementedError
         y_pred = tf.squeeze(tf.cast(y_pred > self.threshold, y_pred.dtype), -1)
         y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.int32)
 
         for single_label_pred in y_true_pred:
             single_label, single_pred = single_label_pred[0], single_label_pred[1]
-            indiced_label = tf.one_hot(tfa.image.connected_components(single_label), tf.reduce_max(single_label) + 1)[:, :, 1:]
-            indiced_label = tf.cast(tf.transpose(indiced_label, [2, 0, 1]), tf.bool)
-            indiced_pred = tf.one_hot(tfa.image.connected_components(single_pred), tf.reduce_max(single_pred) + 1)[:, :, 1:]
-            indiced_pred = tf.cast(tf.transpose(indiced_pred, [2, 0, 1]), tf.bool)
+            indiced_label, indiced_pred = self._separate_predictions(single_label, single_pred)
             for cancer_label in indiced_label:
                 IoUs = tf.map_fn(
                     lambda pred: self._IoU(cancer_label, pred),
@@ -123,33 +186,15 @@ class RegionBasedRecall(tf.keras.metrics.Metric):
                 else: self.fn_count.assign_add(1)
         return
 
-    @tf.function
-    def _IoU(self, cancer_label, cancer_pred):
-        intersection = tf.reduce_sum(tf.cast(cancer_label & cancer_pred, tf.float32))
-        union = tf.reduce_sum(tf.cast(cancer_label | cancer_pred, tf.float32))
-        iou = intersection / union
-        return iou
-
-    def result(self):
+    def _result(self):
         result = tf.cast(self.tp_count, tf.float32) / (tf.cast(self.tp_count + self.fn_count, tf.float32) + self.epsilon)
         return result
 
-    def get_config(self):
-        configs = super().get_config()
-        configs['threshold'] = self.threshold
-        configs['IoU_threshold'] = self.IoU_threshold
-        configs['epsilon'] = self.epsilon
-        return configs
 
-
-class RegionBasedPrecision(tf.keras.metrics.Metric):
-    def __init__(self, threshold, IoU_threshold=0.30, epsilon=1e-07, **kargs):
-        super().__init__(**kargs)
+class RegionBasedPrecision(_RegionBasedMetricMultiThresholds):
+    def init(self, threshold, IoU_threshold=0.30, epsilon=1e-07, **kargs):
         assert threshold > 0
         self.threshold = threshold
-        self.IoU_threshold = IoU_threshold
-        self.epsilon = epsilon
-
         self.tp_count = self.add_weight(
             'tp_count', dtype=tf.int32, initializer=tf.zeros_initializer)
         self.fp_count = self.add_weight(
@@ -157,17 +202,14 @@ class RegionBasedPrecision(tf.keras.metrics.Metric):
         return
 
     @tf.function
-    def update_state(self, y_true, y_pred, sample_weight=None):
+    def _update_state(self, y_true, y_pred, sample_weight=None):
         if sample_weight is not None: raise NotImplementedError
         y_pred = tf.squeeze(tf.cast(y_pred > self.threshold, y_pred.dtype), -1)
         y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.int32)
 
         for single_label_pred in y_true_pred:
             single_label, single_pred = single_label_pred[0], single_label_pred[1]
-            indiced_label = tf.one_hot(tfa.image.connected_components(single_label), tf.reduce_max(single_label) + 1)[:, :, 1:]
-            indiced_label = tf.cast(tf.transpose(indiced_label, [2, 0, 1]), tf.bool)
-            indiced_pred = tf.one_hot(tfa.image.connected_components(single_pred), tf.reduce_max(single_pred) + 1)[:, :, 1:]
-            indiced_pred = tf.cast(tf.transpose(indiced_pred, [2, 0, 1]), tf.bool)
+            indiced_label, indiced_pred = self._separate_predictions(single_label, single_pred)
             for cancer_pred in indiced_pred:
                 IoUs = tf.map_fn(
                     lambda label: self._IoU(label, cancer_pred),
@@ -179,49 +221,28 @@ class RegionBasedPrecision(tf.keras.metrics.Metric):
                 else: self.fp_count.assign_add(1)
         return
 
-    @tf.function
-    def _IoU(self, cancer_label, cancer_pred):
-        intersection = tf.reduce_sum(tf.cast(cancer_label & cancer_pred, tf.float32))
-        union = tf.reduce_sum(tf.cast(cancer_label | cancer_pred, tf.float32))
-        iou = intersection / union
-        return iou
-
-    def result(self):
+    def _result(self):
         result = tf.cast(self.tp_count, tf.float32) / (tf.cast(self.tp_count + self.fp_count, tf.float32) + self.epsilon)
         return result
 
-    def get_config(self):
-        configs = super().get_config()
-        configs['threshold'] = self.threshold
-        configs['IoU_threshold'] = self.IoU_threshold
-        configs['epsilon'] = self.epsilon
-        return configs
 
-
-class RegionBasedTruePositives(tf.keras.metrics.Metric):
-    def __init__(self, threshold, IoU_threshold=0.30, epsilon=1e-07, **kargs):
-        super().__init__(**kargs)
+class RegionBasedTruePositives(_RegionBasedMetricMultiThresholds):
+    def init(self, threshold, IoU_threshold=0.30, epsilon=1e-07, **kargs):
         assert threshold > 0
         self.threshold = threshold
-        self.IoU_threshold = IoU_threshold
-        self.epsilon = epsilon
-
         self.tp_count = self.add_weight(
             'tp_count', dtype=tf.int32, initializer=tf.zeros_initializer)
         return
 
     @tf.function
-    def update_state(self, y_true, y_pred, sample_weight=None):
+    def _update_state(self, y_true, y_pred, sample_weight=None):
         if sample_weight is not None: raise NotImplementedError
         y_pred = tf.squeeze(tf.cast(y_pred > self.threshold, y_pred.dtype), -1)
         y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.int32)
 
         for single_label_pred in y_true_pred:
             single_label, single_pred = single_label_pred[0], single_label_pred[1]
-            indiced_label = tf.one_hot(tfa.image.connected_components(single_label), tf.reduce_max(single_label) + 1)[:, :, 1:]
-            indiced_label = tf.cast(tf.transpose(indiced_label, [2, 0, 1]), tf.bool)
-            indiced_pred = tf.one_hot(tfa.image.connected_components(single_pred), tf.reduce_max(single_pred) + 1)[:, :, 1:]
-            indiced_pred = tf.cast(tf.transpose(indiced_pred, [2, 0, 1]), tf.bool)
+            indiced_label, indiced_pred = self._separate_predictions(single_label, single_pred)
             for cancer_pred in indiced_pred:
                 IoUs = tf.map_fn(
                     lambda label: self._IoU(label, cancer_pred),
@@ -232,49 +253,28 @@ class RegionBasedTruePositives(tf.keras.metrics.Metric):
                 if tf.reduce_any(IoUs > self.IoU_threshold): self.tp_count.assign_add(1)
         return
 
-    @tf.function
-    def _IoU(self, cancer_label, cancer_pred):
-        intersection = tf.reduce_sum(tf.cast(cancer_label & cancer_pred, tf.float32))
-        union = tf.reduce_sum(tf.cast(cancer_label | cancer_pred, tf.float32))
-        iou = intersection / union
-        return iou
-
-    def result(self):
+    def _result(self):
         result = self.tp_count
         return result
 
-    def get_config(self):
-        configs = super().get_config()
-        configs['threshold'] = self.threshold
-        configs['IoU_threshold'] = self.IoU_threshold
-        configs['epsilon'] = self.epsilon
-        return configs
 
-
-class RegionBasedFalsePostives(tf.keras.metrics.Metric):
-    def __init__(self, threshold, IoU_threshold=0.30, epsilon=1e-07, **kargs):
-        super().__init__(**kargs)
+class RegionBasedFalsePostives(_RegionBasedMetricMultiThresholds):
+    def init(self, threshold, IoU_threshold=0.30, epsilon=1e-07, **kargs):
         assert threshold > 0
         self.threshold = threshold
-        self.IoU_threshold = IoU_threshold
-        self.epsilon = epsilon
-
         self.fp_count = self.add_weight(
             'fp_count', dtype=tf.int32, initializer=tf.zeros_initializer)
         return
 
     @tf.function
-    def update_state(self, y_true, y_pred, sample_weight=None):
+    def _update_state(self, y_true, y_pred, sample_weight=None):
         if sample_weight is not None: raise NotImplementedError
         y_pred = tf.squeeze(tf.cast(y_pred > self.threshold, y_pred.dtype), -1)
         y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.int32)
 
         for single_label_pred in y_true_pred:
             single_label, single_pred = single_label_pred[0], single_label_pred[1]
-            indiced_label = tf.one_hot(tfa.image.connected_components(single_label), tf.reduce_max(single_label) + 1)[:, :, 1:]
-            indiced_label = tf.cast(tf.transpose(indiced_label, [2, 0, 1]), tf.bool)
-            indiced_pred = tf.one_hot(tfa.image.connected_components(single_pred), tf.reduce_max(single_pred) + 1)[:, :, 1:]
-            indiced_pred = tf.cast(tf.transpose(indiced_pred, [2, 0, 1]), tf.bool)
+            indiced_label, indiced_pred = self._separate_predictions(single_label, single_pred)
             for cancer_pred in indiced_pred:
                 IoUs = tf.map_fn(
                     lambda label: self._IoU(label, cancer_pred),
@@ -286,49 +286,28 @@ class RegionBasedFalsePostives(tf.keras.metrics.Metric):
                 else: self.fp_count.assign_add(1)
         return
 
-    @tf.function
-    def _IoU(self, cancer_label, cancer_pred):
-        intersection = tf.reduce_sum(tf.cast(cancer_label & cancer_pred, tf.float32))
-        union = tf.reduce_sum(tf.cast(cancer_label | cancer_pred, tf.float32))
-        iou = intersection / union
-        return iou
-
-    def result(self):
+    def _result(self):
         result = self.fp_count
         return result
 
-    def get_config(self):
-        configs = super().get_config()
-        configs['threshold'] = self.threshold
-        configs['IoU_threshold'] = self.IoU_threshold
-        configs['epsilon'] = self.epsilon
-        return configs
 
-
-class RegionBasedFalseNegatives(tf.keras.metrics.Metric):
-    def __init__(self, threshold, IoU_threshold=0.30, epsilon=1e-07, **kargs):
-        super().__init__(**kargs)
+class RegionBasedFalseNegatives(_RegionBasedMetricMultiThresholds):
+    def init(self, threshold, IoU_threshold=0.30, epsilon=1e-07, **kargs):
         assert threshold > 0
         self.threshold = threshold
-        self.IoU_threshold = IoU_threshold
-        self.epsilon = epsilon
-
         self.fn_count = self.add_weight(
             'fn_count', dtype=tf.int32, initializer=tf.zeros_initializer)
         return
 
     @tf.function
-    def update_state(self, y_true, y_pred, sample_weight=None):
+    def _update_state(self, y_true, y_pred, sample_weight=None):
         if sample_weight is not None: raise NotImplementedError
         y_pred = tf.squeeze(tf.cast(y_pred > self.threshold, y_pred.dtype), -1)
         y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.int32)
 
         for single_label_pred in y_true_pred:
             single_label, single_pred = single_label_pred[0], single_label_pred[1]
-            indiced_label = tf.one_hot(tfa.image.connected_components(single_label), tf.reduce_max(single_label) + 1)[:, :, 1:]
-            indiced_label = tf.cast(tf.transpose(indiced_label, [2, 0, 1]), tf.bool)
-            indiced_pred = tf.one_hot(tfa.image.connected_components(single_pred), tf.reduce_max(single_pred) + 1)[:, :, 1:]
-            indiced_pred = tf.cast(tf.transpose(indiced_pred, [2, 0, 1]), tf.bool)
+            indiced_label, indiced_pred = self._separate_predictions(single_label, single_pred)
             for cancer_label in indiced_label:
                 IoUs = tf.map_fn(
                     lambda pred: self._IoU(cancer_label, pred),
@@ -340,23 +319,9 @@ class RegionBasedFalseNegatives(tf.keras.metrics.Metric):
                 else: self.fn_count.assign_add(1)
         return
 
-    @tf.function
-    def _IoU(self, cancer_label, cancer_pred):
-        intersection = tf.reduce_sum(tf.cast(cancer_label & cancer_pred, tf.float32))
-        union = tf.reduce_sum(tf.cast(cancer_label | cancer_pred, tf.float32))
-        iou = intersection / union
-        return iou
-
-    def result(self):
+    def _result(self):
         result = self.fn_count()
         return result
-
-    def get_config(self):
-        configs = super().get_config()
-        configs['threshold'] = self.threshold
-        configs['IoU_threshold'] = self.IoU_threshold
-        configs['epsilon'] = self.epsilon
-        return configs
 
 
 tf.keras.utils.get_custom_objects().update(FBetaScore=FBetaScore)
