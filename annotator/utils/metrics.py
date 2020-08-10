@@ -111,26 +111,30 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
         return indiced_label, indiced_pred
 
     @tf.function
-    def _IoU(self, indiced_label, cancer_pred):
+    def _IoU(self, indiced_label, indiced_pred):
         '''
-        given multiple label cancer region masks and single predicted cancer region,
-        or other way around, this method will calculate IoU.
-
-        Either indiced_label or cancer_pred can have shape: [N_masks, height, width]
-        and other one is shape: [height, width]
+        given multiple label cancer region masks and multiple predicted cancer region masks,
+        this method will calculate IoU.
 
         Args:
             indiced_label: label cancer masks
+                shape: [N_masks, height, width]
             cancer_pred: single cancer prediction mask
+                shape: [M_masks, height, width]
 
         Returns:
             IoU vector
-                shape: [N_masks]
+                shape: [N_masks, M_masks]
         '''
-        intersection = tf.reduce_sum(tf.cast(indiced_label & cancer_pred, tf.float32), axis=[1, 2])
-        union = tf.reduce_sum(tf.cast(indiced_label | cancer_pred, tf.float32), axis=[1, 2])
+        n_label_mask, n_pred_mask = tf.shape(indiced_label)[0], tf.shape(indiced_pred)[0]
+        intermediate_shape = [n_label_mask, n_pred_mask, tf.shape(indiced_label)[1], tf.shape(indiced_label)[2]]
+        indiced_label = tf.broadcast_to(indiced_label, intermediate_shape)
+        indiced_pred = tf.broadcast_to(indiced_pred, intermediate_shape)
+        intersection = tf.reduce_sum(tf.cast(indiced_label & indiced_pred, tf.float32), axis=[2, 3])
+        union = tf.reduce_sum(tf.cast(indiced_label | indiced_pred, tf.float32), axis=[2, 3])
         iou = intersection / union
-        return iou
+        with tf.control_dependencies([tf.assert_equal(tf.shape(iou), [n_label_mask, n_pred_mask])]):
+            return iou
 
     @tf.function
     def get_tp_fn(self, y_true, y_pred, sample_weight, threshold):
@@ -151,12 +155,10 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
     @tf.function
     def get_label_detected(self, single_label, single_pred):
         indiced_label, indiced_pred = self._separate_predictions(single_label, single_pred)
-        label_detected = tf.map_fn(
-            lambda cancer_label: tf.reduce_any(self._IoU(cancer_label, indiced_pred) > self.IoU_threshold),
-            indiced_label,
-            fn_output_signature=tf.TensorSpec(dtype=tf.bool, shape=[]),
-            parallel_iterations=cpu_count(),
-        )
+
+        IoU_matrix = self._IoU(indiced_label, indiced_pred)
+        label_detected = tf.reduce_any(IoU_matrix > self.IoU_threshold, axis=1)
+
         tp = tf.reduce_sum(tf.cast(label_detected, tf.int32))
         fn = tf.reduce_sum(tf.cast(~label_detected, tf.int32))
         return tp, fn
@@ -181,12 +183,9 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
     def get_tp_pred(self, single_label, single_pred):
         indiced_label, indiced_pred = self._separate_predictions(single_label, single_pred)
 
-        tp_pred = tf.map_fn(
-            lambda cancer_pred: tf.reduce_any(self._IoU(indiced_label, cancer_pred) > self.IoU_threshold),
-            indiced_pred,
-            fn_output_signature=tf.bool,
-            parallel_iterations=cpu_count(),
-        )
+        IoU_matrix = self._IoU(indiced_label, indiced_pred)
+        tp_pred = tf.reduce_any(IoU_matrix > self.IoU_threshold, axis=0)
+
         tp = tf.reduce_sum(tf.cast(tp_pred, tf.int32))
         fp = tf.reduce_sum(tf.cast(~tp_pred, tf.int32))
         return tp, fp
