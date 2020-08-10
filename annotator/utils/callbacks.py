@@ -16,6 +16,9 @@ from tensorboard import summary as summary_lib
 from tqdm import tqdm
 from tensorflow.keras.callbacks import Callback
 
+# custom
+from . import metrics as custom_metrics
+
 
 class TFProgress(Callback):
     def __init__(self):
@@ -75,6 +78,7 @@ class Visualizer(Callback):
         ratio=0.5,
         prediction_threshold=None,
         pr_nthreshold=200,
+        pr_IoU_threshold=0.30,
         ignore_test=True,
     ):
         self.params = None
@@ -88,6 +92,7 @@ class Visualizer(Callback):
         self._writer = None
         self._owned_writer = True
         self.pr_nthreshold = pr_nthreshold
+        self.pr_IoU_threshold = pr_IoU_threshold
         self.ignore_test = ignore_test
         self.per_epoch_resources = {}
         self.prediction_threshold = prediction_threshold
@@ -165,6 +170,19 @@ class Visualizer(Callback):
                 'false_negative_counts': tf.keras.metrics.FalseNegatives(thresholds),
                 'recall': tf.keras.metrics.Recall(thresholds),
                 'precision': tf.keras.metrics.Precision(thresholds),
+            },
+            'region': {
+                'true_positive_counts': custom_metrics.RegionBasedTruePositives(
+                    thresholds, IoU_threshold=self.pr_IoU_threshold),
+                'true_negative_counts': custom_metrics.DummyMetric([0] * self.pr_nthreshold),
+                'false_positive_counts': custom_metrics.RegionBasedFalsePositives(
+                    thresholds, IoU_threshold=self.pr_IoU_threshold),
+                'false_negative_counts': custom_metrics.RegionBasedFalseNegatives(
+                    thresholds, IoU_threshold=self.pr_IoU_threshold),
+                'recall': custom_metrics.RegionBasedRecall(
+                    thresholds, IoU_threshold=self.pr_IoU_threshold),
+                'precision': custom_metrics.RegionBasedPrecision(
+                    thresholds, IoU_threshold=self.pr_IoU_threshold),
             },
         }
         return
