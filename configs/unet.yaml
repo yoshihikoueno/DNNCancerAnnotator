@@ -42,6 +42,18 @@ deploy_options:
             thresholds: 0.80
             IoU_threshold: 0.30
             name: "region/recall"
+        - RegionBasedTruePositives:
+            thresholds: 0.80
+            IoU_threshold: 0.30
+            name: "region/TP"
+        - RegionBasedFalsePositives:
+            thresholds: 0.80
+            IoU_threshold: 0.30
+            name: "region/FP"
+        - RegionBasedFalseNegatives:
+            thresholds: 0.80
+            IoU_threshold: 0.30
+            name: "region/FN"
         - RegionBasedFBetaScore:
             thresholds: 0.80
             IoU_threshold: 0.30
