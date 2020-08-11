@@ -1,6 +1,6 @@
-from tensorflow/tensorflow:2.3.0rc1-gpu
+from tensorflow/tensorflow:2.3.0-gpu
 run apt update
-run apt install -y git python3-pip libsm6 libxext6 libxrender-dev
+run apt install -y git python3-pip libsm6 libxext6 libxrender-dev libgl1-mesa-glx
 run git clone --single-branch --branch master https://github.com/yoshihikoueno/DNNCancerAnnotator
 workdir DNNCancerAnnotator
 run pip3 install -r requirements.txt
