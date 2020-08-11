@@ -133,8 +133,7 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
         intersection = tf.reduce_sum(tf.cast(indiced_label & indiced_pred, tf.float32), axis=[2, 3])
         union = tf.reduce_sum(tf.cast(indiced_label | indiced_pred, tf.float32), axis=[2, 3])
         iou = intersection / union
-        with tf.control_dependencies([tf.assert_equal(tf.shape(iou), [n_label_mask, n_pred_mask])]):
-            return iou
+        return iou
 
     @tf.function
     def get_tp_fn(self, y_true, y_pred, sample_weight, threshold):
