@@ -196,7 +196,7 @@ class Visualizer(Callback):
             elif type_ == 'region':
                 result[type_] = dict(
                     true_negative_counts=[0] * self.pr_nthreshold,
-                    **self.per_epoch_resources['pr_curve'][type_].result(),
+                    **self.per_epoch_resources['pr_curve'][type_].result_dict(),
                 )
             else: raise NotImplementedError
         return result

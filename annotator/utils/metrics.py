@@ -410,6 +410,9 @@ class RegionBasedConfusionMatrix(_RegionBasedMetric):
         return
 
     def result(self):
+        return np.nan
+
+    def result_dict(self):
         recall = tf.cast(self.tp_count, tf.float32) / (tf.cast(self.tp_count + self.fn_count, tf.float32) + self.epsilon)
         recall = tf.squeeze(recall)
 
