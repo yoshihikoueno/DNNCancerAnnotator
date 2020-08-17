@@ -171,35 +171,35 @@ class Visualizer(Callback):
                 'recall': tf.keras.metrics.Recall(thresholds),
                 'precision': tf.keras.metrics.Precision(thresholds),
             },
-            'region': {
-                'true_positive_counts': custom_metrics.RegionBasedTruePositives(
-                    thresholds, IoU_threshold=self.pr_IoU_threshold),
-                'true_negative_counts': custom_metrics.DummyMetric([0] * self.pr_nthreshold),
-                'false_positive_counts': custom_metrics.RegionBasedFalsePositives(
-                    thresholds, IoU_threshold=self.pr_IoU_threshold),
-                'false_negative_counts': custom_metrics.RegionBasedFalseNegatives(
-                    thresholds, IoU_threshold=self.pr_IoU_threshold),
-                'recall': custom_metrics.RegionBasedRecall(
-                    thresholds, IoU_threshold=self.pr_IoU_threshold),
-                'precision': custom_metrics.RegionBasedPrecision(
-                    thresholds, IoU_threshold=self.pr_IoU_threshold),
-            },
+            'region': custom_metrics.RegionBasedConfusionMatrix(thresholds, self.pr_IoU_threshold),
         }
         return
 
     def update_internal_metrics(self, y_true, y_pred):
         for type_ in self.per_epoch_resources['pr_curve']:
-            for metric in self.internal_metics:
-                self.per_epoch_resources['pr_curve'][type_][metric].update_state(y_true, y_pred)
+            if type_ == 'pixel':
+                for metric in self.internal_metics:
+                    self.per_epoch_resources['pr_curve'][type_][metric].update_state(y_true, y_pred)
+            elif type_ == 'region':
+                self.per_epoch_resources['pr_curve'][type_].update_state(y_true, y_pred)
+            else: raise NotImplementedError
         return
 
     def get_internal_metrics_results(self):
-        return {
-            type_: {
-                metric: self.per_epoch_resources['pr_curve'][type_][metric].result()
-                for metric in self.internal_metics
-            } for type_ in self.per_epoch_resources['pr_curve']
-        }
+        result = dict()
+        for type_ in self.per_epoch_resources['pr_curve']:
+            if type_ == 'pixel':
+                result[type_] = {
+                    metric: self.per_epoch_resources['pr_curve'][type_][metric].result()
+                    for metric in self.internal_metics
+                }
+            elif type_ == 'region':
+                result[type_] = dict(
+                    true_negative_counts=[0] * self.pr_nthreshold,
+                    **self.per_epoch_resources['pr_curve'][type_].result(),
+                )
+            else: raise NotImplementedError
+        return result
 
     def record_logs(self, logs):
         epoch = self.get_current_step()

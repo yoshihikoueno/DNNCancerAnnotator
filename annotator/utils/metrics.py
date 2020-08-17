@@ -382,6 +382,50 @@ class RegionBasedFalseNegatives(_RegionBasedMetric):
         return result
 
 
+class RegionBasedConfusionMatrix(_RegionBasedMetric):
+    def __init__(self, thresholds, IoU_threshold=0.30, epsilon=1e-07, **kargs):
+        thresholds = tf.reshape(thresholds, [-1])
+        super().__init__(thresholds, IoU_threshold, epsilon, **kargs)
+        self.fn_count = self.add_weight(
+            'fn_count', dtype=tf.int32, shape=tf.shape(self.thresholds), initializer=tf.zeros_initializer)
+        self.fp_count = self.add_weight(
+            'fp_count', dtype=tf.int32, shape=tf.shape(self.thresholds), initializer=tf.zeros_initializer)
+        self.tp_count = self.add_weight(
+            'tp_count', dtype=tf.int32, shape=tf.shape(self.thresholds), initializer=tf.zeros_initializer)
+        return
+
+    def reset_states(self):
+        self.fn_count.assign(tf.zeros_like(self.fn_count))
+        self.fp_count.assign(tf.zeros_like(self.fn_count))
+        self.tp_count.assign(tf.zeros_like(self.fn_count))
+        return
+
+    @tf.function
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        tp, fn = self.get_tp_fn(y_true, y_pred, sample_weight)
+        _, fp = self.get_tp_fp(y_true, y_pred, sample_weight)
+        self.fn_count.assign_add(fn)
+        self.fp_count.assign_add(fp)
+        self.tp_count.assign_add(tp)
+        return
+
+    def result(self):
+        recall = tf.cast(self.tp_count, tf.float32) / (tf.cast(self.tp_count + self.fn_count, tf.float32) + self.epsilon)
+        recall = tf.squeeze(recall)
+
+        precision = tf.cast(self.tp_count, tf.float32) / (tf.cast(self.tp_count + self.fp_count, tf.float32) + self.epsilon)
+        precision = tf.squeeze(precision)
+
+        result = {
+            'true_positive_counts': tf.squeeze(self.tp_count),
+            'false_positive_counts': tf.squeeze(self.fp_count),
+            'false_negative_counts': tf.squeeze(self.fn_count),
+            'recall': recall,
+            'precision': precision,
+        }
+        return result
+
+
 class DummyMetric():
     def __init__(self, value):
         self.value = value
