@@ -228,6 +228,39 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
         fp = tf.reduce_sum(tf.cast(~tp_pred, tf.int32), axis=1)
         return tp, fp
 
+    @tf.function
+    def get_tp_fn_fp(self, y_true, y_pred, sample_weight):
+        if sample_weight is not None: raise NotImplementedError
+        y_true = tf.cast(y_true, tf.float32)
+        y_pred = tf.squeeze(y_pred, -1)
+        y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.float32)
+
+        tp_array, fn_array, fp_array = tf.map_fn(
+            lambda single_label_pred: self._get_tp_fn_fp(single_label_pred[0], single_label_pred[1]),
+            y_true_pred,
+            fn_output_signature=(tf.int32, tf.int32, tf.int32),
+            parallel_iterations=cpu_count(),
+        )
+        tp = tf.reduce_sum(tp_array, axis=0)
+        fn = tf.reduce_sum(fn_array, axis=0)
+        fp = tf.reduce_sum(fp_array, axis=0)
+        return tp, fn, fp
+
+    @tf.function
+    def _get_tp_fn_fp(self, single_label, single_pred):
+        single_label = tf.cast(single_label, tf.bool)
+        indiced_label, indiced_pred, n_pred_masks = self._separate_predictions(single_label, single_pred)
+        IoU_matrix = self._IoU(indiced_label, indiced_pred)
+
+        label_detected = tf.reduce_any(IoU_matrix > self.IoU_threshold, axis=1)
+        tp = tf.reduce_sum(tf.cast(label_detected, tf.int32), axis=0)
+        fn = tf.reduce_sum(tf.cast(~label_detected, tf.int32), axis=0)
+
+        tp_pred = tf.reduce_any(IoU_matrix > self.IoU_threshold, axis=0)
+        tp_pred = tf.RaggedTensor.from_tensor(tf.transpose(tp_pred), n_pred_masks)
+        fp = tf.reduce_sum(tf.cast(~tp_pred, tf.int32), axis=1)
+        return tp, fn, fp
+
     def get_config(self):
         configs = super().get_config()
         configs['thresholds'] = self.thresholds
@@ -402,8 +435,7 @@ class RegionBasedConfusionMatrix(_RegionBasedMetric):
 
     @tf.function
     def update_state(self, y_true, y_pred, sample_weight=None):
-        tp, fn = self.get_tp_fn(y_true, y_pred, sample_weight)
-        _, fp = self.get_tp_fp(y_true, y_pred, sample_weight)
+        tp, fn, fp = self.get_tp_fn_fp(y_true, y_pred, sample_weight)
         self.fn_count.assign_add(fn)
         self.fp_count.assign_add(fp)
         self.tp_count.assign_add(tp)
