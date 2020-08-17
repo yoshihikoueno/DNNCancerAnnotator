@@ -12,6 +12,9 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 import numpy as np
 
+# custom
+from . import image as custom_image_ops
+
 
 def solve_metric(metric_spec):
     '''
@@ -104,11 +107,38 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
             indiced_label: label mask for each cancer region.
             indiced_pred: prediction mask for each predicted cancer region.
         '''
-        indiced_label = tf.one_hot(tfa.image.connected_components(single_label), tf.reduce_max(single_label) + 1)[:, :, 1:]
-        indiced_label = tf.cast(tf.transpose(indiced_label, [2, 0, 1]), tf.bool)
-        indiced_pred = tf.one_hot(tfa.image.connected_components(single_pred), tf.reduce_max(single_pred) + 1)[:, :, 1:]
-        indiced_pred = tf.cast(tf.transpose(indiced_pred, [2, 0, 1]), tf.bool)
-        return indiced_label, indiced_pred
+        cca_label = tfa.image.connected_components(single_label)
+        indiced_label = tf.one_hot(
+            cca_label, tf.reduce_max(cca_label) + 1, axis=0, dtype=tf.bool, on_value=True, off_value=False)[1:]
+
+        single_pred = tf.broadcast_to(
+            tf.cast(single_pred, tf.float32),
+            [tf.shape(self.thresholds)[0], tf.shape(single_pred)[0], tf.shape(single_pred)[1]],
+        )
+        single_pred = tf.transpose(tf.transpose(single_pred, [1, 2, 0]) > self.thresholds, [2, 0, 1])
+        single_pred = tf.squeeze(custom_image_ops.morph_open(tf.expand_dims(tf.cast(single_pred, tf.int8), -1), 5), -1)
+        cca_pred = tfa.image.connected_components(single_pred)
+        # cca_pred dims: n_thresholds, H, W
+        min_indices = -tf.sparse.reduce_max(tf.sparse.from_dense(-cca_pred), axis=[1, 2]) - 1
+        should_shift = tf.cast(min_indices > 0, min_indices.dtype)
+        substractor = tf.transpose(tf.broadcast_to(
+            min_indices * should_shift,
+            [tf.shape(single_pred)[1], tf.shape(single_pred)[2], tf.shape(self.thresholds)[0]],
+        ), [2, 0, 1])
+        substractor = tf.zeros_like(cca_pred) + substractor * tf.cast(cca_pred > 0, tf.int32)
+        cca_pred = cca_pred - substractor
+        # cca_pred dims: n_thresholds, H, W
+        indiced_pred = tf.one_hot(
+            cca_pred, tf.reduce_max(cca_pred) + 1, axis=0, dtype=tf.bool, on_value=True, off_value=False)[1:]
+        # indiced_pred dims: masks, n_thresholds, H, W
+        indiced_pred = tf.transpose(indiced_pred, [0, 2, 3, 1])
+        # indiced_pred dims: masks, H, W, thresholds
+        lengths = tf.reduce_any(indiced_pred, axis=[1, 2])
+        if tf.shape(indiced_pred)[0] > 0:
+            lengths = tf.argmin(tf.cast(lengths, tf.uint8), axis=0) + 1
+        else:
+            lengths = tf.zeros(tf.shape(self.thresholds), tf.int64)
+        return indiced_label, indiced_pred, lengths
 
     @tf.function
     def _IoU(self, indiced_label, indiced_pred):
@@ -118,17 +148,22 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
 
         Args:
             indiced_label: label cancer masks
-                shape: [N_masks, height, width]
+                shape: [N_masks, height, width], dtype: tf.bool
             cancer_pred: single cancer prediction mask
-                shape: [M_masks, height, width]
+                shape: [M_masks, height, width, N_thresholds], dtype: tf.bool
 
         Returns:
             IoU vector
-                shape: [N_masks, M_masks]
+                shape: [N_masks, M_masks, N_thresholds]
         '''
         n_label_mask, n_pred_mask = tf.shape(indiced_label)[0], tf.shape(indiced_pred)[0]
-        intermediate_shape = [n_label_mask, n_pred_mask, tf.shape(indiced_label)[1], tf.shape(indiced_label)[2]]
-        indiced_label = tf.broadcast_to(indiced_label, intermediate_shape)
+        n_thresholds = tf.shape(self.thresholds)[0]
+        intermediate_shape = [n_label_mask, n_pred_mask, tf.shape(indiced_label)[1], tf.shape(indiced_label)[2], n_thresholds]
+
+        indiced_label = tf.transpose(tf.broadcast_to(
+            indiced_label,
+            [n_pred_mask, n_thresholds, n_label_mask, tf.shape(indiced_label)[1], tf.shape(indiced_label)[2]],
+        ), [2, 0, 3, 4, 1])
         indiced_pred = tf.broadcast_to(indiced_pred, intermediate_shape)
         intersection = tf.reduce_sum(tf.cast(indiced_label & indiced_pred, tf.float32), axis=[2, 3])
         union = tf.reduce_sum(tf.cast(indiced_label | indiced_pred, tf.float32), axis=[2, 3])
@@ -136,10 +171,11 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
         return iou
 
     @tf.function
-    def get_tp_fn(self, y_true, y_pred, sample_weight, threshold):
+    def get_tp_fn(self, y_true, y_pred, sample_weight):
         if sample_weight is not None: raise NotImplementedError
-        y_pred = tf.squeeze(tf.cast(y_pred > threshold, y_pred.dtype), -1)
-        y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.int32)
+        y_true = tf.cast(y_true, tf.float32)
+        y_pred = tf.squeeze(y_pred, -1)
+        y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.float32)
 
         tp_array, fn_array = tf.map_fn(
             lambda single_label_pred: self.get_label_detected(single_label_pred[0], single_label_pred[1]),
@@ -147,26 +183,28 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
             fn_output_signature=(tf.int32, tf.int32),
             parallel_iterations=cpu_count(),
         )
-        tp = tf.reduce_sum(tp_array)
-        fn = tf.reduce_sum(fn_array)
+        tp = tf.reduce_sum(tp_array, axis=0)
+        fn = tf.reduce_sum(fn_array, axis=0)
         return tp, fn
 
     @tf.function
     def get_label_detected(self, single_label, single_pred):
-        indiced_label, indiced_pred = self._separate_predictions(single_label, single_pred)
+        single_label = tf.cast(single_label, tf.bool)
+        indiced_label, indiced_pred, pred_masks = self._separate_predictions(single_label, single_pred)
 
         IoU_matrix = self._IoU(indiced_label, indiced_pred)
         label_detected = tf.reduce_any(IoU_matrix > self.IoU_threshold, axis=1)
 
-        tp = tf.reduce_sum(tf.cast(label_detected, tf.int32))
-        fn = tf.reduce_sum(tf.cast(~label_detected, tf.int32))
+        tp = tf.reduce_sum(tf.cast(label_detected, tf.int32), axis=0)
+        fn = tf.reduce_sum(tf.cast(~label_detected, tf.int32), axis=0)
         return tp, fn
 
     @tf.function
-    def get_tp_fp(self, y_true, y_pred, sample_weight, threshold):
+    def get_tp_fp(self, y_true, y_pred, sample_weight):
         if sample_weight is not None: raise NotImplementedError
-        y_pred = tf.squeeze(tf.cast(y_pred > threshold, y_pred.dtype), -1)
-        y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.int32)
+        y_true = tf.cast(y_true, tf.float32)
+        y_pred = tf.squeeze(y_pred, -1)
+        y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.float32)
 
         tp_array, fp_array = tf.map_fn(
             lambda single_label_pred: self.get_tp_pred(single_label_pred[0], single_label_pred[1]),
@@ -174,19 +212,20 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
             fn_output_signature=(tf.int32, tf.int32),
             parallel_iterations=cpu_count(),
         )
-        tp = tf.reduce_sum(tp_array)
-        fp = tf.reduce_sum(fp_array)
+        tp = tf.reduce_sum(tp_array, axis=0)
+        fp = tf.reduce_sum(fp_array, axis=0)
         return tp, fp
 
     @tf.function
     def get_tp_pred(self, single_label, single_pred):
-        indiced_label, indiced_pred = self._separate_predictions(single_label, single_pred)
+        indiced_label, indiced_pred, n_pred_masks = self._separate_predictions(single_label, single_pred)
 
         IoU_matrix = self._IoU(indiced_label, indiced_pred)
         tp_pred = tf.reduce_any(IoU_matrix > self.IoU_threshold, axis=0)
+        tp_pred = tf.RaggedTensor.from_tensor(tf.transpose(tp_pred), n_pred_masks)
 
-        tp = tf.reduce_sum(tf.cast(tp_pred, tf.int32))
-        fp = tf.reduce_sum(tf.cast(~tp_pred, tf.int32))
+        tp = tf.reduce_sum(tf.cast(tp_pred, tf.int32), axis=1)
+        fp = tf.reduce_sum(tf.cast(~tp_pred, tf.int32), axis=1)
         return tp, fp
 
     def get_config(self):
@@ -232,14 +271,9 @@ class RegionBasedRecall(_RegionBasedMetric):
 
     @tf.function
     def update_state(self, y_true, y_pred, sample_weight=None):
-        tp_fn = tf.map_fn(
-            lambda threshold: self.get_tp_fn(y_true, y_pred, sample_weight, threshold),
-            self.thresholds,
-            fn_output_signature=(tf.int32, tf.int32),
-            parallel_iterations=cpu_count(),
-        )
-        self.tp_count.assign_add(tp_fn[0])
-        self.fn_count.assign_add(tp_fn[1])
+        tp, fn = self.get_tp_fn(y_true, y_pred, sample_weight)
+        self.tp_count.assign_add(tp)
+        self.fn_count.assign_add(fn)
         return
 
     def result(self):
@@ -265,14 +299,9 @@ class RegionBasedPrecision(_RegionBasedMetric):
 
     @tf.function
     def update_state(self, y_true, y_pred, sample_weight=None):
-        tp_fp = tf.map_fn(
-            lambda threshold: self.get_tp_fp(y_true, y_pred, sample_weight, threshold),
-            self.thresholds,
-            fn_output_signature=(tf.int32, tf.int32),
-            parallel_iterations=cpu_count(),
-        )
-        self.tp_count.assign_add(tp_fp[0])
-        self.fp_count.assign_add(tp_fp[1])
+        tp, fp = self.get_tp_fp(y_true, y_pred, sample_weight)
+        self.tp_count.assign_add(tp)
+        self.fp_count.assign_add(fp)
         return
 
     def result(self):
@@ -295,13 +324,8 @@ class RegionBasedTruePositives(_RegionBasedMetric):
 
     @tf.function
     def update_state(self, y_true, y_pred, sample_weight=None):
-        tp_fn = tf.map_fn(
-            lambda threshold: self.get_tp_fn(y_true, y_pred, sample_weight, threshold),
-            self.thresholds,
-            fn_output_signature=(tf.int32, tf.int32),
-            parallel_iterations=cpu_count(),
-        )
-        self.tp_count.assign_add(tp_fn[0])
+        tp, fn = self.get_tp_fn(y_true, y_pred, sample_weight)
+        self.tp_count.assign_add(tp)
         return
 
     def result(self):
@@ -324,13 +348,8 @@ class RegionBasedFalsePositives(_RegionBasedMetric):
 
     @tf.function
     def update_state(self, y_true, y_pred, sample_weight=None):
-        tp_fp = tf.map_fn(
-            lambda threshold: self.get_tp_fp(y_true, y_pred, sample_weight, threshold),
-            self.thresholds,
-            fn_output_signature=(tf.int32, tf.int32),
-            parallel_iterations=cpu_count(),
-        )
-        self.fp_count.assign_add(tp_fp[1])
+        tp, fp = self.get_tp_fp(y_true, y_pred, sample_weight)
+        self.fp_count.assign_add(fp)
         return
 
     def result(self):
@@ -353,13 +372,8 @@ class RegionBasedFalseNegatives(_RegionBasedMetric):
 
     @tf.function
     def update_state(self, y_true, y_pred, sample_weight=None):
-        tp_fn = tf.map_fn(
-            lambda threshold: self.get_tp_fn(y_true, y_pred, sample_weight, threshold),
-            self.thresholds,
-            fn_output_signature=(tf.int32, tf.int32),
-            parallel_iterations=cpu_count(),
-        )
-        self.fn_count.assign_add(tp_fn[1])
+        tp, fn = self.get_tp_fn(y_true, y_pred, sample_weight)
+        self.fn_count.assign_add(fn)
         return
 
     def result(self):
