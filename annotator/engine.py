@@ -200,5 +200,5 @@ class TFKerasModel():
             deploy_options['optimizer'].decay = tf.Variable(0.0)
 
         model.compile(**deploy_options)
-        if scope is not None: scope.__exit__()
+        if scope is not None: scope.__exit__(None, None, None)
         return model
