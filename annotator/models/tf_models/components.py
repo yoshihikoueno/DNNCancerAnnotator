@@ -300,3 +300,18 @@ class Decoder(Layer):
         for reference, upsample_layer in zip(reversed(res_list), self.upsamples):
             upsampled = upsample_layer(inputs=upsampled, reference=reference, training=training)
         return upsampled
+
+
+def solve_activation(identifier):
+    '''solve activation'''
+    if callable(identifier):
+        obj = identifier
+    elif isinstance(identifier, str):
+        obj = tf.keras.activations.get(identifier)
+    elif isinstance(identifier, dict):
+        obj = tf.keras.utils.deserialize_keras_object(
+            identifier=identifier,
+            module_objects=vars(tf.keras.layers)
+        )
+    else: raise ValueError(f'Failed to resolve activation: {identifier}')
+    return obj

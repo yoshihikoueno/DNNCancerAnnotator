@@ -130,7 +130,7 @@ class UNetAnnotator(keras.Model):
             conv_stride=conv_stride,
             bn=bn,
             padding=padding,
-            activation=activation,
+            activation=components.solve_activation(activation),
             **kargs,
         )
         last_conv = layers.Conv2D(filters=1, kernel_size=1, activation='sigmoid', padding=padding, **kargs)
