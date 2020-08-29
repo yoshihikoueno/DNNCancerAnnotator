@@ -177,10 +177,11 @@ class TFKerasModel():
 
         model_name = model_config['model']
         if enable_multigpu:
-            with tf.distribute.MirroredStrategy().scope():
-                model = getattr(tf_models, model_name)(**model_config['model_options'])
-        else:
-            model = getattr(tf_models, model_name)(**model_config['model_options'])
+            scope = tf.distribute.MirroredStrategy().scope()
+            scope.__enter__()
+        else: scope = None
+
+        model = getattr(tf_models, model_name)(**model_config['model_options'])
 
         if 'loss' in deploy_options:
             deploy_options['loss'] = tf.keras.losses.get(deploy_options['loss'])
@@ -199,4 +200,5 @@ class TFKerasModel():
             deploy_options['optimizer'].decay = tf.Variable(0.0)
 
         model.compile(**deploy_options)
+        if scope is not None: scope.__exit__()
         return model
