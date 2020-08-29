@@ -182,13 +182,8 @@ class TFKerasModel():
         else:
             model = getattr(tf_models, model_name)(**model_config['model_options'])
 
-        if isinstance(deploy_options.get('loss', None), dict):
-            loss_config = deploy_options.pop('loss')
-            loss_name = loss_config['name']
-            loss_option = loss_config.get('option', {})
-            loss_class = tf.keras.utils.get_registered_object(loss_name)
-            loss = loss_class(**loss_option)
-            deploy_options['loss'] = loss
+        if 'loss' in deploy_options:
+            deploy_options['loss'] = tf.keras.losses.get(deploy_options['loss'])
 
         deploy_options['metrics'] = list(map(custom_metrics.solve_metric, deploy_options.get('metrics', [])))
 

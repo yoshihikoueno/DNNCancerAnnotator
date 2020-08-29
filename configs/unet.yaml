@@ -10,8 +10,8 @@ model_options:
 deploy_options:
     optimizer: adam
     loss:
-        name: WeightedCrossentropy
-        option:
+        class_name: WeightedCrossentropy
+        config:
             weight_mul: 3.0
     metrics:
         - Precision:
