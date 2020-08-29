@@ -213,6 +213,5 @@ class TFKerasModel():
             deploy_options['optimizer'].decay = tf.Variable(0.0)
 
         model.compile(**deploy_options)
-        if self.enable_multigpu: self.strategy.scope().__exit__(None, None, None)
         self._exit_strategy_section()
         return model
