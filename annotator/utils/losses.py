@@ -30,14 +30,13 @@ def tf_weighted_crossentropy(label, pred, weight=None, weight_add=0, weight_mul=
     pred = tf.concat([1 - pred, pred], axis=-1)
 
     strategy = tf.distribute.get_strategy()
-    with strategy.scope():
-        bce = tf.keras.losses.BinaryCrossentropy(reduction=tf.losses.Reduction.NONE)
-        loss = bce(label, pred, sample_weight=weight_mask)
-        num_replicas = strategy.num_replicas_in_sync
-        per_replica_batch_size = tf.shape(loss)[0]
-        global_batch_size = per_replica_batch_size * num_replicas
-        with tf.control_dependencies([tf.print('!!!!!!', num_replicas, per_replica_batch_size)]):
-            loss /= tf.cast(global_batch_size, loss.dtype)
+    bce = tf.keras.losses.BinaryCrossentropy(reduction=tf.losses.Reduction.NONE)
+    loss = bce(label, pred, sample_weight=weight_mask)
+    num_replicas = strategy.num_replicas_in_sync
+    per_replica_batch_size = tf.shape(loss)[0]
+    global_batch_size = per_replica_batch_size * num_replicas
+    with tf.control_dependencies([tf.print('!!!!!!', num_replicas, per_replica_batch_size)]):
+        loss /= tf.cast(global_batch_size, loss.dtype)
     return loss
 
 
