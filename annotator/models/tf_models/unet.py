@@ -28,6 +28,7 @@ class UNet(Layer):
         bn=False,
         trainable=True,
         padding='valid',
+        activation='relu',
         **kargs,
     ):
         super().__init__(**kargs)
@@ -40,6 +41,7 @@ class UNet(Layer):
             bn=bn,
             trainable=trainable,
             padding=padding,
+            activation=activation,
         )
         self.encoder = components.Encoder(
             filters_first=filters_first,
@@ -49,6 +51,7 @@ class UNet(Layer):
             conv_stride=conv_stride,
             bn=bn,
             padding=padding,
+            activation=activation,
             trainable=trainable,
         )
         self.decoder = components.Decoder(
@@ -57,6 +60,7 @@ class UNet(Layer):
             conv_stride=conv_stride,
             bn=bn,
             padding=padding,
+            activation=activation,
             trainable=trainable,
         )
         return
@@ -88,6 +92,7 @@ class UNetAnnotator(keras.Model):
         conv_stride,
         bn=False,
         padding='valid',
+        activation='relu',
         **kargs,
     ):
         '''
@@ -114,6 +119,7 @@ class UNetAnnotator(keras.Model):
             conv_stride=conv_stride,
             bn=bn,
             padding=padding,
+            activation=activation,
             **kargs,
         )
         unet = UNet(
@@ -124,6 +130,7 @@ class UNetAnnotator(keras.Model):
             conv_stride=conv_stride,
             bn=bn,
             padding=padding,
+            activation=activation,
             **kargs,
         )
         last_conv = layers.Conv2D(filters=1, kernel_size=1, activation='sigmoid', padding=padding, **kargs)

@@ -89,6 +89,7 @@ class Upsample(Layer):
         trainable,
         n_conv=2,
         padding='valid',
+        activation='relu',
         **kargs,
     ):
         super().__init__(self, **kargs)
@@ -101,10 +102,12 @@ class Upsample(Layer):
             trainable=trainable,
             n_conv=n_conv,
             padding=padding,
+            activation=activation,
         )
         self.filters = filters
         self.rate = rate
         self.padding = padding
+        self.activation = activation
         self.conv_transpose = layers.Convolution2DTranspose(
             filters=filters, kernel_size=rate, strides=rate,
             padding=self.padding, activation=None, trainable=trainable)
@@ -112,7 +115,7 @@ class Upsample(Layer):
         self.conv_layers = [
             layers.Conv2D(
                 filters=filters, kernel_size=kernel_size,
-                strides=conv_stride, padding=self.padding, activation=tf.nn.relu, trainable=trainable
+                strides=conv_stride, padding=self.padding, activation=self.activation, trainable=trainable
             ) for i in range(n_conv)
         ]
 
@@ -168,6 +171,7 @@ class Encoder(Layer):
         trainable,
         n_conv=2,
         padding='valid',
+        activation='relu',
         **kargs,
     ):
         super().__init__(self, **kargs)
@@ -181,9 +185,11 @@ class Encoder(Layer):
             trainable=trainable,
             n_conv=n_conv,
             padding=padding,
+            activation=activation,
             **kargs,
         )
         self.padding = padding
+        self.activation = activation
         self.downsamples = []
         next_filters = filters_first
         for i in range(n_downsample):
@@ -197,6 +203,7 @@ class Encoder(Layer):
                     bn=bn,
                     padding=self.padding,
                     trainable=trainable,
+                    activation=self.activation,
                 )
             )
             next_filters = int(rate * next_filters)
@@ -238,6 +245,7 @@ class Decoder(Layer):
         bn,
         trainable,
         padding='valid',
+        activation='relu',
         **kargs,
     ):
         super().__init__(self, **kargs)
@@ -248,9 +256,11 @@ class Decoder(Layer):
             bn=bn,
             trainable=trainable,
             padding=padding,
+            activation=activation,
         )
         self.upsamples = []
         self.rate = rate
+        self.activation = activation
         self.kernel_size = kernel_size
         self.conv_stride = conv_stride
         self.bn = bn
@@ -274,6 +284,7 @@ class Decoder(Layer):
                     bn=self.bn,
                     trainable=self.trainable,
                     padding=self.padding,
+                    activation=self.activation,
                 )
             )
 
