@@ -171,7 +171,11 @@ class Visualizer(Callback):
                 'recall': tf.keras.metrics.Recall(thresholds),
                 'precision': tf.keras.metrics.Precision(thresholds),
             },
-            'region': custom_metrics.RegionBasedConfusionMatrix(thresholds, self.pr_IoU_threshold),
+            'region': custom_metrics.RegionBasedConfusionMatrix(
+                thresholds,
+                self.pr_IoU_threshold,
+                resize_factor=self.ratio,
+            ),
         }
         return
 

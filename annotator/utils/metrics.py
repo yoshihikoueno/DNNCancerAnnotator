@@ -68,7 +68,12 @@ class FBetaScore(tf.keras.metrics.Metric):
     def get_config(self):
         """Returns the serializable config of the metric."""
         config = super().get_config()
-        config.update({'beta': self.beta, 'epsilon': self.epsilon, 'thresholds': self.thresholds})
+        config.update({
+            'beta': self.beta,
+            'epsilon': self.epsilon,
+            'thresholds': self.thresholds,
+            'resize_factor': self.resize_factor,
+        })
         return config
 
 
@@ -80,13 +85,17 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
         IoU_threshold: minimum IoU between prediction and label
             required to be considered "successful detected"
         epsilon: small number to avoid devision by zero
+        resize_factor: resizing factor of images before being processed.
+            setting this lower than 1 will save some ram
+            at the cost evaluation accuracy.
     '''
-    def __init__(self, thresholds, IoU_threshold=0.30, epsilon=1e-07, **kargs):
+    def __init__(self, thresholds, IoU_threshold=0.30, epsilon=1e-07, resize_factor=1.0, **kargs):
         super().__init__(**kargs)
         with tf.control_dependencies([tf.debugging.assert_non_negative(thresholds)]):
             self.thresholds = thresholds
         self.IoU_threshold = IoU_threshold
         self.epsilon = epsilon
+        self.resize_factor = resize_factor
         return
 
     @tf.function
@@ -170,12 +179,24 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
         iou = intersection / union
         return iou
 
+    # @tf.function
+    def resize(self, image):
+        # image: [batch, 2(true+pred), W, H]
+        image = tf.transpose(image, [0, 2, 3, 1])
+        # image: [batch, W, H, 2(true+pred)]
+        target_width = tf.cast(tf.cast(tf.shape(image)[1], tf.float16) * self.resize_factor, tf.int32)
+        target_height = tf.cast(tf.cast(tf.shape(image)[2], tf.float16) * self.resize_factor, tf.int32)
+        resized_image = tf.image.resize(image, [target_width, target_height])
+        image = tf.transpose(image, [0, 3, 1, 2])
+        return resized_image
+
     @tf.function
     def get_tp_fn(self, y_true, y_pred, sample_weight):
         if sample_weight is not None: raise NotImplementedError
         y_true = tf.cast(y_true, tf.float32)
         y_pred = tf.squeeze(y_pred, -1)
         y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.float32)
+        y_true_pred = self.resize(y_true_pred)
 
         tp_array, fn_array = tf.map_fn(
             lambda single_label_pred: self.get_label_detected(single_label_pred[0], single_label_pred[1]),
@@ -205,6 +226,7 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
         y_true = tf.cast(y_true, tf.float32)
         y_pred = tf.squeeze(y_pred, -1)
         y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.float32)
+        y_true_pred = self.resize(y_true_pred)
 
         tp_array, fp_array = tf.map_fn(
             lambda single_label_pred: self.get_tp_pred(single_label_pred[0], single_label_pred[1]),
@@ -234,6 +256,7 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
         y_true = tf.cast(y_true, tf.float32)
         y_pred = tf.squeeze(y_pred, -1)
         y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.float32)
+        y_true_pred = self.resize(y_true_pred)
 
         tp_array, fn_array, fp_array = tf.map_fn(
             lambda single_label_pred: self._get_tp_fn_fp(single_label_pred[0], single_label_pred[1]),
@@ -270,20 +293,34 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
 
 
 class RegionBasedFBetaScore(FBetaScore):
-    def __init__(self, beta, thresholds, IoU_threshold=0.30, epsilon=1e-07, **kargs):
+    def __init__(self, beta, thresholds, IoU_threshold=0.30, epsilon=1e-07, resize_factor=1.0, **kargs):
         self.IoU_threshold = IoU_threshold
+        self.resize_factor = resize_factor
         super().__init__(beta=beta, thresholds=thresholds, epsilon=epsilon, **kargs)
         return
 
     def prepare_precision_recall(self):
-        self.precision = RegionBasedPrecision(thresholds=self.thresholds, IoU_threshold=self.IoU_threshold, epsilon=self.epsilon)
-        self.recall = RegionBasedRecall(thresholds=self.thresholds, IoU_threshold=self.IoU_threshold, epsilon=self.epsilon)
+        self.precision = RegionBasedPrecision(
+            thresholds=self.thresholds,
+            IoU_threshold=self.IoU_threshold,
+            epsilon=self.epsilon,
+            resize_factor=self.resize_factor,
+        )
+        self.recall = RegionBasedRecall(
+            thresholds=self.thresholds,
+            IoU_threshold=self.IoU_threshold,
+            epsilon=self.epsilon,
+            resize_factor=self.resize_factor,
+        )
         return
 
     def get_config(self):
         """Returns the serializable config of the metric."""
         config = super().get_config()
-        config.update({'IoU_threshold': self.IoU_threshold})
+        config.update({
+            'IoU_threshold': self.IoU_threshold,
+            'resize_factor': self.resize_factor,
+        })
         return config
 
 

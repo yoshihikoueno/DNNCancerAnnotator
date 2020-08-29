@@ -37,31 +37,38 @@ deploy_options:
         - RegionBasedPrecision:
             thresholds: 0.80
             IoU_threshold: 0.30
+            resize_factor: 0.5
             name: "region/precision"
         - RegionBasedRecall:
             thresholds: 0.80
             IoU_threshold: 0.30
+            resize_factor: 0.5
             name: "region/recall"
         - RegionBasedTruePositives:
             thresholds: 0.80
             IoU_threshold: 0.30
+            resize_factor: 0.5
             name: "region/TP"
         - RegionBasedFalsePositives:
             thresholds: 0.80
             IoU_threshold: 0.30
+            resize_factor: 0.5
             name: "region/FP"
         - RegionBasedFalseNegatives:
             thresholds: 0.80
             IoU_threshold: 0.30
+            resize_factor: 0.5
             name: "region/FN"
         - RegionBasedFBetaScore:
             thresholds: 0.80
             IoU_threshold: 0.30
+            resize_factor: 0.5
             beta: 1.0
             name: "region/F1-score"
         - RegionBasedFBetaScore:
             thresholds: 0.80
             IoU_threshold: 0.30
+            resize_factor: 0.5
             beta: 2.0
             name: "region/F2-score"
     enable_multigpu: false
