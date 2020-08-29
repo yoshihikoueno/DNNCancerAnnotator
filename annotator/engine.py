@@ -84,6 +84,7 @@ class TFKerasModel():
         visualization=None,
         auto_resume=True,
     ):
+        self._enter_strategy_section()
         self.model.build(dataset.element_spec[0].shape)
         if auto_resume: self._auto_resume(os.path.join(save_path, 'checkpoints'))
         if visualization is None: visualization = dict()
@@ -122,6 +123,7 @@ class TFKerasModel():
             initial_epoch=self.current_step,
             verbose=0,
         )
+        self._exit_strategy_section()
         return results
 
     def eval(self, dataset, viz_ds, save_path, tag='val', avoid_overwrite=False):
@@ -167,20 +169,31 @@ class TFKerasModel():
     def get_config(self):
         return self.model_config
 
+    def _enter_strategy_section(self):
+        assert getattr(self, '_scope', None) is None
+        if not self.enable_multigpu: self._scope = None
+        self._scope = self.strategy.scope()
+        self._scope.__enter__()
+        return
+
+    def _exit_strategy_section(self):
+        if getattr(self, '_scope', None) is None: return
+        self._scope.__exit__(None, None, None)
+        del self._scope
+        return
+
     def from_config(self, model_config) -> tf.keras.Model:
         assert 'model' in model_config
         assert 'model_options' in model_config
         assert 'deploy_options' in model_config
 
         deploy_options = copy.deepcopy(model_config['deploy_options'])
-        enable_multigpu = deploy_options.pop('enable_multigpu', True)
+        self.enable_multigpu = deploy_options.pop('enable_multigpu', True)
+        if self.enable_multigpu:
+            self.strategy = tf.distribute.MirroredStrategy()
+        self._enter_strategy_section()
 
         model_name = model_config['model']
-        if enable_multigpu:
-            scope = tf.distribute.MirroredStrategy().scope()
-            scope.__enter__()
-        else: scope = None
-
         model = getattr(tf_models, model_name)(**model_config['model_options'])
 
         if 'loss' in deploy_options:
@@ -200,5 +213,6 @@ class TFKerasModel():
             deploy_options['optimizer'].decay = tf.Variable(0.0)
 
         model.compile(**deploy_options)
-        if scope is not None: scope.__exit__(None, None, None)
+        if self.enable_multigpu: self.strategy.scope().__exit__(None, None, None)
+        self._exit_strategy_section()
         return model
