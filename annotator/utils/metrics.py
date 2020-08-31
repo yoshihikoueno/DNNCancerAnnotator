@@ -98,6 +98,11 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
         self.resize_factor = resize_factor
         return
 
+    def add_weight(self, *args, **kargs):
+        if 'synchronization' not in kargs:
+            kargs['synchronization'] = tf.VariableSynchronization.ON_WRITE
+        return super().add_weight(*args, **kargs)
+
     @tf.function
     def _separate_predictions(self, single_label, single_pred):
         '''separate positive(cancer) regions
