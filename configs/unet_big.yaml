@@ -75,7 +75,7 @@ deploy_options:
 data_options:
     train:
         batch_size: 8
-        buffer_size: 256
+        buffer_size: 1024
         normalize_exams: true
         output_size: [256, 256]
         slice_types: ['TRA', 'ADC', 'DWI', 'DCEE', 'DCEL', 'label']
