@@ -35,8 +35,7 @@ def tf_weighted_crossentropy(label, pred, weight=None, weight_add=0, weight_mul=
     num_replicas = strategy.num_replicas_in_sync
     per_replica_batch_size = tf.shape(loss)[0]
     global_batch_size = per_replica_batch_size * num_replicas
-    with tf.control_dependencies([tf.print('!!!!!!', num_replicas, per_replica_batch_size)]):
-        loss /= tf.cast(global_batch_size, loss.dtype)
+    loss /= tf.cast(global_batch_size, loss.dtype)
     return loss
 
 
