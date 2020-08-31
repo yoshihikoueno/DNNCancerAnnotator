@@ -171,7 +171,9 @@ class TFKerasModel():
 
     def _enter_strategy_section(self):
         assert getattr(self, '_scope', None) is None
-        if not self.enable_multigpu: self._scope = None
+        if not self.enable_multigpu:
+            self._scope = None
+            return
         self._scope = self.strategy.scope()
         self._scope.__enter__()
         return
