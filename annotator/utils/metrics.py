@@ -184,7 +184,6 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
         iou = intersection / union
         return iou
 
-    # @tf.function
     def resize(self, image):
         # image: [batch, 2(true+pred), W, H]
         image = tf.transpose(image, [0, 2, 3, 1])
@@ -344,7 +343,6 @@ class RegionBasedRecall(_RegionBasedMetric):
         self.fn_count.assign(tf.zeros_like(self.fn_count))
         return
 
-    @tf.function
     def update_state(self, y_true, y_pred, sample_weight=None):
         tp, fn = self.get_tp_fn(y_true, y_pred, sample_weight)
         self.tp_count.assign_add(tp)
@@ -372,7 +370,6 @@ class RegionBasedPrecision(_RegionBasedMetric):
         self.fp_count.assign(tf.zeros_like(self.fp_count))
         return
 
-    @tf.function
     def update_state(self, y_true, y_pred, sample_weight=None):
         tp, fp = self.get_tp_fp(y_true, y_pred, sample_weight)
         self.tp_count.assign_add(tp)
@@ -397,7 +394,6 @@ class RegionBasedTruePositives(_RegionBasedMetric):
         self.tp_count.assign(tf.zeros_like(self.tp_count))
         return
 
-    @tf.function
     def update_state(self, y_true, y_pred, sample_weight=None):
         tp, fn = self.get_tp_fn(y_true, y_pred, sample_weight)
         self.tp_count.assign_add(tp)
@@ -421,7 +417,6 @@ class RegionBasedFalsePositives(_RegionBasedMetric):
         self.fp_count.assign(tf.zeros_like(self.fp_count))
         return
 
-    @tf.function
     def update_state(self, y_true, y_pred, sample_weight=None):
         tp, fp = self.get_tp_fp(y_true, y_pred, sample_weight)
         self.fp_count.assign_add(fp)
@@ -445,7 +440,6 @@ class RegionBasedFalseNegatives(_RegionBasedMetric):
         self.fn_count.assign(tf.zeros_like(self.fn_count))
         return
 
-    @tf.function
     def update_state(self, y_true, y_pred, sample_weight=None):
         tp, fn = self.get_tp_fn(y_true, y_pred, sample_weight)
         self.fn_count.assign_add(fn)
@@ -475,7 +469,6 @@ class RegionBasedConfusionMatrix(_RegionBasedMetric):
         self.tp_count.assign(tf.zeros_like(self.fn_count))
         return
 
-    @tf.function
     def update_state(self, y_true, y_pred, sample_weight=None):
         tp, fn, fp = self.get_tp_fn_fp(y_true, y_pred, sample_weight)
         self.fn_count.assign_add(fn)
