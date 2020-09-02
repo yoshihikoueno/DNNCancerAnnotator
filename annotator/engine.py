@@ -89,6 +89,11 @@ class TFKerasModel():
         if auto_resume: self._auto_resume(os.path.join(save_path, 'checkpoints'))
         if visualization is None: visualization = dict()
         callbacks = []
+        if self.learning_rate_scheduler is not None:
+            callbacks.append(tf.keras.callbacks.LearningRateScheduler(
+                eval(self.learning_rate_scheduler), verbose=1,
+            ))
+
         if save_path is not None:
             ckpt_path = os.path.join(save_path, 'checkpoints', self.ckpt_pattern)
             os.makedirs(os.path.dirname(ckpt_path), exist_ok=True)
@@ -194,6 +199,8 @@ class TFKerasModel():
         if self.enable_multigpu:
             self.strategy = tf.distribute.MirroredStrategy()
         self._enter_strategy_section()
+
+        self.learning_rate_scheduler = deploy_options.pop('LearningRateScheduler', None)
 
         model_name = model_config['model']
         model = getattr(tf_models, model_name)(**model_config['model_options'])
