@@ -67,6 +67,7 @@ class Visualizer(Callback):
             and ratio is 0.5, then the output images will have size (128, 128).
         prediction_threshold: threshold to apply against predicted segmentation
         pr_nthreshold: the number of thresholds to use for PR curve
+        pr_region_nthreshold: the number of thresholds to use for region based PR curve
         ignore_test: whether this callback should do nothing for test events
     '''
     def __init__(
@@ -78,6 +79,7 @@ class Visualizer(Callback):
         ratio=0.5,
         prediction_threshold=None,
         pr_nthreshold=200,
+        pr_region_nthreshold=100,
         pr_IoU_threshold=0.30,
         ignore_test=True,
     ):
@@ -92,6 +94,7 @@ class Visualizer(Callback):
         self._writer = None
         self._owned_writer = True
         self.pr_nthreshold = pr_nthreshold
+        self.pr_region_nthreshold = pr_region_nthreshold
         self.pr_IoU_threshold = pr_IoU_threshold
         self.ignore_test = ignore_test
         self.per_epoch_resources = {}
@@ -161,18 +164,19 @@ class Visualizer(Callback):
         return
 
     def prepare_internal_metrics(self):
-        thresholds = [i / float(self.pr_nthreshold - 1) for i in range(self.pr_nthreshold)]
+        pixel_thresholds = [i / float(self.pr_nthreshold - 1) for i in range(self.pr_nthreshold)]
+        region_thresholds = [i / float(self.pr_region_nthreshold - 1) for i in range(self.pr_region_nthreshold)]
         self.per_epoch_resources['pr_curve'] = {
             'pixel': {
-                'true_positive_counts': tf.keras.metrics.TruePositives(thresholds),
-                'true_negative_counts': tf.keras.metrics.TrueNegatives(thresholds),
-                'false_positive_counts': tf.keras.metrics.FalsePositives(thresholds),
-                'false_negative_counts': tf.keras.metrics.FalseNegatives(thresholds),
-                'recall': tf.keras.metrics.Recall(thresholds),
-                'precision': tf.keras.metrics.Precision(thresholds),
+                'true_positive_counts': tf.keras.metrics.TruePositives(pixel_thresholds),
+                'true_negative_counts': tf.keras.metrics.TrueNegatives(pixel_thresholds),
+                'false_positive_counts': tf.keras.metrics.FalsePositives(pixel_thresholds),
+                'false_negative_counts': tf.keras.metrics.FalseNegatives(pixel_thresholds),
+                'recall': tf.keras.metrics.Recall(pixel_thresholds),
+                'precision': tf.keras.metrics.Precision(pixel_thresholds),
             },
             'region': custom_metrics.RegionBasedConfusionMatrix(
-                thresholds,
+                region_thresholds,
                 self.pr_IoU_threshold,
                 resize_factor=self.ratio,
             ),
@@ -199,7 +203,7 @@ class Visualizer(Callback):
                 }
             elif type_ == 'region':
                 result[type_] = dict(
-                    true_negative_counts=[0] * self.pr_nthreshold,
+                    true_negative_counts=[0] * self.pr_region_nthreshold,
                     **self.per_epoch_resources['pr_curve'][type_].result_dict(),
                 )
             else: raise NotImplementedError
