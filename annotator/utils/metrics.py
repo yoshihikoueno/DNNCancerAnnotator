@@ -89,13 +89,14 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
             setting this lower than 1 will save some ram
             at the cost evaluation accuracy.
     '''
-    def __init__(self, thresholds, IoU_threshold=0.30, epsilon=1e-07, resize_factor=1.0, **kargs):
+    def __init__(self, thresholds, IoU_threshold=0.30, epsilon=1e-07, resize_factor=1.0, morph_filter_size=5, **kargs):
         super().__init__(**kargs)
         with tf.control_dependencies([tf.debugging.assert_non_negative(thresholds)]):
             self.thresholds = thresholds
         self.IoU_threshold = IoU_threshold
         self.epsilon = epsilon
         self.resize_factor = resize_factor
+        self.morph_filter_size = morph_filter_size
         return
 
     def add_weight(self, *args, **kargs):
@@ -130,7 +131,10 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
             [tf.shape(self.thresholds)[0], tf.shape(single_pred)[0], tf.shape(single_pred)[1]],
         )
         single_pred = tf.transpose(tf.transpose(single_pred, [1, 2, 0]) > self.thresholds, [2, 0, 1])
-        single_pred = tf.squeeze(custom_image_ops.morph_open(tf.expand_dims(tf.cast(single_pred, tf.int8), -1), 5), -1)
+        single_pred = tf.squeeze(
+            custom_image_ops.morph_open(tf.expand_dims(tf.cast(single_pred, tf.int8), -1), self.morph_filter_size),
+            -1,
+        )
         cca_pred = tfa.image.connected_components(single_pred)
         # cca_pred dims: n_thresholds, H, W
         min_indices = -tf.sparse.reduce_max(tf.sparse.from_dense(-cca_pred), axis=[1, 2]) - 1
@@ -149,7 +153,9 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
         # indiced_pred dims: masks, H, W, thresholds
         lengths = tf.reduce_any(indiced_pred, axis=[1, 2])
         if tf.shape(indiced_pred)[0] > 0:
-            lengths = tf.argmin(tf.cast(lengths, tf.uint8), axis=0) + 1
+            lengths = tf.argmin(tf.cast(lengths, tf.uint8), axis=0)
+            lengths = (tf.cast(lengths == 0, lengths.dtype) * tf.ones_like(lengths)
+                       * tf.cast(tf.shape(indiced_pred)[0], lengths.dtype) + lengths)
         else:
             lengths = tf.zeros(tf.shape(self.thresholds), tf.int64)
         return indiced_label, indiced_pred, lengths
@@ -200,7 +206,8 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
         y_true = tf.cast(y_true, tf.float32)
         y_pred = tf.squeeze(y_pred, -1)
         y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.float32)
-        y_true_pred = self.resize(y_true_pred)
+        y_true_pred = self.resize(y_true_pred)  # [batch, W, H, 2]
+        y_true_pred = tf.transpose(y_true_pred, [0, 3, 1, 2])  # [batch, 2, W, H]
 
         tp_array, fn_array = tf.map_fn(
             lambda single_label_pred: self.get_label_detected(single_label_pred[0], single_label_pred[1]),
@@ -230,7 +237,8 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
         y_true = tf.cast(y_true, tf.float32)
         y_pred = tf.squeeze(y_pred, -1)
         y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.float32)
-        y_true_pred = self.resize(y_true_pred)
+        y_true_pred = self.resize(y_true_pred)  # [batch, W, H, 2]
+        y_true_pred = tf.transpose(y_true_pred, [0, 3, 1, 2])  # [batch, 2, W, H]
 
         tp_array, fp_array = tf.map_fn(
             lambda single_label_pred: self.get_tp_pred(single_label_pred[0], single_label_pred[1]),
@@ -260,7 +268,8 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
         y_true = tf.cast(y_true, tf.float32)
         y_pred = tf.squeeze(y_pred, -1)
         y_true_pred = tf.cast(tf.stack([y_true, y_pred], axis=1), tf.float32)
-        y_true_pred = self.resize(y_true_pred)
+        y_true_pred = self.resize(y_true_pred)  # [batch, W, H, 2]
+        y_true_pred = tf.transpose(y_true_pred, [0, 3, 1, 2])  # [batch, 2, W, H]
 
         tp_array, fn_array, fp_array = tf.map_fn(
             lambda single_label_pred: self._get_tp_fn_fp(single_label_pred[0], single_label_pred[1]),
