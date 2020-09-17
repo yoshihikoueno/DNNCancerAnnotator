@@ -147,10 +147,14 @@ class Visualizer(Callback):
 
     def record_pr_curve(self):
         data = self.get_internal_metrics_results()
+        thresholds = {
+            'pixel': self.pr_nthreshold,
+            'region': self.pr_region_nthreshold,
+        }
         for type_, data_ in data.items():
             summary_pb = summary_lib.v1.pr_curve_raw_data_pb(
                 **data_,
-                num_thresholds=self.pr_nthreshold,
+                num_thresholds=thresholds[type_],
                 name=f'{type_}/PR_curve',
             )
             with self.writer.as_default():
