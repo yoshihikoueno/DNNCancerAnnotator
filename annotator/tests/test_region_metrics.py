@@ -5,6 +5,7 @@ unittests for region based metrics
 # built-in
 import unittest
 import pdb
+import random
 
 # external
 import tensorflow as tf
@@ -143,6 +144,92 @@ class TestRegionMetricsSingleThreshold(unittest.TestCase):
         self.assertListEqual(fp.numpy().tolist(), [n_fp] * self.n_threshold)
         return
 
+    def test_consistency(self):
+        y_true, y_pred, n_tp, n_fn = self.generate_tp_fn_samples(0.4)
+        offs, n_off = self.generate_off_samples(0.7)
+        y_pred = y_pred + offs
+        tp, fn, fp = self.metric.get_tp_fn_fp(y_true, y_pred, None)
+        tp2, fn2 = self.metric.get_tp_fn(y_true, y_pred, None)
+        _, fp2 = self.metric.get_tp_fp(y_true, y_pred, None)
+        self.assertListEqual(tp.numpy().tolist(), tp2.numpy().tolist())
+        self.assertListEqual(fp.numpy().tolist(), fp2.numpy().tolist())
+        self.assertListEqual(fn.numpy().tolist(), fn2.numpy().tolist())
+        return
+
+    def test_consistency_random(self):
+        for i in range(10):
+            y_true, y_pred = self.generate_random_samples(20)
+
+            tp, fn, fp = self.metric.get_tp_fn_fp(y_true, y_pred, None)
+            tp2, fn2 = self.metric.get_tp_fn(y_true, y_pred, None)
+            _, fp2 = self.metric.get_tp_fp(y_true, y_pred, None)
+
+            self.assertListEqual(tp.numpy().tolist(), tp2.numpy().tolist())
+            self.assertListEqual(fn.numpy().tolist(), fn2.numpy().tolist())
+            self.assertListEqual(fp.numpy().tolist(), fp2.numpy().tolist())
+        return
+
+    def test_highlevel_consistency(self):
+        tp_count = custom_metrics.RegionBasedTruePositives(**self.metric.get_config())
+        fp_count = custom_metrics.RegionBasedFalsePositives(**self.metric.get_config())
+        fn_count = custom_metrics.RegionBasedFalseNegatives(**self.metric.get_config())
+        precision_count = custom_metrics.RegionBasedPrecision(**self.metric.get_config())
+        recall_count = custom_metrics.RegionBasedRecall(**self.metric.get_config())
+        confusion_count = custom_metrics.RegionBasedConfusionMatrix(**self.metric.get_config())
+
+        for i in range(10):
+            y_true, y_pred = self.generate_random_samples(20)
+            tp_count.update_state(y_true, y_pred)
+            fp_count.update_state(y_true, y_pred)
+            fn_count.update_state(y_true, y_pred)
+            precision_count.update_state(y_true, y_pred)
+            recall_count.update_state(y_true, y_pred)
+            confusion_count.update_state(y_true, y_pred)
+
+        if self.n_threshold == 1:
+            self.assertEqual(
+                tp_count.result().numpy().tolist(),
+                confusion_count.result_dict()['true_positive_counts'].numpy().tolist(),
+            )
+            self.assertEqual(
+                fp_count.result().numpy().tolist(),
+                confusion_count.result_dict()['false_positive_counts'].numpy().tolist(),
+            )
+            self.assertEqual(
+                fn_count.result().numpy().tolist(),
+                confusion_count.result_dict()['false_negative_counts'].numpy().tolist(),
+            )
+            self.assertEqual(
+                precision_count.result().numpy().tolist(),
+                confusion_count.result_dict()['precision'].numpy().tolist(),
+            )
+            self.assertEqual(
+                recall_count.result().numpy().tolist(),
+                confusion_count.result_dict()['recall'].numpy().tolist(),
+            )
+        else:
+            self.assertListEqual(
+                tp_count.result().numpy().tolist(),
+                confusion_count.result_dict()['true_positive_counts'].numpy().tolist(),
+            )
+            self.assertListEqual(
+                fp_count.result().numpy().tolist(),
+                confusion_count.result_dict()['false_positive_counts'].numpy().tolist(),
+            )
+            self.assertListEqual(
+                fn_count.result().numpy().tolist(),
+                confusion_count.result_dict()['false_negative_counts'].numpy().tolist(),
+            )
+            self.assertListEqual(
+                precision_count.result().numpy().tolist(),
+                confusion_count.result_dict()['precision'].numpy().tolist(),
+            )
+            self.assertListEqual(
+                recall_count.result().numpy().tolist(),
+                confusion_count.result_dict()['recall'].numpy().tolist(),
+            )
+        return
+
     def generate_tp_fn_samples(self, tp_rate):
         y_true = tf.stack(
             [
@@ -159,6 +246,31 @@ class TestRegionMetricsSingleThreshold(unittest.TestCase):
         tp_indicator = tf.random.shuffle(tf.concat([tf.ones([n_tp], y_pred.dtype), tf.zeros([n_fn], y_pred.dtype)], -1))
         y_pred = tf.transpose(tf.transpose(y_pred) * tp_indicator)
         return y_true, y_pred, n_tp, n_fn
+
+    def generate_random_samples(self, nslices):
+        def gen_slice(dtype, ncircles):
+            image = tf.zeros([self.width, self.height], dtype)
+            for _ in range(ncircles):
+                image = self.draw_circle(
+                    image,
+                    random.uniform(5.0, self.width / 20),
+                    random.uniform(0.0, self.width),
+                    random.uniform(0.0, self.height),
+                )
+            return image
+
+        y_true = tf.stack(
+            [gen_slice(tf.int32, 5) for _ in range(nslices)],
+            axis=0,
+        )
+
+        y_pred = tf.stack(
+            [gen_slice(tf.float32, 5) for _ in range(nslices)],
+            axis=0,
+        )
+
+        y_pred = tf.expand_dims(y_pred, -1)
+        return y_true, y_pred
 
     def generate_null_samples(self):
         y_true = tf.zeros([self.batch_size, self.width, self.height], tf.int64)
@@ -216,6 +328,7 @@ class TestRegionMetricsSingleThreshold(unittest.TestCase):
 
         dist = tf.sqrt(tf.cast(x_dist + y_dist, tf.float32))
         output = tf.cast(dist < tf.cast(radius, dist.dtype), tensor.dtype)
+        output = output + tensor
         return output
 
 
