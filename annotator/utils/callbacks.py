@@ -78,7 +78,7 @@ class Visualizer(Callback):
         save_dir: str,
         ratio=0.5,
         prediction_threshold=None,
-        pr_nthreshold=200,
+        pr_nthreshold=100,
         pr_region_nthreshold=100,
         pr_IoU_threshold=0.30,
         ignore_test=True,
