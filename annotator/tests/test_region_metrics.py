@@ -6,6 +6,7 @@ unittests for region based metrics
 import unittest
 import pdb
 import random
+from copy import deepcopy
 
 # external
 import tensorflow as tf
@@ -177,7 +178,7 @@ class TestRegionMetricsSingleThreshold(unittest.TestCase):
         recall_count = custom_metrics.RegionBasedRecall(**self.metric.get_config())
         confusion_count = custom_metrics.RegionBasedConfusionMatrix(**self.metric.get_config())
 
-        for i in range(10):
+        for i in range(5):
             y_true, y_pred = self.generate_random_samples(20)
             tp_count.update_state(y_true, y_pred)
             fp_count.update_state(y_true, y_pred)
@@ -247,8 +248,8 @@ class TestRegionMetricsSingleThreshold(unittest.TestCase):
         y_pred = tf.transpose(tf.transpose(y_pred) * tp_indicator)
         return y_true, y_pred, n_tp, n_fn
 
-    def generate_random_samples(self, nslices):
-        def gen_slice(dtype, ncircles):
+    def generate_random_samples(self, nslices, min_=1.0, max_=1.0):
+        def gen_slice(dtype, ncircles, min_=1.0, max_=1.0):
             image = tf.zeros([self.width, self.height], dtype)
             for _ in range(ncircles):
                 image = self.draw_circle(
@@ -256,6 +257,8 @@ class TestRegionMetricsSingleThreshold(unittest.TestCase):
                     random.uniform(5.0, self.width / 20),
                     random.uniform(0.0, self.width),
                     random.uniform(0.0, self.height),
+                    min_,
+                    max_,
                 )
             return image
 
@@ -265,7 +268,7 @@ class TestRegionMetricsSingleThreshold(unittest.TestCase):
         )
 
         y_pred = tf.stack(
-            [gen_slice(tf.float32, 5) for _ in range(nslices)],
+            [gen_slice(tf.float32, 5, min_, max_) for _ in range(nslices)],
             axis=0,
         )
 
@@ -313,7 +316,7 @@ class TestRegionMetricsSingleThreshold(unittest.TestCase):
         return offs, n_off
 
     @classmethod
-    def draw_circle(cls, tensor, radius, center_x, center_y):
+    def draw_circle(cls, tensor, radius, center_x, center_y, min_=1.0, max_=1.0):
         assert len(tensor.shape) == 2
         width, height = tensor.shape
         center_x, center_y = tf.cast(center_x, tensor.dtype), tf.cast(center_y, tensor.dtype)
@@ -328,60 +331,102 @@ class TestRegionMetricsSingleThreshold(unittest.TestCase):
 
         dist = tf.sqrt(tf.cast(x_dist + y_dist, tf.float32))
         output = tf.cast(dist < tf.cast(radius, dist.dtype), tensor.dtype)
+        output = tf.cast(tf.cast(output, tf.float32) * random.uniform(min_, max_), tensor.dtype)
         output = output + tensor
         return output
 
 
 class TestRegionMetricsMultiThreshold(TestRegionMetricsSingleThreshold):
     def setUp(self):
-        self.metric = custom_metrics.RegionBasedConfusionMatrix(
-            thresholds=[0.5, 0.8],
-            IoU_threshold=0.3,
-            resize_factor=1.0,
+        super().setUp()
+        self.n_threshold = 10
+        configs = self.metric.get_config()
+        configs['thresholds'] = [i / (self.n_threshold - 1) for i in range(self.n_threshold)]
+        self.metric = custom_metrics.RegionBasedConfusionMatrix(**configs)
+        return
+
+    def test_consistency_multithresholds(self):
+        thresholds = self.metric.thresholds
+        config = self.metric.get_config()
+
+        def new_config(threshold, config):
+            config = deepcopy(config)
+            config['thresholds'] = [threshold]
+            return config
+
+        confusion_count = custom_metrics.RegionBasedConfusionMatrix(**config)
+        confusion_count_list = [
+            custom_metrics.RegionBasedConfusionMatrix(**new_config(threshold, config))
+            for threshold in thresholds
+        ]
+
+        y_true, y_pred = self.generate_random_samples(20, 0.2, 1.0)
+        tp, fn, fp = confusion_count.get_tp_fn_fp(y_true, y_pred, None)
+
+        tp_fn_fp_list = [m.get_tp_fn_fp(y_true, y_pred, None) for m in confusion_count_list]
+        tp_list = list(map(lambda x: x[0].numpy().tolist()[0], tp_fn_fp_list))
+        fn_list = list(map(lambda x: x[1].numpy().tolist()[0], tp_fn_fp_list))
+        fp_list = list(map(lambda x: x[2].numpy().tolist()[0], tp_fn_fp_list))
+
+        self.assertListEqual(tp_list, tp.numpy().tolist())
+        self.assertListEqual(fn_list, fn.numpy().tolist())
+        self.assertListEqual(fp_list, fp.numpy().tolist())
+        return
+
+    def test_highlevel_consistency_multithresholds(self):
+        thresholds = self.metric.thresholds
+        config = self.metric.get_config()
+
+        def new_config(threshold, config):
+            config = deepcopy(config)
+            config['thresholds'] = [threshold]
+            return config
+
+        confusion_count = custom_metrics.RegionBasedConfusionMatrix(**config)
+        confusion_count_list = [
+            custom_metrics.RegionBasedConfusionMatrix(**new_config(threshold, config))
+            for threshold in thresholds
+        ]
+
+        for i in range(10):
+            y_true, y_pred = self.generate_random_samples(20, 0.2, 1.0)
+            confusion_count.update_state(y_true, y_pred)
+            for m in confusion_count_list: m.update_state(y_true, y_pred)
+
+        self.assertListEqual(
+            [m.result_dict()['true_positive_counts'].numpy().tolist() for m in confusion_count_list],
+            confusion_count.result_dict()['true_positive_counts'].numpy().tolist(),
         )
-        self.batch_size = 10
-        self.radius = tf.random.uniform([self.batch_size], 10, 30, tf.int64)
-        self.center_x = tf.random.uniform([self.batch_size], 30, 70, tf.int32)
-        self.center_y = tf.random.uniform([self.batch_size], 80, 120, tf.int32)
-        self.center_x_off = tf.random.uniform([self.batch_size], 130, 170, tf.int32)
-        self.center_y_off = tf.random.uniform([self.batch_size], 80, 120, tf.int32)
-        self.width = 200
-        self.height = 200
-        self.n_threshold = 2
+        self.assertListEqual(
+            [m.result_dict()['false_positive_counts'].numpy().tolist() for m in confusion_count_list],
+            confusion_count.result_dict()['false_positive_counts'].numpy().tolist(),
+        )
+        self.assertListEqual(
+            [m.result_dict()['false_negative_counts'].numpy().tolist() for m in confusion_count_list],
+            confusion_count.result_dict()['false_negative_counts'].numpy().tolist(),
+        )
+        self.assertListEqual(
+            [m.result_dict()['precision_counts'].numpy().tolist() for m in confusion_count_list],
+            confusion_count.result_dict()['precision_counts'].numpy().tolist(),
+        )
+        self.assertListEqual(
+            [m.result_dict()['recall_counts'].numpy().tolist() for m in confusion_count_list],
+            confusion_count.result_dict()['recall_counts'].numpy().tolist(),
+        )
         return
 
 class TestRegionMetricsSingleThresholdShrinked(TestRegionMetricsSingleThreshold):
     def setUp(self):
-        self.metric = custom_metrics.RegionBasedConfusionMatrix(
-            thresholds=0.5,
-            IoU_threshold=0.3,
-            resize_factor=0.5,
-        )
-        self.batch_size = 10
-        self.radius = tf.random.uniform([self.batch_size], 10, 30, tf.int64)
-        self.center_x = tf.random.uniform([self.batch_size], 30, 70, tf.int32)
-        self.center_y = tf.random.uniform([self.batch_size], 80, 120, tf.int32)
-        self.center_x_off = tf.random.uniform([self.batch_size], 130, 170, tf.int32)
-        self.center_y_off = tf.random.uniform([self.batch_size], 80, 120, tf.int32)
-        self.width = 200
-        self.height = 200
-        self.n_threshold = 1
+        super().setUp()
+        configs = self.metric.get_config()
+        configs['resize_factor'] = 0.5
+        self.metric = custom_metrics.RegionBasedConfusionMatrix(**configs)
         return
 
-class TestRegionMetricsMultiThresholdShrinked(TestRegionMetricsSingleThreshold):
+class TestRegionMetricsMultiThresholdShrinked(TestRegionMetricsMultiThreshold):
     def setUp(self):
-        self.metric = custom_metrics.RegionBasedConfusionMatrix(
-            thresholds=[0.5, 0.8],
-            IoU_threshold=0.3,
-            resize_factor=0.5,
-        )
-        self.batch_size = 10
-        self.radius = tf.random.uniform([self.batch_size], 10, 30, tf.int64)
-        self.center_x = tf.random.uniform([self.batch_size], 30, 70, tf.int32)
-        self.center_y = tf.random.uniform([self.batch_size], 80, 120, tf.int32)
-        self.center_x_off = tf.random.uniform([self.batch_size], 130, 170, tf.int32)
-        self.center_y_off = tf.random.uniform([self.batch_size], 80, 120, tf.int32)
-        self.width = 200
-        self.height = 200
-        self.n_threshold = 2
+        super().setUp()
+        configs = self.metric.get_config()
+        configs['resize_factor'] = 0.5
+        self.metric = custom_metrics.RegionBasedConfusionMatrix(**configs)
         return
