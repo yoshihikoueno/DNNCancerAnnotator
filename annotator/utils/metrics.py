@@ -122,6 +122,7 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
             indiced_label: label mask for each cancer region.
             indiced_pred: prediction mask for each predicted cancer region.
         '''
+        single_label = single_label > 0.5
         cca_label = tfa.image.connected_components(single_label)
         indiced_label = tf.one_hot(
             cca_label, tf.reduce_max(cca_label) + 1, axis=0, dtype=tf.bool, on_value=True, off_value=False)[1:]
@@ -221,7 +222,6 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
 
     @tf.function
     def get_label_detected(self, single_label, single_pred):
-        single_label = tf.cast(single_label, tf.bool)
         indiced_label, indiced_pred, pred_masks = self._separate_predictions(single_label, single_pred)
 
         IoU_matrix = self._IoU(indiced_label, indiced_pred)
@@ -284,7 +284,6 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
 
     @tf.function
     def _get_tp_fn_fp(self, single_label, single_pred):
-        single_label = tf.cast(single_label, tf.bool)
         indiced_label, indiced_pred, n_pred_masks = self._separate_predictions(single_label, single_pred)
         IoU_matrix = self._IoU(indiced_label, indiced_pred)
 
@@ -302,6 +301,7 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
         configs['thresholds'] = self.thresholds
         configs['IoU_threshold'] = self.IoU_threshold
         configs['epsilon'] = self.epsilon
+        configs['resize_factor'] = self.resize_factor
         return configs
 
 
