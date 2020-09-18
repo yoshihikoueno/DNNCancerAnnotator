@@ -131,7 +131,7 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
             tf.cast(single_pred, tf.float32),
             [tf.shape(self.thresholds)[0], tf.shape(single_pred)[0], tf.shape(single_pred)[1]],
         )
-        single_pred = tf.transpose(tf.transpose(single_pred, [1, 2, 0]) > self.thresholds, [2, 0, 1])
+        single_pred = tf.transpose(tf.transpose(single_pred, [1, 2, 0]) >= self.thresholds, [2, 0, 1])
         single_pred = tf.squeeze(
             custom_image_ops.morph_open(tf.expand_dims(tf.cast(single_pred, tf.int8), -1), self.morph_filter_size),
             -1,
@@ -153,10 +153,12 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
         indiced_pred = tf.transpose(indiced_pred, [0, 2, 3, 1])
         # indiced_pred dims: masks, H, W, thresholds
         lengths = tf.reduce_any(indiced_pred, axis=[1, 2])
+        existence_indicator = tf.reduce_any(lengths, axis=[0])
         if tf.shape(indiced_pred)[0] > 0:
             lengths = tf.argmin(tf.cast(lengths, tf.uint8), axis=0)
-            lengths = (tf.cast(lengths == 0, lengths.dtype) * tf.ones_like(lengths)
-                       * tf.cast(tf.shape(indiced_pred)[0], lengths.dtype) + lengths)
+            lengths = (tf.cast(lengths == 0, lengths.dtype) * tf.cast(existence_indicator, lengths.dtype)
+                       * tf.cast(tf.shape(indiced_pred)[0], lengths.dtype)
+                       + lengths)
         else:
             lengths = tf.zeros(tf.shape(self.thresholds), tf.int64)
         return indiced_label, indiced_pred, lengths
