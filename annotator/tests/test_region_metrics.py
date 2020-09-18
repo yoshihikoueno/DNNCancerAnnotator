@@ -342,28 +342,25 @@ class TestRegionMetricsMultiThreshold(TestRegionMetricsSingleThreshold):
         self.n_threshold = 10
         configs = self.metric.get_config()
         configs['thresholds'] = [i / (self.n_threshold - 1) for i in range(self.n_threshold)]
+        configs['thresholds'][0] = 0.001
+
+        def new_config(threshold, configs):
+            configs = deepcopy(configs)
+            configs['thresholds'] = [threshold]
+            return configs
+
         self.metric = custom_metrics.RegionBasedConfusionMatrix(**configs)
+        self.metric_list = [
+            custom_metrics.RegionBasedConfusionMatrix(**new_config(threshold, configs))
+            for threshold in configs['thresholds']
+        ]
         return
 
     def test_consistency_multithresholds(self):
-        thresholds = self.metric.thresholds
-        config = self.metric.get_config()
-
-        def new_config(threshold, config):
-            config = deepcopy(config)
-            config['thresholds'] = [threshold]
-            return config
-
-        confusion_count = custom_metrics.RegionBasedConfusionMatrix(**config)
-        confusion_count_list = [
-            custom_metrics.RegionBasedConfusionMatrix(**new_config(threshold, config))
-            for threshold in thresholds
-        ]
-
         y_true, y_pred = self.generate_random_samples(20, 0.2, 1.0)
-        tp, fn, fp = confusion_count.get_tp_fn_fp(y_true, y_pred, None)
+        tp, fn, fp = self.metric.get_tp_fn_fp(y_true, y_pred, None)
 
-        tp_fn_fp_list = [m.get_tp_fn_fp(y_true, y_pred, None) for m in confusion_count_list]
+        tp_fn_fp_list = [m.get_tp_fn_fp(y_true, y_pred, None) for m in self.metric_list]
         tp_list = list(map(lambda x: x[0].numpy().tolist()[0], tp_fn_fp_list))
         fn_list = list(map(lambda x: x[1].numpy().tolist()[0], tp_fn_fp_list))
         fp_list = list(map(lambda x: x[2].numpy().tolist()[0], tp_fn_fp_list))
@@ -374,44 +371,30 @@ class TestRegionMetricsMultiThreshold(TestRegionMetricsSingleThreshold):
         return
 
     def test_highlevel_consistency_multithresholds(self):
-        thresholds = self.metric.thresholds
-        config = self.metric.get_config()
-
-        def new_config(threshold, config):
-            config = deepcopy(config)
-            config['thresholds'] = [threshold]
-            return config
-
-        confusion_count = custom_metrics.RegionBasedConfusionMatrix(**config)
-        confusion_count_list = [
-            custom_metrics.RegionBasedConfusionMatrix(**new_config(threshold, config))
-            for threshold in thresholds
-        ]
-
         for i in range(10):
             y_true, y_pred = self.generate_random_samples(20, 0.2, 1.0)
-            confusion_count.update_state(y_true, y_pred)
-            for m in confusion_count_list: m.update_state(y_true, y_pred)
+            self.metric.update_state(y_true, y_pred)
+            for m in self.metric_list: m.update_state(y_true, y_pred)
 
         self.assertListEqual(
-            [m.result_dict()['true_positive_counts'].numpy().tolist() for m in confusion_count_list],
-            confusion_count.result_dict()['true_positive_counts'].numpy().tolist(),
+            [m.result_dict()['true_positive_counts'].numpy().tolist() for m in self.metric_list],
+            self.metric.result_dict()['true_positive_counts'].numpy().tolist(),
         )
         self.assertListEqual(
-            [m.result_dict()['false_positive_counts'].numpy().tolist() for m in confusion_count_list],
-            confusion_count.result_dict()['false_positive_counts'].numpy().tolist(),
+            [m.result_dict()['false_positive_counts'].numpy().tolist() for m in self.metric_list],
+            self.metric.result_dict()['false_positive_counts'].numpy().tolist(),
         )
         self.assertListEqual(
-            [m.result_dict()['false_negative_counts'].numpy().tolist() for m in confusion_count_list],
-            confusion_count.result_dict()['false_negative_counts'].numpy().tolist(),
+            [m.result_dict()['false_negative_counts'].numpy().tolist() for m in self.metric_list],
+            self.metric.result_dict()['false_negative_counts'].numpy().tolist(),
         )
         self.assertListEqual(
-            [m.result_dict()['precision_counts'].numpy().tolist() for m in confusion_count_list],
-            confusion_count.result_dict()['precision_counts'].numpy().tolist(),
+            [m.result_dict()['precision'].numpy().tolist() for m in self.metric_list],
+            self.metric.result_dict()['precision'].numpy().tolist(),
         )
         self.assertListEqual(
-            [m.result_dict()['recall_counts'].numpy().tolist() for m in confusion_count_list],
-            confusion_count.result_dict()['recall_counts'].numpy().tolist(),
+            [m.result_dict()['recall'].numpy().tolist() for m in self.metric_list],
+            self.metric.result_dict()['recall'].numpy().tolist(),
         )
         return
 
@@ -429,4 +412,14 @@ class TestRegionMetricsMultiThresholdShrinked(TestRegionMetricsMultiThreshold):
         configs = self.metric.get_config()
         configs['resize_factor'] = 0.5
         self.metric = custom_metrics.RegionBasedConfusionMatrix(**configs)
+
+        def new_config(threshold, configs):
+            configs = deepcopy(configs)
+            configs['thresholds'] = [threshold]
+            return configs
+
+        self.metric_list = [
+            custom_metrics.RegionBasedConfusionMatrix(**new_config(threshold, configs))
+            for threshold in configs['thresholds']
+        ]
         return
