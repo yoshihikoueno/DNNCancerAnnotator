@@ -164,7 +164,7 @@ class TFKerasModel():
             results = self.model.evaluate(dataset, callbacks=[viz_callback], verbose=0, return_dict=True)
             if export_csv: result_container.append(pd.Series(results, name=ckpt_step))
         if export_csv:
-            result_container.to_csv(os.path.join(export_path, self.tag, 'results.csv'))
+            result_container.to_csv(os.path.join(export_path, tag, 'results.csv'))
         return
 
     def list_ckpts(self, save_path):
