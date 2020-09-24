@@ -157,12 +157,14 @@ class TFKerasModel():
             save_dir=export_path,
             export_images=export_images,
         )
-        if export_csv: result_container = pd.DataFrame()
+        if export_csv:
+            result_container = pd.DataFrame()
+            result_container.index.rename('step', inplace=True)
         for ckpt_step, ckpt_path_ in tqdm(self.get_ckpts(ckpt_path).items(), desc='checkpoints'):
             viz_callback.set_current_step(ckpt_step)
             self.load(ckpt_path_)
             results = self.model.evaluate(dataset, callbacks=[viz_callback], verbose=0, return_dict=True)
-            if export_csv: result_container.append(pd.Series(results, name=ckpt_step))
+            if export_csv: result_container = result_container.append(pd.Series(results, name=ckpt_step))
         if export_csv:
             result_container.to_csv(os.path.join(export_path, tag, 'results.csv'))
         return
