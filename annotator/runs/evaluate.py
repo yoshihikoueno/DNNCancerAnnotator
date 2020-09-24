@@ -24,7 +24,9 @@ def evaluate(
     tag,
     config=None,
     avoid_overwrite=False,
-    prediction_threshold=None,
+    export_path=None,
+    export_images=False,
+    export_csv=False,
 ):
     '''
     Evaluate a model with specified configs
@@ -38,8 +40,9 @@ def evaluate(
             None (default): load config from save_path
         avoid_overwrite (bool): should `save_path` altered when a directory already
             exists at the original `save_path` to avoid overwriting.
-        prediction_threshold (float): threshold to apply onto the predicted segmentation mask
-            default(None): disable threshold
+        export_path (str): path to export results
+        export_images (bool): export images
+        export_csv (bool): export results csv
     '''
     if config is None:
         config = os.path.join(save_path, 'options.yaml')
@@ -54,5 +57,8 @@ def evaluate(
         tag=tag,
         save_path=os.path.join(save_path),
         avoid_overwrite=avoid_overwrite,
+        export_path=export_path,
+        export_images=export_images,
+        export_csv=export_csv,
     )
     return results

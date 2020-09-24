@@ -5,8 +5,8 @@ provide custom callbacks
 # biult-in
 import pdb
 import os
-import sys
 import pprint
+import re
 from multiprocessing import cpu_count
 from concurrent.futures import ThreadPoolExecutor
 
@@ -82,6 +82,8 @@ class Visualizer(Callback):
         pr_region_nthreshold=100,
         pr_IoU_threshold=0.30,
         ignore_test=True,
+        export_images=False,
+        export_path_depth=3,
     ):
         self.params = None
         self.model = None
@@ -93,6 +95,8 @@ class Visualizer(Callback):
         self.ratio = ratio
         self._writer = None
         self._owned_writer = True
+        self.export_images = export_images
+        self.export_path_depth = export_path_depth
         self.pr_nthreshold = pr_nthreshold
         self.pr_region_nthreshold = pr_region_nthreshold
         self.pr_IoU_threshold = pr_IoU_threshold
@@ -249,6 +253,14 @@ class Visualizer(Callback):
     def _emit(self, tag, image):
         with self.writer.as_default():
             result = tf.summary.image(tag.numpy().decode(), image, step=self.get_current_step())
+        if self.export_images:
+            tag_str = tag.numpy().decode()
+            pattern = r'^path:(.*),sliceID:(.*)$'
+            tags = re.sub(pattern, r'\1', tag_str).split('/')[-self.export_path_depth:]
+            slice_num = int(re.sub(pattern, r'\2', tag_str))
+            step = self.get_current_step()
+            path = os.path.join(self.save_dir, self.tag, 'images', *tags, f'{slice_num:02d}', f'step_{step:08d}.png')
+            tf.io.write_file(path, tf.image.encode_png(tf.squeeze(tf.cast(image * 255, tf.uint8), 0)))
         return result
 
     @tf.function

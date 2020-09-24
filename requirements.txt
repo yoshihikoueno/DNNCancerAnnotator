@@ -5,6 +5,7 @@ matplotlib
 numpy
 protobuf
 regex
+pandas
 tqdm
 opencv-python
 git+https://github.com/yoshihikoueno/dsargparse.git@master

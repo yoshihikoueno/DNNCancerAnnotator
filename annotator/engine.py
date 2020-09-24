@@ -16,6 +16,7 @@ import itertools
 import tensorflow as tf
 from tensorflow import keras
 from tqdm import tqdm
+import pandas as pd
 
 # customs
 from .models import tf_models
@@ -131,20 +132,39 @@ class TFKerasModel():
         self._exit_strategy_section()
         return results
 
-    def eval(self, dataset, viz_ds, save_path, tag='val', avoid_overwrite=False):
+    def eval(
+            self,
+            dataset,
+            viz_ds,
+            save_path,
+            tag='val',
+            avoid_overwrite=False,
+            export_path=None,
+            export_images=False,
+            export_csv=False,
+    ):
         self.model.build(dataset.element_spec[0].shape)
         ckpt_path = os.path.join(save_path, 'checkpoints')
 
-        tfevents_path = os.path.join(save_path, 'tfevents')
-        if os.path.exists(os.path.join(tfevents_path, tag)):
+        if not export_path: export_path = os.path.join(save_path, 'tfevents')
+        if os.path.exists(os.path.join(export_path, tag)):
             if avoid_overwrite:
-                while os.path.exists(os.path.join(tfevents_path, tag)): tag += '_'
+                while os.path.exists(os.path.join(export_path, tag)): tag += '_'
             else: raise ValueError(f'tag: {tag} already exists.')
-        viz_callback = custom_callbacks.Visualizer(tag, viz_ds, 1, tfevents_path, ignore_test=False)
+
+        viz_callback = custom_callbacks.Visualizer(
+            tag, viz_ds, 1, ignore_test=False,
+            save_dir=export_path,
+            export_images=export_images,
+        )
+        if export_csv: result_container = pd.DataFrame()
         for ckpt_step, ckpt_path_ in tqdm(self.get_ckpts(ckpt_path).items(), desc='checkpoints'):
             viz_callback.set_current_step(ckpt_step)
             self.load(ckpt_path_)
-            self.model.evaluate(dataset, callbacks=[viz_callback], verbose=0, return_dict=True)
+            results = self.model.evaluate(dataset, callbacks=[viz_callback], verbose=0, return_dict=True)
+            if export_csv: result_container.append(pd.Series(results, name=ckpt_step))
+        if export_csv:
+            result_container.to_csv(os.path.join(self.save_dir, self.tag, 'results.csv'))
         return
 
     def list_ckpts(self, save_path):
