@@ -1,0 +1,2 @@
+deploy_options.LearningRateScheduler:
+    'lambda epoch, current_lr: 0.005 * 0.96 ** (epoch // 1000)'

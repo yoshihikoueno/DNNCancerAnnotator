@@ -1,0 +1,2 @@
+data_options.train:
+    batch_size: 28

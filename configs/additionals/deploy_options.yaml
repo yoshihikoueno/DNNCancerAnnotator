@@ -1,0 +1,8 @@
+deploy_options:
+    optimizer: adam
+    LearningRateScheduler: "lambda epoch, current_lr: 0.001 * 0.96 ** (epoch // 1000)"
+    loss:
+        class_name: WeightedCrossentropy
+        config:
+            weight_mul: 3.0
+    enable_multigpu: false
