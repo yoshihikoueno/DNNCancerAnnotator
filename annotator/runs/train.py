@@ -35,7 +35,10 @@ def train(
     then train a model, finally dump reults.
 
     Args:
-        config: configuration file path
+        config (list[str]): configuration file path
+            This option accepts arbitrary number of configs.
+            If a list is specified, the first one is considered
+            as a "main" config, and the other ones will overwrite the content
         save_path: where to save weights/configs/results
         data_path (list[str]): path to the data root dir
         max_steps (int): max training steps
