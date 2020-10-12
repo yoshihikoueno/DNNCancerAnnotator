@@ -67,6 +67,7 @@ def train_ds(
     slice_types=('TRA', 'ADC', 'DWI', 'DCEE', 'DCEL', 'label'),
     normalize_exams=True,
     output_size=(256, 256),
+    augment_options=None,
 ):
     '''
     generate dataset for training
@@ -81,7 +82,16 @@ def train_ds(
             the same number of slices from each exam
         output_size: size of images in the dataset
             images will be centrally cropped to match the size
+        augment_options (dict): options for augmentation
     '''
+    if augment_options is None: augment_options = {'random_crop': {}}
+    default_augment_options = {
+        augment_random_crop: dict(output_size=output_size),
+        augment_random_flip: {},
+        augment_random_contrast: dict(target_channels=list(range(len(slice_types[:-1])))),
+        augment_random_warp: {},
+    }
+
     ds = base(
         path,
         output_size=(512, 512),
@@ -90,12 +100,7 @@ def train_ds(
     )
     ds = augment(
         ds,
-        methods={
-            augment_random_crop: dict(output_size=output_size),
-            augment_random_flip: {},
-            augment_random_contrast: dict(target_channels=list(range(len(slice_types[:-1])))),
-            augment_random_warp: {},
-        },
+        methods=parse_augment_options(augment_options, default_augment_options),
     )
     ds = to_feature_label(ds, slice_types=slice_types)
     ds = ds.shuffle(buffer_size)
@@ -513,6 +518,21 @@ def base_from_tfrecords(path: list, normalize=False, include_meta=False, output_
             num_parallel_calls=tf.data.experimental.AUTOTUNE,
         )
     return ds
+
+
+def parse_augment_options(options, default_options=None):
+    '''parse augment options'''
+    if default_options is None: default_options = {}
+    result = {}
+    for name, conf in options.items():
+        func = globals()[f'augment_{name}']
+        if func in default_options:
+            new_conf = default_options[func].copy()
+            new_conf.update(conf)
+            conf = new_conf
+
+        result[func] = conf
+    return result
 
 
 def augment(ds, methods=None):
