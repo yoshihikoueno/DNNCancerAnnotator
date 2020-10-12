@@ -525,6 +525,7 @@ def parse_augment_options(options, default_options=None):
     if default_options is None: default_options = {}
     result = {}
     for name, conf in options.items():
+        if conf is None: conf = {}
         func = globals()[f'augment_{name}']
         if func in default_options:
             new_conf = default_options[func].copy()
