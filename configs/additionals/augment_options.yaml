@@ -1,0 +1,8 @@
+data_options.train.augment_options:
+    random_crop:
+    random_flip:
+    random_contrast:
+    random_warp:
+        n_points: 500
+        max_idff: 15
+        stddev: 20.0
