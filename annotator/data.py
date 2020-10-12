@@ -551,7 +551,9 @@ def augment(ds, methods=None):
             methods.keys(), methods.values(),
         ))
 
-    for op, config in methods.items(): ds = op(ds, **config)
+    for op, config in methods.items():
+        print('Augment: applying', op, config)
+        ds = op(ds, **config)
     return ds
 
 
