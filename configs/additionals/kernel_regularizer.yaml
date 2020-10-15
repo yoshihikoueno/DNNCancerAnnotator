@@ -1,0 +1,4 @@
+model_options.kernel_regularizer:
+    class_name: L2
+    config:
+        l2: 0.01
