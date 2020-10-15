@@ -42,6 +42,7 @@ class UNet(Layer):
             trainable=trainable,
             padding=padding,
             activation=activation,
+            **kargs,
         )
         self.encoder = components.Encoder(
             filters_first=filters_first,
@@ -96,7 +97,8 @@ class UNetAnnotator(keras.Model):
         **kargs,
     ):
         '''
-        this function represents a part of model which will produce annotation or segmentation
+        A class that represents a part of model which will produce annotation or segmentation
+
         Args:
             input_: input tensor
             n_filters_first: the num of filters in the first block
@@ -104,11 +106,11 @@ class UNetAnnotator(keras.Model):
             rate: the rate of downsample and upsample
             kernel_size: kernel_size of every Conv
             conv_stride: stride in conv
-            bn: (bool) whether or not BN is applied
-            training: (bool) whether the model is being trained
+            bn (bool): whether or not BN is applied
+            training (bool): whether the model is being trained
                 this can be None as long as bn=False
             padding: padding method used in internal components
-            trainable: (bool) whether or not this block is trainable
+            trainable (bool): whether or not this block is trainable
         '''
         super().__init__(**kargs)
         self.configs = dict(
