@@ -26,6 +26,7 @@ class Downsample(Layer):
         trainable=True,
         padding='valid',
         activation='relu',
+        kernel_regularizer=None,
         **kargs,
     ):
         super().__init__(self, **kargs)
@@ -39,11 +40,13 @@ class Downsample(Layer):
             trainable=trainable,
             padding=padding,
             activation=activation,
+            kernel_regularizer=kernel_regularizer,
         )
         self.padding = padding
         convs = [
             layers.Conv2D(
                 filters, kernel_size, strides=conv_stride, padding=self.padding, activation=activation, trainable=trainable,
+                kernel_regularizer=kernel_regularizer,
             )
             for i in range(n_conv)
         ]
@@ -90,6 +93,7 @@ class Upsample(Layer):
         n_conv=2,
         padding='valid',
         activation='relu',
+        kernel_regularizer=None,
         **kargs,
     ):
         super().__init__(self, **kargs)
@@ -103,18 +107,20 @@ class Upsample(Layer):
             n_conv=n_conv,
             padding=padding,
             activation=activation,
+            kernel_regularizer=kernel_regularizer,
+            **kargs,
         )
         self.filters = filters
         self.rate = rate
         self.padding = padding
         self.activation = activation
         self.conv_transpose = layers.Convolution2DTranspose(
-            filters=filters, kernel_size=rate, strides=rate,
+            filters=filters, kernel_size=rate, strides=rate, kernel_regularizer=kernel_regularizer,
             padding=self.padding, activation=None, trainable=trainable)
 
         self.conv_layers = [
             layers.Conv2D(
-                filters=filters, kernel_size=kernel_size,
+                filters=filters, kernel_size=kernel_size, kernel_regularizer=kernel_regularizer,
                 strides=conv_stride, padding=self.padding, activation=self.activation, trainable=trainable
             ) for i in range(n_conv)
         ]
@@ -172,6 +178,7 @@ class Encoder(Layer):
         n_conv=2,
         padding='valid',
         activation='relu',
+        kernel_regularizer=None,
         **kargs,
     ):
         super().__init__(self, **kargs)
@@ -186,6 +193,7 @@ class Encoder(Layer):
             n_conv=n_conv,
             padding=padding,
             activation=activation,
+            kernel_regularizer=kernel_regularizer,
             **kargs,
         )
         self.padding = padding
@@ -204,6 +212,7 @@ class Encoder(Layer):
                     padding=self.padding,
                     trainable=trainable,
                     activation=self.activation,
+                    kernel_regularizer=kernel_regularizer,
                 )
             )
             next_filters = int(rate * next_filters)
@@ -246,6 +255,7 @@ class Decoder(Layer):
         trainable,
         padding='valid',
         activation='relu',
+        kernel_regularizer=None,
         **kargs,
     ):
         super().__init__(self, **kargs)
@@ -257,6 +267,8 @@ class Decoder(Layer):
             trainable=trainable,
             padding=padding,
             activation=activation,
+            kernel_regularizer=kernel_regularizer,
+            **kargs,
         )
         self.upsamples = []
         self.rate = rate
@@ -266,6 +278,7 @@ class Decoder(Layer):
         self.bn = bn
         self.trainable = trainable
         self.padding = padding
+        self.kernel_regularizer = kernel_regularizer
         return
 
     def get_config(self):
@@ -285,6 +298,7 @@ class Decoder(Layer):
                     trainable=self.trainable,
                     padding=self.padding,
                     activation=self.activation,
+                    kernel_regularizer=self.kernel_regularizer,
                 )
             )
 

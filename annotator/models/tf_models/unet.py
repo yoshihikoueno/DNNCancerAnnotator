@@ -29,6 +29,7 @@ class UNet(Layer):
         trainable=True,
         padding='valid',
         activation='relu',
+        kernel_regularizer=None,
         **kargs,
     ):
         super().__init__(**kargs)
@@ -42,6 +43,7 @@ class UNet(Layer):
             trainable=trainable,
             padding=padding,
             activation=activation,
+            kernel_regularizer=kernel_regularizer,
             **kargs,
         )
         self.encoder = components.Encoder(
@@ -54,6 +56,7 @@ class UNet(Layer):
             padding=padding,
             activation=activation,
             trainable=trainable,
+            kernel_regularizer=kernel_regularizer,
         )
         self.decoder = components.Decoder(
             rate=rate,
@@ -63,6 +66,7 @@ class UNet(Layer):
             padding=padding,
             activation=activation,
             trainable=trainable,
+            kernel_regularizer=kernel_regularizer,
         )
         return
 
@@ -94,6 +98,7 @@ class UNetAnnotator(keras.Model):
         bn=False,
         padding='valid',
         activation='relu',
+        kernel_regularizer=None,
         **kargs,
     ):
         '''
@@ -111,6 +116,8 @@ class UNetAnnotator(keras.Model):
                 this can be None as long as bn=False
             padding: padding method used in internal components
             trainable (bool): whether or not this block is trainable
+            kernel_regularizer: kernel regularizer
+                can be either None, string, dict
         '''
         super().__init__(**kargs)
         self.configs = dict(
@@ -122,6 +129,7 @@ class UNetAnnotator(keras.Model):
             bn=bn,
             padding=padding,
             activation=activation,
+            kernel_regularizer=kernel_regularizer,
             **kargs,
         )
         unet = UNet(
@@ -133,9 +141,13 @@ class UNetAnnotator(keras.Model):
             bn=bn,
             padding=padding,
             activation=components.solve_activation(activation),
+            kernel_regularizer=kernel_regularizer,
             **kargs,
         )
-        last_conv = layers.Conv2D(filters=1, kernel_size=1, activation='sigmoid', padding=padding, **kargs)
+        last_conv = layers.Conv2D(
+            filters=1, kernel_size=1, activation='sigmoid', padding=padding,
+            kernel_regularizer=kernel_regularizer, **kargs,
+        )
         self.unet = unet
         self.padding = padding
         self.last_conv = last_conv
