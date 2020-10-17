@@ -1,6 +1,6 @@
 model: MulmoUNetAnnotator
 model_options:
-    n_filters_first: 64
+    n_filters_first: 16
     n_downsample: 4
     rate: 2
     kernel_size: 3
