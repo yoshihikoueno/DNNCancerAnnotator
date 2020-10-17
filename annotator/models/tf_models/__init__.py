@@ -1,1 +1,1 @@
-from annotator.models.tf_models.unet import UNet, UNetAnnotator
+from annotator.models.tf_models.unet import UNet, UNetAnnotator, MulmoUNet, MulmoUNetAnnotator
