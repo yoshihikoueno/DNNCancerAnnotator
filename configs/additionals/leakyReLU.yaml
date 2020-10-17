@@ -1,0 +1,4 @@
+model_options.activation:
+    class_name: LeakyReLU
+    config:
+        alpha: 0.3
