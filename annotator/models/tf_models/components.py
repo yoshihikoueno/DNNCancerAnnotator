@@ -230,7 +230,7 @@ class Encoder(Layer):
         self.built = True
         return output_shape, ref_shapes
 
-    def call(self, inputs, training=True):
+    def call(self, inputs, training=False):
         res_list = list()
         next_inputs = inputs
 

@@ -81,7 +81,7 @@ class UNet(Layer):
         self.built = True
         return decoder_out
 
-    def call(self, inputs, training=True):
+    def call(self, inputs, training=False):
         res_list, downsampled = self.encoder(inputs=inputs, training=training)
         output = self.decoder(inputs=downsampled, res_list=res_list, training=training)
         return output
@@ -176,7 +176,7 @@ class MulmoUNet(Layer):
         self.built = True
         return decoder_out
 
-    def call(self, inputs, training=True):
+    def call(self, inputs, training=False):
         res_lists, downsampled_list = zip(*(
             encoder(inputs=inputs[:, :, :, idx:idx + 1], training=training)
             for idx, encoder in enumerate(self.encoders)
@@ -275,7 +275,7 @@ class UNetAnnotator(keras.Model):
         return
 
     @tf.function
-    def call(self, x, training=True):
+    def call(self, x, training=False):
         unet_out = self.unet(x, training=training)
         output = self.last_conv(unet_out, training=training)
         return output
