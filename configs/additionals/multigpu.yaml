@@ -1,0 +1,1 @@
+deploy_options.enable_multigpu: true
