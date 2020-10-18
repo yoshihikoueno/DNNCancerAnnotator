@@ -84,6 +84,7 @@ class TFKerasModel():
         early_stop_steps=None,
         visualization=None,
         auto_resume=True,
+        profile=False,
     ):
         self._enter_strategy_section()
         self.model.build(dataset.element_spec[0].shape)
@@ -102,7 +103,7 @@ class TFKerasModel():
             callbacks.append(ckpt_saver)
 
             tfevents_path = os.path.join(save_path, 'tfevents')
-            tb_callback = tf.keras.callbacks.TensorBoard(tfevents_path, update_freq='epoch', profile_batch=0)
+            tb_callback = tf.keras.callbacks.TensorBoard(tfevents_path, update_freq='epoch', profile_batch=int(profile))
             tb_callback.set_model(self.model)
             callbacks.append(tb_callback)
             for tag, viz_ds in visualization.items():

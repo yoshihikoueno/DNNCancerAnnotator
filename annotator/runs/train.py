@@ -28,6 +28,7 @@ def train(
     validate=False,
     val_data_path=None,
     visualize=False,
+    profile=False,
 ):
     '''
     Train a model with specified configs.
@@ -49,6 +50,7 @@ def train(
         validate: also validate the model on the validation dataset
         val_data_path (list[str]): path to the validation dataset
         visualize (bool): should visualize results
+        profile (bool): enable profilling
     '''
     config = load.load_config(config)
     dump.dump_options(
@@ -81,6 +83,7 @@ def train(
         save_freq=save_freq,
         val_data=val_ds,
         visualization=visualization,
+        profile=profile,
     )
 
     dump.dump_train_results(
