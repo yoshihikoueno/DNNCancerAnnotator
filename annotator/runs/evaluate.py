@@ -27,6 +27,7 @@ def evaluate(
     export_path=None,
     export_images=False,
     export_csv=False,
+    min_interval=1,
 ):
     '''
     Evaluate a model with specified configs
@@ -43,6 +44,9 @@ def evaluate(
         export_path (str): path to export results
         export_images (bool): export images
         export_csv (bool): export results csv
+        min_interval (int): minimum interval in steps between evaluations.
+            Checkpoints which are less than `min_interval` steps away
+            from the previous one will be disregarded.
     '''
     if config is None:
         config = os.path.join(save_path, 'options.yaml')
@@ -60,5 +64,6 @@ def evaluate(
         export_path=export_path,
         export_images=export_images,
         export_csv=export_csv,
+        min_interval=min_interval,
     )
     return results

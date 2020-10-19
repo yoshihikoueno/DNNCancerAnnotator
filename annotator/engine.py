@@ -11,6 +11,7 @@ from functools import partial
 import logging
 import re
 import itertools
+from logging import warn
 
 # external
 import tensorflow as tf
@@ -143,6 +144,7 @@ class TFKerasModel():
             export_path=None,
             export_images=False,
             export_csv=False,
+            min_interval=1,
     ):
         self.model.build(dataset.element_spec[0].shape)
         ckpt_path = os.path.join(save_path, 'checkpoints')
@@ -161,7 +163,13 @@ class TFKerasModel():
         if export_csv:
             result_container = pd.DataFrame()
             result_container.index.rename('step', inplace=True)
+
+        previous_step = None
         for ckpt_step, ckpt_path_ in tqdm(self.get_ckpts(ckpt_path).items(), desc='checkpoints'):
+            if previous_step is not None and (ckpt_step - previous_step) < min_interval:
+                warn(f'Ignored {ckpt_path_} due to min_interval:{min_interval}.')
+                continue
+            else: previous_step = ckpt_step
             viz_callback.set_current_step(ckpt_step)
             self.load(ckpt_path_)
             results = self.model.evaluate(dataset, callbacks=[viz_callback], verbose=0, return_dict=True)
