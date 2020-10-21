@@ -32,7 +32,7 @@ def train(
 ):
     '''
     Train a model with specified configs.
-    This funciton will first dump the input arguments,
+    This function will first dump the input arguments,
     then train a model, finally dump reults.
 
     Args:

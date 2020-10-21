@@ -74,6 +74,7 @@ class Downsample(Layer):
         self.built = True
         return conv_output_shape, pool_output_shape
 
+    @tf.function
     def call(self, inputs, training):
         conv = self.convchain(inputs, training=training)
         half = self.pool(conv, training=training)
@@ -154,6 +155,7 @@ class Upsample(Layer):
         output_shape = [*tconv_shape[:3], self.filters]
         return output_shape
 
+    @tf.function
     def call(self, inputs, reference, training):
         tconv0 = self.conv_transpose(inputs, training=training)
         assert all(map(lambda x, y: x >= y, reference.shape[1:], tconv0.shape[1:]))
@@ -230,6 +232,7 @@ class Encoder(Layer):
         self.built = True
         return output_shape, ref_shapes
 
+    @tf.function
     def call(self, inputs, training=False):
         res_list = list()
         next_inputs = inputs
@@ -308,6 +311,7 @@ class Decoder(Layer):
         self.built = True
         return inputs_shape
 
+    @tf.function
     def call(self, inputs, res_list, training):
         upsampled = inputs
         assert len(res_list) == len(self.upsamples), f'#References {len(res_list)} != #upsamples {len(self.upsamples)}'

@@ -1,5 +1,5 @@
 '''
-provide various funcitons to load data.
+provide various functions to load data.
 '''
 
 # built-in

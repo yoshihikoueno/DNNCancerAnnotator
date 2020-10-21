@@ -81,6 +81,7 @@ class UNet(Layer):
         self.built = True
         return decoder_out
 
+    @tf.function
     def call(self, inputs, training=False):
         res_list, downsampled = self.encoder(inputs=inputs, training=training)
         output = self.decoder(inputs=downsampled, res_list=res_list, training=training)
@@ -176,6 +177,7 @@ class MulmoUNet(Layer):
         self.built = True
         return decoder_out
 
+    @tf.function
     def call(self, inputs, training=False):
         res_lists, downsampled_list = zip(*(
             encoder(inputs=inputs[:, :, :, idx:idx + 1], training=training)
