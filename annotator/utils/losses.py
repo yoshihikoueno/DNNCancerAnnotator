@@ -14,7 +14,7 @@ import tensorflow as tf
 
 
 @tf.function
-def tf_weighted_crossentropy(label, pred, weight=None, weight_add=0, weight_mul=1):
+def tf_weighted_crossentropy(label, pred, weight=None, weight_add=0, weight_mul=1, from_logits=False):
     '''
     calculates weighted loss
     '''
@@ -26,10 +26,8 @@ def tf_weighted_crossentropy(label, pred, weight=None, weight_add=0, weight_mul=
     with tf.control_dependencies([tf.debugging.assert_greater_equal(weight, 0.0)]):
         weight_mask = label * weight + tf.ones_like(label)
 
-    label = tf.stack([label == 0, label == 1], axis=-1)
-    pred = tf.concat([1 - pred, pred], axis=-1)
-
-    bce = tf.keras.losses.BinaryCrossentropy(reduction=tf.losses.Reduction.NONE)
+    label = tf.expand_dims(label, -1)
+    bce = tf.keras.losses.BinaryCrossentropy(reduction=tf.losses.Reduction.NONE, from_logits=from_logits)
     loss = bce(label, pred, sample_weight=weight_mask)
     loss = tf.reduce_mean(loss, [1, 2])
     return loss
@@ -47,9 +45,9 @@ class TFWeightedCrossentropy(tf.keras.losses.Loss):
         super().__init__(name='weighted_crossentropy')
         return
 
-    @tf.function
     def call(self, y_true, y_pred):
-        loss = tf_weighted_crossentropy(y_true, y_pred, **self.config)
+        y_pred_logits = y_pred._keras_logits
+        loss = tf_weighted_crossentropy(y_true, y_pred_logits, from_logits=True, **self.config)
         return loss
 
     def get_config(self):
