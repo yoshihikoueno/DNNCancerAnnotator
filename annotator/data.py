@@ -653,6 +653,7 @@ def random_crop(image, output_size=(512, 512), stddev=4, max_=6, min_=-6):
     return image
 
 
+@tf.function
 def random_warp(image, n_points=100, max_diff=5, stddev=2.0, process_in_batch=None):
     '''
     this function will perfom data augmentation

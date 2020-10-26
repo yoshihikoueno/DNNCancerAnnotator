@@ -3,6 +3,7 @@ data_options.train.augment_options:
     random_flip:
     random_contrast:
     random_warp:
-        n_points: 500
+        n_points: 150
         max_diff: 15
         stddev: 20.0
+        process_in_batch: 15
