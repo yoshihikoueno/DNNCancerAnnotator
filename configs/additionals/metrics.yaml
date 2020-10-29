@@ -8,9 +8,11 @@ deploy_options.metrics:
     - AUC:
         curve: "PR"
         name: "pixel/AUPRC"
+        num_thresholds: 150
     - AUC:
         curve: "ROC"
         name: "pixel/AUROC"
+        num_thresholds: 150
     - FBetaScore:
         thresholds: 0.80
         beta: 1.0
