@@ -18,6 +18,7 @@ from tensorflow.keras.callbacks import Callback
 
 # custom
 from . import metrics as custom_metrics
+from . import nn as custom_nn
 
 
 class TFProgress(Callback):
@@ -195,9 +196,15 @@ class Visualizer(Callback):
         for type_ in self.per_epoch_resources['pr_curve']:
             if type_ == 'pixel':
                 for metric in self.internal_metics:
-                    self.per_epoch_resources['pr_curve'][type_][metric].update_state(y_true, y_pred)
+                    tf.distribute.get_strategy().run(
+                        self.per_epoch_resources['pr_curve'][type_][metric].update_state,
+                        (custom_nn.to_distributed(y_true), custom_nn.to_distributed(y_pred))
+                    )
             elif type_ == 'region':
-                self.per_epoch_resources['pr_curve'][type_].update_state(y_true, y_pred)
+                tf.distribute.get_strategy().run(
+                    self.per_epoch_resources['pr_curve'][type_].update_state,
+                    (custom_nn.to_distributed(y_true), custom_nn.to_distributed(y_pred))
+                )
             else: raise NotImplementedError
         return
 
