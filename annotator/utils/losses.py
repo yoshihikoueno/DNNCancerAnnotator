@@ -23,7 +23,7 @@ def tf_weighted_crossentropy(label, pred, weight=None, weight_add=0, weight_mul=
         weight = 1 / positive_rate if positive_rate > 0.0 else 1.0
 
     weight = weight_mul * weight + weight_add
-    with tf.control_dependencies([tf.debugging.assert_greater_equal(weight, 0.0)]):
+    with tf.control_dependencies([tf.debugging.assert_greater_equal(weight, 0.0, name='assert_on_weight')]):
         weight_mask = label * weight + tf.ones_like(label)
 
     label = tf.expand_dims(label, -1)
@@ -60,13 +60,16 @@ def tf_get_positive_rate(label):
     max_value = tf.reduce_max(label)
     min_value = tf.reduce_min(label)
 
-    upbound = tf.debugging.assert_less_equal(max_value, 1.0)
-    lowbound = tf.debugging.assert_greater_equal(min_value, 0.0)
+    upbound = tf.debugging.assert_less_equal(max_value, 1.0, name='assert_on_max')
+    lowbound = tf.debugging.assert_greater_equal(min_value, 0.0, name='assert_on_min')
 
     with tf.control_dependencies([upbound, lowbound]):
         positive_rate = tf.reduce_sum(label) / tf.cast(tf.reduce_prod(tf.shape(label)), tf.float32)
 
-    assert_range = [tf.debugging.assert_greater_equal(positive_rate, 0.0), tf.debugging.assert_less_equal(positive_rate, 1.0)]
+    assert_range = [
+        tf.debugging.assert_greater_equal(positive_rate, 0.0, name='assert_on_range_lower'),
+        tf.debugging.assert_less_equal(positive_rate, 1.0, name='assert_on_range_lower'),
+    ]
     with tf.control_dependencies(assert_range):
         return positive_rate
 
