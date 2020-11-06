@@ -70,7 +70,9 @@ class TFKerasModel():
         if not ckpts: return
         latest_step = max(ckpts.keys())
         latest_ckpt = ckpts[latest_step]
-        self.model.load_weights(latest_ckpt).assert_consumed()
+        # Ideally, we want to use `assert_consumed`, but we need to use `assert_existing_objects_matched` for now.
+        # https://github.com/tensorflow/tensorflow/issues/44518
+        self.model.load_weights(latest_ckpt).assert_existing_objects_matched()
         self.current_step = latest_step
         logging.warn(f'Resumed from {latest_step}')
         return
