@@ -18,6 +18,9 @@ def tf_weighted_crossentropy(label, pred, weight=None, weight_add=0, weight_mul=
     '''
     calculates weighted loss
     '''
+    if tf.reduce_prod(tf.shape(label)) == 0:
+        return tf.constant(float('nan'))
+
     if weight is None:
         positive_rate = tf_get_positive_rate(label)
         weight = 1 / positive_rate if positive_rate > 0.0 else 1.0
