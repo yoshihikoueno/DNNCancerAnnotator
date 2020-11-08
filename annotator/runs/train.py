@@ -87,8 +87,8 @@ def train(
     )
 
     dump.dump_train_results(
-        os.path.join(save_path, 'results.yaml'),
+        os.path.join(save_path, 'results.pkl'),
         results,
-        format_='yaml',
+        format_='pickle',
     )
     return results
