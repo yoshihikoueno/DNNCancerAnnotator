@@ -65,9 +65,8 @@ def tf_get_positive_rate(label):
 
     upbound = tf.debugging.assert_less_equal(max_value, 1.0, name='assert_on_max')
     lowbound = tf.debugging.assert_greater_equal(min_value, 0.0, name='assert_on_min')
-    shape_sanity = tf.debugging.assert_positive(tf.shape(label), 'shape is insane', name='assert_shape_sanity')
 
-    with tf.control_dependencies([upbound, lowbound, shape_sanity]):
+    with tf.control_dependencies([upbound, lowbound]):
         positive_rate = tf.reduce_sum(label) / tf.cast(tf.reduce_prod(tf.shape(label)), tf.float32)
 
     assert_range = [
