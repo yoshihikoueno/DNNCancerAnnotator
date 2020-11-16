@@ -1,0 +1,4 @@
+data_options.train.augment_options:
+    random_crop:
+    random_flip:
+    random_contrast:
