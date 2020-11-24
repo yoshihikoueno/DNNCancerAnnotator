@@ -1,0 +1,5 @@
+data_options.train.augment_options.random_warp:
+        n_points: 50
+        max_diff: 5
+        stddev: 3
+        process_in_batch: null
