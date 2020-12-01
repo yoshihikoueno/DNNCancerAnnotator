@@ -1,0 +1,1 @@
+data_options.train.slice_types: ['TRA', 'ADC', 'label']
