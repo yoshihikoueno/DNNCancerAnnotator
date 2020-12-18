@@ -18,7 +18,7 @@ Tensorflow
 ## Usage
 ### Available commands
  ```bash
- python3 -m annotaator -h
+ python3 -m annotator -h
 
  # usage: python3 -m annotator [-h] {train,evaluate,extract_all,generate_tfrecords} ...
  # 
@@ -40,12 +40,12 @@ Tensorflow
 ### Train
  Command:
  ```bash
- python3 -m annotaator train
+ python3 -m annotator train
  ```
 
  Options:
  ```bash
- python3 -m annotaator train -h
+ python3 -m annotator train -h
 
  # usage: python3 -m annotator train [-h] --config CONFIG [CONFIG ...] --save_path SAVE_PATH --data_path DATA_PATH [DATA_PATH ...]
  #                                   --max_steps MAX_STEPS [--early_stop_steps EARLY_STOP_STEPS] [--save_freq SAVE_FREQ] [--validate]
@@ -86,12 +86,12 @@ Tensorflow
 ### Evaluate
  Command:
  ```bash
- python3 -m annotaator evaluate
+ python3 -m annotator evaluate
  ```
 
  Options:
  ```bash
- python3 -m annotaator evaluate -h
+ python3 -m annotator evaluate -h
 
  # usage: python3 -m annotator evaluate [-h] --save_path SAVE_PATH --data_path DATA_PATH [DATA_PATH ...] --tag TAG [--config CONFIG]
  #                                      [--avoid_overwrite] [--export_path EXPORT_PATH] [--export_images] [--export_csv]
