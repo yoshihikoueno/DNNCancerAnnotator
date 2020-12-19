@@ -466,7 +466,7 @@ def extract_slices_from_tfrecord(path, output_slice_types=None, include_meta=Tru
             'examID': x['examID'],
             'path': x['path'],
             'category': x['category'],
-            'slice_types': x['slice_types'],
+            'slice_types': tf.gather(x['slice_types'], get_indices(x['slice_types'], output_slice_types)),
         },
         num_parallel_calls=tf.data.experimental.AUTOTUNE,
     )
