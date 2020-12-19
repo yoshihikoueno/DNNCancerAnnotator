@@ -145,6 +145,7 @@ class TFKerasModel():
             avoid_overwrite=False,
             export_path=None,
             export_images=False,
+            visualize_sensitivity=False,
             export_csv=False,
             min_interval=1,
     ):
@@ -161,6 +162,7 @@ class TFKerasModel():
             tag, viz_ds, 1, ignore_test=False,
             save_dir=export_path,
             export_images=export_images,
+            visualize_sensitivity=visualize_sensitivity,
         )
         if export_csv:
             result_container = pd.DataFrame()

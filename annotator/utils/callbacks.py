@@ -15,6 +15,9 @@ import tensorflow as tf
 from tensorboard import summary as summary_lib
 from tqdm import tqdm
 from tensorflow.keras.callbacks import Callback
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
+import numpy as np
 
 # custom
 from . import metrics as custom_metrics
@@ -84,6 +87,7 @@ class Visualizer(Callback):
         pr_IoU_threshold=0.30,
         ignore_test=True,
         export_images=False,
+        visualize_sensitivity=False,
         export_path_depth=3,
     ):
         self.params = None
@@ -97,6 +101,7 @@ class Visualizer(Callback):
         self._writer = None
         self._owned_writer = True
         self.export_images = export_images
+        self.show_sensitivity = visualize_sensitivity
         self.export_path_depth = export_path_depth
         self.pr_nthreshold = pr_nthreshold
         self.pr_region_nthreshold = pr_region_nthreshold
@@ -249,17 +254,58 @@ class Visualizer(Callback):
         return
 
     def process_batch(self, batch):
-        batch_output = self.model(batch['x'])
+        if self.show_sensitivity:
+            with tf.GradientTape() as g:
+                g.watch(batch['x'])
+                batch_output = self.model(batch['x'])
+            gradient = g.gradient(batch_output, batch['x'])
+            summed_grad = tf.reduce_sum(tf.abs(gradient), [1, 2])
+            sensitivity_channels = summed_grad / tf.transpose(
+                tf.broadcast_to(tf.reduce_sum(summed_grad, axis=1), tf.transpose(summed_grad).shape)
+            )
+        else:
+            batch_output = self.model(batch['x'])
+
         self.update_internal_metrics(batch['y'], batch_output)
         consts = self.make_summary_batch(batch, batch_output)
-        with ThreadPoolExecutor() as e:
-            results = list(e.map(self._emit, *consts))
+
+        if self.show_sensitivity:
+            with ThreadPoolExecutor() as e:
+                sensitivity_images = list(e.map(self.visualize_sensitivity, sensitivity_channels, batch['slice_types']))
+            assert len(sensitivity_images) == len(consts[0])
+            with ThreadPoolExecutor() as e:
+                results = list(e.map(self._emit, *consts, sensitivity_images))
+        else:
+            with ThreadPoolExecutor() as e:
+                results = list(e.map(self._emit, *consts))
+
         assert tf.reduce_all(results)
         return
 
-    def _emit(self, tag, image):
+    def visualize_sensitivity(self, sensitivity_channel, slice_types):
+        '''visualize channel-wise sensitivity'''
+        slice_types = list(map(lambda x: x.decode(), slice_types.numpy().tolist()))[:-1]
+        fig = Figure()
+        canvas = FigureCanvas(fig)
+        ax = fig.gca()
+        ax.bar(list(range(len(slice_types))), sensitivity_channel.numpy(), tick_label=slice_types)
+
+        canvas.draw()
+        s, (width, height) = canvas.print_to_buffer()
+        image = np.fromstring(s, np.uint8).reshape((height, width, 4))[:, :, :-1]
+        image = np.expand_dims(image, 0)
+        return image
+
+    def _emit(self, tag, image, sensitivity_image=None):
         with self.writer.as_default():
             result = tf.summary.image(tag.numpy().decode(), image, step=self.get_current_step())
+            if sensitivity_image is not None:
+                sense_result = tf.summary.image(
+                    tag.numpy().decode() + 'sensitivity',
+                    sensitivity_image,
+                    step=self.get_current_step(),
+                )
+                result = result and sense_result
         if self.export_images:
             tag_str = tag.numpy().decode()
             pattern = r'^path:(.*),sliceID:(.*)$'
@@ -268,6 +314,11 @@ class Visualizer(Callback):
             step = self.get_current_step()
             path = os.path.join(self.save_dir, self.tag, 'images', *tags, f'{slice_num:02d}', f'step_{step:08d}.png')
             tf.io.write_file(path, tf.image.encode_png(tf.squeeze(tf.cast(image * 255, tf.uint8), 0)))
+
+            if sensitivity_image is not None:
+                sense_path = os.path.join(
+                    self.save_dir, self.tag, 'images', *tags, f'{slice_num:02d}', f'step_{step:08d}_sensitivity.png')
+                tf.io.write_file(sense_path, tf.image.encode_png(np.squeeze(sensitivity_image, 0)))
         return result
 
     @tf.function

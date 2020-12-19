@@ -27,6 +27,7 @@ def evaluate(
     export_path=None,
     export_images=False,
     export_csv=False,
+    visualize_sensitivity=False,
     min_interval=1,
 ):
     '''
@@ -43,6 +44,7 @@ def evaluate(
             exists at the original `save_path` to avoid overwriting.
         export_path (str): path to export results
         export_images (bool): export images
+        visualize_sensitivity (bool): whether sensitivity should be visualized
         export_csv (bool): export results csv
         min_interval (int): minimum interval in steps between evaluations.
             Checkpoints which are less than `min_interval` steps away
@@ -64,6 +66,7 @@ def evaluate(
         export_path=export_path,
         export_images=export_images,
         export_csv=export_csv,
+        visualize_sensitivity=visualize_sensitivity,
         min_interval=min_interval,
     )
     return results
