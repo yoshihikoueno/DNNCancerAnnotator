@@ -289,6 +289,9 @@ class Visualizer(Callback):
         canvas = FigureCanvas(fig)
         ax = fig.gca()
         ax.bar(list(range(len(slice_types))), sensitivity_channel.numpy(), tick_label=slice_types)
+        ax.set_ylim(0, 1)
+        ax.set_xlabel('modality')
+        ax.set_ylabel('normalized sensitivity')
 
         canvas.draw()
         s, (width, height) = canvas.print_to_buffer()
