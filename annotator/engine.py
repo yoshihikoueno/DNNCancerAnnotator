@@ -148,6 +148,7 @@ class TFKerasModel():
             visualize_sensitivity=False,
             export_csv=False,
             min_interval=1,
+            step_range=None,
     ):
         self.model.build(dataset.element_spec[0].shape)
         ckpt_path = os.path.join(save_path, 'checkpoints')
@@ -157,6 +158,12 @@ class TFKerasModel():
             if avoid_overwrite:
                 while os.path.exists(os.path.join(export_path, tag)): tag += '_'
             else: raise ValueError(f'tag: {tag} already exists.')
+
+        if step_range is None:
+            step_range = 0, float('inf')
+        else:
+            assert len(step_range) == 2
+            assert 0 <= step_range[0] <= step_range[1]
 
         viz_callback = custom_callbacks.Visualizer(
             tag, viz_ds, 1, ignore_test=False,
@@ -169,7 +176,10 @@ class TFKerasModel():
             result_container.index.rename('step', inplace=True)
 
         previous_step = None
-        for ckpt_step, ckpt_path_ in tqdm(self.get_ckpts(ckpt_path).items(), desc='checkpoints'):
+        for ckpt_step, ckpt_path_ in tqdm(
+                list(filter(lambda step: step_range[0] <= step[0] <= step_range[1], self.get_ckpts(ckpt_path).items())),
+                desc='checkpoints',
+        ):
             if previous_step is not None and (ckpt_step - previous_step) < min_interval:
                 warn(f'Ignored {ckpt_path_} due to min_interval:{min_interval}.')
                 continue

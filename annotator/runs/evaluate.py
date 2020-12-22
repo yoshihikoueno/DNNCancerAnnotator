@@ -29,6 +29,7 @@ def evaluate(
     export_csv=False,
     visualize_sensitivity=False,
     min_interval=1,
+    step_range=None,
 ):
     '''
     Evaluate a model with specified configs
@@ -49,6 +50,9 @@ def evaluate(
         min_interval (int): minimum interval in steps between evaluations.
             Checkpoints which are less than `min_interval` steps away
             from the previous one will be disregarded.
+        step_range (tuple[int]): range of steps to evaluate.
+            Format: "--step_range start end".
+            Default: evaluate the checkpoint at all the steps.
     '''
     if config is None:
         config = os.path.join(save_path, 'options.yaml')
@@ -68,5 +72,6 @@ def evaluate(
         export_csv=export_csv,
         visualize_sensitivity=visualize_sensitivity,
         min_interval=min_interval,
+        step_range=step_range,
     )
     return results
