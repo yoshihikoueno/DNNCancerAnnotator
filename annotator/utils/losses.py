@@ -9,6 +9,7 @@ import pdb
 
 # external
 import tensorflow as tf
+import tensorflow_addons as tfa
 
 # custom
 
@@ -37,25 +38,49 @@ def tf_weighted_crossentropy(label, pred, weight=None, weight_add=0, weight_mul=
 
 
 class TFWeightedCrossentropy(tf.keras.losses.Loss):
-    def __init__(self, weight=None, weight_add=0.0, weight_mul=1.0):
+    def __init__(
+            self,
+            weight=None,
+            weight_add=0.0,
+            weight_mul=1.0,
+            label_smoothing=False,
+            label_smoothing_filter_size=6,
+            label_smoothing_sigma=3,
+    ):
         self.weight = weight
         self.weight_add = weight_add
         self.weight_mul = weight_mul
+        self.label_smoothing = label_smoothing
+        self.label_smoothing_filter_size = label_smoothing_filter_size
+        self.label_smoothing_sigma = label_smoothing_sigma
 
-        self.config = dict(
-            weight=weight, weight_add=weight_add, weight_mul=weight_mul,
-        )
         super().__init__(name='weighted_crossentropy')
         return
 
     def call(self, y_true, y_pred):
         y_pred_logits = y_pred._keras_logits
-        loss = tf_weighted_crossentropy(y_true, y_pred_logits, from_logits=True, **self.config)
+        if self.label_smoothing:
+            y_true = tf.expand_dims(y_true, -1)
+            y_true = tfa.image.gaussian_filter2d(
+                y_true, filter_shape=self.label_smoothing_filter_size, sigma=self.label_smoothing_sigma,
+            )
+            y_true = tf.squeeze(y_true, -1)
+        loss = tf_weighted_crossentropy(
+            y_true, y_pred_logits, from_logits=True,
+            weight=self.weight, weight_add=self.weight_add, weight_mul=self.weight_mul,
+        )
         return loss
 
     def get_config(self):
         config = super().get_config()
-        config.update(self.config)
+        config.update(dict(
+            weight=self.weight,
+            weight_add=self.weight_add,
+            weight_mul=self.weight_mul,
+            label_smoothing=self.label_smoothing,
+            label_smoothing_filter_size=self.label_smoothing_filter_size,
+            label_smoothing_sigma=self.label_smoothing_sigma,
+        ))
         return config
 
 
