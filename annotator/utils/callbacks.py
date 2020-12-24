@@ -89,6 +89,7 @@ class Visualizer(Callback):
         export_images=False,
         visualize_sensitivity=False,
         export_path_depth=3,
+        overlay=False
     ):
         self.params = None
         self.model = None
@@ -103,6 +104,7 @@ class Visualizer(Callback):
         self.export_images = export_images
         self.show_sensitivity = visualize_sensitivity
         self.export_path_depth = export_path_depth
+        self.overlay = overlay
         self.pr_nthreshold = pr_nthreshold
         self.pr_region_nthreshold = pr_region_nthreshold
         self.pr_IoU_threshold = pr_IoU_threshold
@@ -267,7 +269,7 @@ class Visualizer(Callback):
             batch_output = self.model(batch['x'])
 
         self.update_internal_metrics(batch['y'], batch_output)
-        consts = self.make_summary_batch(batch, batch_output)
+        consts = self.make_summary_batch(batch, batch_output, overlay=self.overlay)
 
         if self.show_sensitivity:
             with ThreadPoolExecutor() as e:
@@ -325,9 +327,9 @@ class Visualizer(Callback):
         return result
 
     @tf.function
-    def make_summary_batch(self, batch, batch_output):
+    def make_summary_batch(self, batch, batch_output, overlay=False):
         results = tf.map_fn(
-            lambda x: self.make_summary_constructor(x[0], x[1], x[2], x[3], x[4]),
+            lambda x: self.make_summary_constructor(x[0], x[1], x[2], x[3], x[4], overlay=overlay),
             (batch['x'], batch['y'], batch['path'], batch['sliceID'], batch_output),
             dtype=(tf.string, tf.float32),
             parallel_iterations=cpu_count(),
@@ -335,8 +337,8 @@ class Visualizer(Callback):
         return results
 
     @tf.function
-    def make_summary_constructor(self, features, label, path, sliceID, output):
-        image = self.generate_image(features, label, output)
+    def make_summary_constructor(self, features, label, path, sliceID, output, overlay=False):
+        image = self.generate_image(features, label, output, overlay=overlay)
         image = tf.image.resize(image, tf.cast(tf.cast(tf.shape(image)[1:3], tf.float32) * self.ratio, tf.int32))
         sliceID = tf.strings.as_string(sliceID)
         return tf.strings.join(['path:', path, ',sliceID:', sliceID]), image
@@ -350,12 +352,19 @@ class Visualizer(Callback):
         step = tf.cast(step, tf.int64)
         return step
 
-    def generate_image(self, features, label, output, axis=1):
+    def generate_image(self, features, label, output, axis=1, overlay=False):
         assert len(features.shape) == 3
         horizontal_features = tf.concat(tf.unstack(features, axis=-1), axis=axis)
         pred = tf.squeeze(output, axis=-1)
-        if self.prediction_threshold is not None: pred = tf.cast(pred > self.prediction_threshold, pred.dtype)
+        if self.prediction_threshold is not None:
+            pred = tf.cast(pred > self.prediction_threshold, pred.dtype)
+        if overlay:
+            horizontal_features = tf.expand_dims(horizontal_features, -1)
+            horizontal_features = tf.tile(horizontal_features, [1, 1, 3])
+            pred = tf.stack([pred, features[:, :, 0], features[:, :, 0]], axis=-1)
+            label = tf.stack([label, features[:, :, 0], features[:, :, 0]], axis=-1)
         image = tf.concat([horizontal_features, label, pred], axis=axis)
         image = tf.expand_dims(image, 0)
-        image = tf.expand_dims(image, -1)
+        if not overlay:
+            image = tf.expand_dims(image, -1)
         return image

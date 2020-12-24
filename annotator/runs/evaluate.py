@@ -30,6 +30,7 @@ def evaluate(
     visualize_sensitivity=False,
     min_interval=1,
     step_range=None,
+    overlay=False,
 ):
     '''
     Evaluate a model with specified configs
@@ -53,6 +54,8 @@ def evaluate(
         step_range (tuple[int]): range of steps to evaluate.
             Format: "--step_range start end".
             Default: evaluate the checkpoint at all the steps.
+        overlay (bool): whether visualized segmentation should be overlayed
+            on top of input image.
     '''
     if config is None:
         config = os.path.join(save_path, 'options.yaml')
@@ -73,5 +76,6 @@ def evaluate(
         visualize_sensitivity=visualize_sensitivity,
         min_interval=min_interval,
         step_range=step_range,
+        overlay=overlay,
     )
     return results

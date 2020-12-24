@@ -149,6 +149,7 @@ class TFKerasModel():
             export_csv=False,
             min_interval=1,
             step_range=None,
+            overlay=False,
     ):
         self.model.build(dataset.element_spec[0].shape)
         ckpt_path = os.path.join(save_path, 'checkpoints')
@@ -170,6 +171,7 @@ class TFKerasModel():
             save_dir=export_path,
             export_images=export_images,
             visualize_sensitivity=visualize_sensitivity,
+            overlay=overlay,
         )
         if export_csv:
             result_container = pd.DataFrame()
