@@ -31,6 +31,7 @@ def evaluate(
     min_interval=1,
     step_range=None,
     overlay=False,
+    skip_visualization=False,
 ):
     '''
     Evaluate a model with specified configs
@@ -56,17 +57,20 @@ def evaluate(
             Default: evaluate the checkpoint at all the steps.
         overlay (bool): whether visualized segmentation should be overlayed
             on top of input image.
+        skip_visualization (bool): whether the visualization should be skipped.
     '''
     if config is None:
         config = os.path.join(save_path, 'options.yaml')
         config = load.load_config(config)['config']
     else: config = load.load_config(config)
     ds = data.eval_ds(data_path, **config['data_options']['eval'])
-    viz_ds = data.eval_ds(data_path, **config['data_options']['eval'], include_meta=True)
+
+    if skip_visualization: viz_ds = None
+    else: viz_ds = data.eval_ds(data_path, **config['data_options']['eval'], include_meta=True)
 
     model = engine.TFKerasModel(config)
     results = model.eval(
-        ds, viz_ds,
+        ds, viz_ds=viz_ds,
         tag=tag,
         save_path=os.path.join(save_path),
         avoid_overwrite=avoid_overwrite,

@@ -139,8 +139,8 @@ class TFKerasModel():
     def eval(
             self,
             dataset,
-            viz_ds,
             save_path,
+            viz_ds=None,
             tag='val',
             avoid_overwrite=False,
             export_path=None,
@@ -166,13 +166,14 @@ class TFKerasModel():
             assert len(step_range) == 2
             assert 0 <= step_range[0] <= step_range[1]
 
-        viz_callback = custom_callbacks.Visualizer(
-            tag, viz_ds, 1, ignore_test=False,
-            save_dir=export_path,
-            export_images=export_images,
-            visualize_sensitivity=visualize_sensitivity,
-            overlay=overlay,
-        )
+        if viz_ds is not None:
+            viz_callback = custom_callbacks.Visualizer(
+                tag, viz_ds, 1, ignore_test=False,
+                save_dir=export_path,
+                export_images=export_images,
+                visualize_sensitivity=visualize_sensitivity,
+                overlay=overlay,
+            )
         if export_csv:
             result_container = pd.DataFrame()
             result_container.index.rename('step', inplace=True)
@@ -186,11 +187,17 @@ class TFKerasModel():
                 warn(f'Ignored {ckpt_path_} due to min_interval:{min_interval}.')
                 continue
             else: previous_step = ckpt_step
-            viz_callback.set_current_step(ckpt_step)
+            if viz_ds is not None: viz_callback.set_current_step(ckpt_step)
             self.load(ckpt_path_)
-            results = self.model.evaluate(dataset, callbacks=[viz_callback], verbose=0, return_dict=True)
+            results = self.model.evaluate(
+                dataset,
+                callbacks=[viz_callback] if viz_ds is not None else [],
+                verbose=0,
+                return_dict=True,
+            )
             if export_csv: result_container = result_container.append(pd.Series(results, name=ckpt_step))
         if export_csv:
+            os.makedirs(os.path.join(export_path, tag), exist_ok=True)
             result_container.to_csv(os.path.join(export_path, tag, 'results.csv'))
         return
 
