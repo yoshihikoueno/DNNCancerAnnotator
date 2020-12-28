@@ -41,8 +41,8 @@ def evaluate(
         save_path: where to find weights/configs/results
         data_path (list[str]): path to the data root dir
         tag: save tag
-        config (str): configuration file path
-            None (default): load config from save_path
+        config (list[str]): configuration file path
+            This option accepts arbitrary number of configs.
         avoid_overwrite (bool): should `save_path` altered when a directory already
             exists at the original `save_path` to avoid overwriting.
         export_path (str): path to export results
@@ -59,10 +59,12 @@ def evaluate(
             on top of input image.
         skip_visualization (bool): whether the visualization should be skipped.
     '''
-    if config is None:
-        config = os.path.join(save_path, 'options.yaml')
-        config = load.load_config(config)['config']
-    else: config = load.load_config(config)
+    saved_config = os.path.join(save_path, 'options.yaml')
+    saved_config = load.load_config(saved_config)['config']
+    if config:
+        add_config = load.load_config(config)
+        config = load._apply_config(saved_config, add_config)
+    else: config = saved_config
     ds = data.eval_ds(data_path, **config['data_options']['eval'])
 
     if skip_visualization: viz_ds = None
