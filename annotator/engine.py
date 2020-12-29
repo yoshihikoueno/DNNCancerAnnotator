@@ -171,6 +171,7 @@ class TFKerasModel():
                 tag, viz_ds, 1, ignore_test=False,
                 save_dir=export_path,
                 export_images=export_images,
+                export_csv=export_csv,
                 visualize_sensitivity=visualize_sensitivity,
                 overlay=overlay,
             )

@@ -18,6 +18,7 @@ from tensorflow.keras.callbacks import Callback
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 import numpy as np
+import pandas as pd
 
 # custom
 from . import metrics as custom_metrics
@@ -87,6 +88,7 @@ class Visualizer(Callback):
         pr_IoU_threshold=0.30,
         ignore_test=True,
         export_images=False,
+        export_csv=False,
         visualize_sensitivity=False,
         export_path_depth=3,
         overlay=False
@@ -102,6 +104,7 @@ class Visualizer(Callback):
         self._writer = None
         self._owned_writer = True
         self.export_images = export_images
+        self.export_csv = export_csv
         self.show_sensitivity = visualize_sensitivity
         self.export_path_depth = export_path_depth
         self.overlay = overlay
@@ -274,9 +277,14 @@ class Visualizer(Callback):
         if self.show_sensitivity:
             with ThreadPoolExecutor() as e:
                 sensitivity_images = list(e.map(self.visualize_sensitivity, sensitivity_channels, batch['slice_types']))
+                sensitivity_data = list(e.map(
+                    lambda x, y: pd.Series(x.numpy(), index=map(bytes.decode, y[:-1].numpy())),
+                    sensitivity_channels,
+                    batch['slice_types'],
+                ))
             assert len(sensitivity_images) == len(consts[0])
             with ThreadPoolExecutor() as e:
-                results = list(e.map(self._emit, *consts, sensitivity_images))
+                results = list(e.map(self._emit, *consts, sensitivity_images, sensitivity_data))
         else:
             with ThreadPoolExecutor() as e:
                 results = list(e.map(self._emit, *consts))
@@ -301,7 +309,7 @@ class Visualizer(Callback):
         image = np.expand_dims(image, 0)
         return image
 
-    def _emit(self, tag, image, sensitivity_image=None):
+    def _emit(self, tag, image, sensitivity_image=None, sensitivity_data=None):
         with self.writer.as_default():
             result = tf.summary.image(tag.numpy().decode(), image, step=self.get_current_step())
             if sensitivity_image is not None:
@@ -324,6 +332,11 @@ class Visualizer(Callback):
                 sense_path = os.path.join(
                     self.save_dir, self.tag, 'images', *tags, f'{slice_num:02d}', f'step_{step:08d}_sensitivity.png')
                 tf.io.write_file(sense_path, tf.image.encode_png(np.squeeze(sensitivity_image, 0)))
+        if self.export_csv:
+            if sensitivity_data is not None:
+                sense_csv_path = os.path.join(
+                    self.save_dir, self.tag, 'csv', *tags, f'{slice_num:02d}', f'step_{step:08d}_sensitivity.csv')
+                tf.io.write_file(sense_csv_path, sensitivity_data.to_csv())
         return result
 
     @tf.function
