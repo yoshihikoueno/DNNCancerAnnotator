@@ -1,1 +1,2 @@
 data_options.train.slice_types: ['TRA', 'DCEE', 'DCEL', 'label']
+data_options.eval.slice_types: ['TRA', 'DCEE', 'DCEL', 'label']
