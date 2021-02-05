@@ -1,0 +1,5 @@
+model: MultiResUnet
+model_options:
+    height: null
+    width: null
+    n_channels: 5
