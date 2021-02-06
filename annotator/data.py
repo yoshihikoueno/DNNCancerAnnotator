@@ -638,6 +638,27 @@ def augment_random_crop(ds, **options):
     return ds
 
 
+def augment_random_intrachannelwarp(ds: tf.data.Dataset, paired=((0, -1),), **options) -> tf.data.Dataset:
+    '''warps each channel indenpently.
+
+    As oppposed to `augment_random_warp`, this will introduce misalignments between
+    channels. For this reason, this function is not intended to used as a regular training,
+    rather for experiment purpose to see how a model robust against misalignments between slices.
+
+    Args:
+        paired (list[tuple[int, int]]): list of paired channels. Paired channels will be applied
+            warping operation together, keeping them consistent.
+            This is meant to be used to align a channel to a label, while still introducing
+            artificial misalignments between channels.
+        options: options to be passed to random_warp function
+    '''
+    ds = ds.map(
+        lambda image: random_intrachannelwarp(image, paired=paired, **options),
+        num_parallel_calls=tf.data.experimental.AUTOTUNE,
+    )
+    return ds
+
+
 def random_crop(image, output_size=(512, 512), stddev=4, max_=6, min_=-6):
     """
     performs augmentation by cropping/resizing
@@ -649,6 +670,32 @@ def random_crop(image, output_size=(512, 512), stddev=4, max_=6, min_=-6):
         ((tf.shape(image)[:2] - output_size) // 2 + diff)[0],
         ((tf.shape(image)[:2] - output_size) // 2 + diff)[1],
         *output_size,
+    )
+    return image
+
+
+def random_intrachannelwarp(image, n_points=100, max_diff=5, stddev=2.0, paired=()):
+    paired = list(map(
+        lambda channel_list: list(map(
+            lambda channel: channel if channel >= 0 else image.get_shape()[-1] + channel,
+            channel_list,
+        )),
+        paired,
+    ))
+    non_paired = list(map(
+        lambda x: [x],
+        set(range(image.get_shape()[-1])) - set([index for indices in paired for index in indices]),
+    ))
+    channel_groups = paired + non_paired
+    warped_groups = list(map(
+        lambda group: random_warp(tf.gather(image, group, axis=-1), n_points=100, max_diff=max_diff, stddev=stddev),
+        channel_groups,
+    ))
+    warped_groups = [channel for channels in warped_groups for channel in tf.unstack(channels, axis=-1)]
+    indices = [index for indices in channel_groups for index in indices]
+    image = tf.stack(
+        list(map(lambda x: x[1], sorted(zip(indices, warped_groups), key=lambda x: x[0]))),
+        axis=-1
     )
     return image
 
