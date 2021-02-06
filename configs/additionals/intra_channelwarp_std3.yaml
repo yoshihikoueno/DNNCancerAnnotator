@@ -1,0 +1,4 @@
+data_options.train.augment_options.random_intrachannelwarp:
+    n_points: 50
+    max_diff: 100
+    stddev: 3.0
