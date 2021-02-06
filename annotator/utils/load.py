@@ -48,6 +48,7 @@ def _apply_config(base_config, add_config):
             target[dest] = value
         else:
             keys = dest.split('.')
+            if keys[0] not in target: target[keys[0]] = dict()
             _apply(target[keys[0]], '.'.join(keys[1:]), value)
         return target
 
