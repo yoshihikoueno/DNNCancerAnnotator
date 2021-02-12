@@ -32,6 +32,7 @@ def evaluate(
     step_range=None,
     overlay=False,
     skip_visualization=False,
+    export_casewise_metrics=False,
 ):
     '''
     Evaluate a model with specified configs
@@ -58,6 +59,8 @@ def evaluate(
         overlay (bool): whether visualized segmentation should be overlayed
             on top of input image.
         skip_visualization (bool): whether the visualization should be skipped.
+        export_casewise_metrics (bool): whether or not to export evaluation results for each case separately.
+            This needs `export_csv == True` to get the result actually yielded.
     '''
     saved_config = os.path.join(save_path, 'options.yaml')
     saved_config = load.load_config(saved_config)['config']
@@ -83,5 +86,6 @@ def evaluate(
         min_interval=min_interval,
         step_range=step_range,
         overlay=overlay,
+        export_casewise_metrics=export_casewise_metrics,
     )
     return results

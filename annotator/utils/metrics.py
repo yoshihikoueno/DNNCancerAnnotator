@@ -265,7 +265,7 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
         return tp, fp
 
     @tf.function
-    def get_tp_fn_fp(self, y_true, y_pred, sample_weight):
+    def get_tp_fn_fp(self, y_true, y_pred, sample_weight, return_raw=False):
         if sample_weight is not None: raise NotImplementedError
         y_true = tf.cast(y_true, tf.float32)
         y_pred = tf.squeeze(y_pred, -1)
@@ -279,6 +279,9 @@ class _RegionBasedMetric(tf.keras.metrics.Metric):
             fn_output_signature=(tf.int32, tf.int32, tf.int32),
             parallel_iterations=cpu_count(),
         )
+
+        if return_raw: return tp_array, fn_array, fp_array
+
         tp = tf.reduce_sum(tp_array, axis=0)
         fn = tf.reduce_sum(fn_array, axis=0)
         fp = tf.reduce_sum(fp_array, axis=0)

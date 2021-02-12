@@ -91,7 +91,8 @@ class Visualizer(Callback):
         export_csv=False,
         visualize_sensitivity=False,
         export_path_depth=3,
-        overlay=False
+        overlay=False,
+        export_casewise_metrics=False,
     ):
         self.params = None
         self.model = None
@@ -112,6 +113,7 @@ class Visualizer(Callback):
         self.pr_region_nthreshold = pr_region_nthreshold
         self.pr_IoU_threshold = pr_IoU_threshold
         self.ignore_test = ignore_test
+        self.export_casewise_metrics = export_casewise_metrics
         self.per_epoch_resources = {}
         self.prediction_threshold = prediction_threshold
         self.internal_metics = [
@@ -185,6 +187,8 @@ class Visualizer(Callback):
     def prepare_internal_metrics(self):
         pixel_thresholds = [i / float(self.pr_nthreshold - 1) for i in range(self.pr_nthreshold)]
         region_thresholds = [i / float(self.pr_region_nthreshold - 1) for i in range(self.pr_region_nthreshold)]
+        self.per_epoch_resources['pixel_thresholds'] = pixel_thresholds
+        self.per_epoch_resources['region_thresholds'] = region_thresholds
         self.per_epoch_resources['pr_curve'] = {
             'pixel': {
                 'true_positive_counts': tf.keras.metrics.TruePositives(pixel_thresholds),
@@ -283,11 +287,39 @@ class Visualizer(Callback):
                     batch['slice_types'],
                 ))
             assert len(sensitivity_images) == len(consts[0])
-            with ThreadPoolExecutor() as e:
-                results = list(e.map(self._emit, *consts, sensitivity_images, sensitivity_data))
         else:
-            with ThreadPoolExecutor() as e:
-                results = list(e.map(self._emit, *consts))
+            sensitivity_images = [None] * len(consts[0])
+            sensitivity_data = [None] * len(consts[0])
+
+        if self.export_casewise_metrics:
+            region_tp_array, region_fn_array, region_fp_array = self.per_epoch_resources['pr_curve']['region'].get_tp_fn_fp(
+                batch['y'],
+                batch_output,
+                sample_weight=None,
+                return_raw=True,
+            )
+            metric_data = [
+                pd.Series(dict(
+                    (
+                        *zip(map(
+                            lambda x: f'region_tp@PixelThreshold{x:.2}', self.per_epoch_resources['region_thresholds']),
+                            region_tp.numpy()),
+                        *zip(map(
+                            lambda x: f'region_fn@PixelThreshold{x:.2}', self.per_epoch_resources['region_thresholds']),
+                            region_fn.numpy()),
+                        *zip(map(
+                            lambda x: f'region_fp@PixelThreshold{x:.2}', self.per_epoch_resources['region_thresholds']),
+                            region_fp.numpy()),
+                    ),
+                    tag=tag.numpy().decode(),
+                ))
+                for tag, region_tp, region_fn, region_fp in zip(consts[0], region_tp_array, region_fn_array, region_fp_array)
+            ]
+            assert len(metric_data) == len(consts[0])
+        else: metric_data = [None] * len(consts[0])
+
+        with ThreadPoolExecutor() as e:
+            results = list(e.map(self._emit, *consts, sensitivity_images, sensitivity_data, metric_data))
 
         assert tf.reduce_all(results)
         return
@@ -309,7 +341,7 @@ class Visualizer(Callback):
         image = np.expand_dims(image, 0)
         return image
 
-    def _emit(self, tag, image, sensitivity_image=None, sensitivity_data=None):
+    def _emit(self, tag, image, sensitivity_image=None, sensitivity_data=None, metrics_data=None):
         with self.writer.as_default():
             result = tf.summary.image(tag.numpy().decode(), image, step=self.get_current_step())
             if sensitivity_image is not None:
@@ -319,12 +351,12 @@ class Visualizer(Callback):
                     step=self.get_current_step(),
                 )
                 result = result and sense_result
+        tag_str = tag.numpy().decode()
+        pattern = r'^path:(.*),sliceID:(.*)$'
+        tags = re.sub(pattern, r'\1', tag_str).split('/')[-self.export_path_depth:]
+        slice_num = int(re.sub(pattern, r'\2', tag_str))
+        step = self.get_current_step()
         if self.export_images:
-            tag_str = tag.numpy().decode()
-            pattern = r'^path:(.*),sliceID:(.*)$'
-            tags = re.sub(pattern, r'\1', tag_str).split('/')[-self.export_path_depth:]
-            slice_num = int(re.sub(pattern, r'\2', tag_str))
-            step = self.get_current_step()
             path = os.path.join(self.save_dir, self.tag, 'images', *tags, f'{slice_num:02d}', f'step_{step:08d}.png')
             tf.io.write_file(path, tf.image.encode_png(tf.squeeze(tf.cast(image * 255, tf.uint8), 0)))
 
@@ -337,6 +369,10 @@ class Visualizer(Callback):
                 sense_csv_path = os.path.join(
                     self.save_dir, self.tag, 'csv', *tags, f'{slice_num:02d}', f'step_{step:08d}_sensitivity.csv')
                 tf.io.write_file(sense_csv_path, sensitivity_data.to_csv())
+            if metrics_data is not None:
+                metric_csv_path = os.path.join(
+                    self.save_dir, self.tag, 'csv', *tags, f'{slice_num:02d}', f'step_{step:08d}_metrics.csv')
+                tf.io.write_file(metric_csv_path, pd.DataFrame(metrics_data).T.to_csv())
         return result
 
     @tf.function
