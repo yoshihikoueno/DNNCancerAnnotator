@@ -1,5 +1,5 @@
 connected-components-3d
-tensorflow==2.4.0
+tensorflow==2.5.0
 tensorflow-addons
 matplotlib
 numpy
