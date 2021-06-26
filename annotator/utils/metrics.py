@@ -60,9 +60,9 @@ class FBetaScore(tf.keras.metrics.Metric):
         score = (1 + self.beta**2) * precision * recall / (self.beta**2 * precision + recall + self.epsilon)
         return score
 
-    def reset_states(self):
-        self.precision.reset_states()
-        self.recall.reset_states()
+    def reset_state(self):
+        self.precision.reset_state()
+        self.recall.reset_state()
         return
 
     def get_config(self):
@@ -352,7 +352,7 @@ class RegionBasedRecall(_RegionBasedMetric):
             'fn_count', dtype=tf.int32, shape=tf.shape(self.thresholds), initializer=tf.zeros_initializer)
         return
 
-    def reset_states(self):
+    def reset_state(self):
         self.tp_count.assign(tf.zeros_like(self.tp_count))
         self.fn_count.assign(tf.zeros_like(self.fn_count))
         return
@@ -379,7 +379,7 @@ class RegionBasedPrecision(_RegionBasedMetric):
             'fp_count', dtype=tf.int32, shape=tf.shape(self.thresholds), initializer=tf.zeros_initializer)
         return
 
-    def reset_states(self):
+    def reset_state(self):
         self.tp_count.assign(tf.zeros_like(self.tp_count))
         self.fp_count.assign(tf.zeros_like(self.fp_count))
         return
@@ -404,7 +404,7 @@ class RegionBasedTruePositives(_RegionBasedMetric):
             'tp_count', dtype=tf.int32, shape=tf.shape(self.thresholds), initializer=tf.zeros_initializer)
         return
 
-    def reset_states(self):
+    def reset_state(self):
         self.tp_count.assign(tf.zeros_like(self.tp_count))
         return
 
@@ -427,7 +427,7 @@ class RegionBasedFalsePositives(_RegionBasedMetric):
             'fp_count', dtype=tf.int32, shape=tf.shape(self.thresholds), initializer=tf.zeros_initializer)
         return
 
-    def reset_states(self):
+    def reset_state(self):
         self.fp_count.assign(tf.zeros_like(self.fp_count))
         return
 
@@ -450,7 +450,7 @@ class RegionBasedFalseNegatives(_RegionBasedMetric):
             'fn_count', dtype=tf.int32, shape=tf.shape(self.thresholds), initializer=tf.zeros_initializer)
         return
 
-    def reset_states(self):
+    def reset_state(self):
         self.fn_count.assign(tf.zeros_like(self.fn_count))
         return
 
@@ -477,7 +477,7 @@ class RegionBasedConfusionMatrix(_RegionBasedMetric):
             'tp_count', dtype=tf.int32, shape=tf.shape(self.thresholds), initializer=tf.zeros_initializer)
         return
 
-    def reset_states(self):
+    def reset_state(self):
         self.fn_count.assign(tf.zeros_like(self.fn_count))
         self.fp_count.assign(tf.zeros_like(self.fn_count))
         self.tp_count.assign(tf.zeros_like(self.fn_count))
