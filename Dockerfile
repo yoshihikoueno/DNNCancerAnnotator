@@ -1,4 +1,4 @@
-from tensorflow/tensorflow:2.4.0-gpu
+from tensorflow/tensorflow:2.5.0-gpu
 run apt update
 run apt install -y git python3-pip libsm6 libxext6 libxrender-dev libgl1-mesa-glx
 run git clone --single-branch --branch master https://github.com/yoshihikoueno/DNNCancerAnnotator
