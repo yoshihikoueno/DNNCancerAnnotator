@@ -230,6 +230,7 @@ class Encoder(Layer):
             ref_shape, output_shape = downsample.build(output_shape)
             ref_shapes.append(ref_shape)
         self.built = True
+        output_shape = ref_shapes.pop()
         return output_shape, ref_shapes
 
     @tf.function
@@ -244,7 +245,9 @@ class Encoder(Layer):
             )
             res_list.append(res)
             next_inputs = downsampled
-        return res_list, downsampled
+
+        latent = res_list.pop()
+        return res_list, latent
 
 
 class Decoder(Layer):
