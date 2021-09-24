@@ -152,6 +152,7 @@ class TFKerasModel():
             overlay=False,
             export_casewise_metrics=False,
     ):
+        self._enter_strategy_section()
         self.model.build(dataset.element_spec[0].shape)
         ckpt_path = os.path.join(save_path, 'checkpoints')
 
@@ -202,6 +203,7 @@ class TFKerasModel():
         if export_csv:
             os.makedirs(os.path.join(export_path, tag), exist_ok=True)
             result_container.to_csv(os.path.join(export_path, tag, 'results.csv'))
+        self._exit_strategy_section()
         return
 
     def list_ckpts(self, save_path):
