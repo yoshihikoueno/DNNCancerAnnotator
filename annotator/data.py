@@ -227,8 +227,11 @@ def generate_tfrecords(
 
     Args:
         path: path to the data directory
+            under the path, it should be structured as below:
+            -- path -- healthy -- patientID -- examID -- slice_type -- <sliceID>.png
+                    |- cancer -- patientID -- examID -- slice_type -- <sliceID>.png
         output: output path
-        category: category to include
+        category: category to include (e.g. cancer or healthy)
             default (None): include all
         slice_types: list of slices to be included
     '''
