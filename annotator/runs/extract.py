@@ -346,9 +346,13 @@ def process_slice(slice_, exam, dry, include_label, debug, kernel_size, iteratio
     )
     for kind, img in results.items():
         kind_dir = os.path.join(exam, kind)
-        if not dry:
-            if not os.path.exists(kind_dir): os.makedirs(kind_dir, exist_ok=True)
+        if dry: continue
+        if not os.path.exists(kind_dir): os.makedirs(kind_dir, exist_ok=True)
+        try:
             cv2.imwrite(os.path.join(kind_dir, slice_), img)
+        except cv2.error:
+            logging.error(f'Failed to save image (shape: {img.shape}) for {os.path.join(kind_dir, slice_)}.')
+            raise
     return
 
 
