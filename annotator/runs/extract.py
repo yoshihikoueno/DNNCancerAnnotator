@@ -11,6 +11,7 @@ from glob import glob
 from multiprocessing.pool import Pool
 import multiprocessing as mp
 import functools
+import logging
 
 # external
 import cv2
@@ -96,6 +97,8 @@ def detect_internals(
         while y > 60: y -= box_size[1]
     else:
         x, y = find_top_left_fallback(gray)
+        logging.warn('Corner detection failed and falled back to naive method.'
+                     f'Starting point ({x}, {y}) was detected.')
         if x < 0 or y < 0: raise ValueError('Failed to detect corners')
 
     anchor = x, y
