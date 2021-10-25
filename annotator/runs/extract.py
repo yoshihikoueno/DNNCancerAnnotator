@@ -351,10 +351,13 @@ def process_slice(slice_, exam, dry, include_label, debug, kernel_size, iteratio
 
 def list_exams(path, extension='png'):
     if path[-1] == os.path.sep: path = path[:-1]
+
+    def is_supported(filepath):
+        return (os.path.splitext(filepath)[1][1:]).lower() == extension
+
     exams = {
-        exam: sorted(list(filter(lambda x: os.path.splitext(x)[1][1:] == extension, os.listdir(exam))))
-        for exam in glob(os.path.join(path, '*', '*'))
-        if list(filter(lambda x: os.path.splitext(x)[1][1:] == extension, os.listdir(exam)))
+        exam: sorted(list(filter(is_supported, os.listdir(exam))))
+        for exam in glob(os.path.join(path, '*', '*')) if any(map(is_supported, os.listdir(exam)))
     }
     return exams
 
