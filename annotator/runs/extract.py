@@ -79,8 +79,8 @@ def detect_internals(
     '''
     def _draw_end_support(img):
         img = np.copy(img)
-        img[-1, :, :] = 255
-        img[:, -1, :] = 255
+        img[-1, :] = 255
+        img[:, -1] = 255
         return img
 
     def _detect_corner(img, detector_filter, adjust_x=0, adjust_y=0, candidate_threshold_rank=1):
@@ -96,8 +96,8 @@ def detect_internals(
         corner_xs, corner_ys = np.where(conv_result >= candidate_threshold)
         return list(zip(corner_xs + adjust_x, corner_ys + adjust_y))
 
-    collective_img = _draw_end_support(collective_img)
     gray = collective_img[:, :, 0]
+    gray = _draw_end_support(gray)
     filtered = gray >= separator_value
     conv_filter = get_orthogonal_detector(conv_filter_size)
     start_candidates = _detect_corner(filtered, conv_filter)
