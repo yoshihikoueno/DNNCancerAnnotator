@@ -23,12 +23,14 @@ import p_tqdm
 import tensorflow as tf
 
 
-def get_orthogonal_detector(size=200):
+def get_orthogonal_detector(size=200, non_orthogonal_penalty=10):
     '''
     generates conv filter to detect orthogonal
     corners
     '''
     filter_ = np.zeros([size] * 2)
+    filter_[1, :] = -non_orthogonal_penalty
+    filter_[:, 1] = -non_orthogonal_penalty
     filter_[0, :] = 1
     filter_[:, 0] = 1
     return filter_
@@ -58,10 +60,10 @@ def find_top_left_fallback(gray):
 def detect_internals(
     collective_img,
     num_internals=6,
-    separator_value=200,
-    conv_filter_size=20,
-    box_size=(708, 850),
+    conv_filter_size=25,
+    separator_value=100,
     nboxes_horizontal=3,
+    min_box_size=500,
     debug_output=None,
     use_tensorflow=False,
 ):
@@ -75,49 +77,77 @@ def detect_internals(
     Returns:
         list of boxes (startx, starty, endx, endy)
     '''
+    def _draw_end_support(img):
+        img = np.copy(img)
+        img[-1, :, :] = 255
+        img[:, -1, :] = 255
+        return img
+
+    def _detect_corner(img, detector_filter, adjust_x=0, adjust_y=0, candidate_threshold_rank=1):
+        if use_tensorflow:
+            conv_result = tf.nn.conv2d(
+                tf.expand_dims(tf.expand_dims(tf.constant(img, dtype=tf.float16), 0), -1),
+                tf.expand_dims(tf.expand_dims(tf.constant(detector_filter, dtype=tf.float16), -1), -1),
+                1,
+                'VALID',
+            ).numpy()[0, :, :, 0]
+        else: conv_result = signal.convolve2d(img, np.flip(detector_filter), 'valid')
+        candidate_threshold = np.partition(conv_result.flatten(), -candidate_threshold_rank)[-candidate_threshold_rank]
+        corner_xs, corner_ys = np.where(conv_result >= candidate_threshold)
+        return list(zip(corner_xs + adjust_x, corner_ys + adjust_y))
+
+    collective_img = _draw_end_support(collective_img)
     gray = collective_img[:, :, 0]
-    filtered = gray == separator_value
+    filtered = gray >= separator_value
     conv_filter = get_orthogonal_detector(conv_filter_size)
+    start_candidates = _detect_corner(filtered, conv_filter)
+    end_candidates = _detect_corner(filtered, np.flip(conv_filter), conv_filter_size, conv_filter_size, 3)
 
-    if use_tensorflow:
-        conv_result = tf.nn.conv2d(
-            tf.expand_dims(tf.expand_dims(tf.constant(filtered, dtype=tf.float16), 0), -1),
-            tf.expand_dims(tf.expand_dims(tf.constant(conv_filter, dtype=tf.float16), -1), -1),
-            1,
-            'VALID',
-        ).numpy()[0, :, :, 0]
-    else: conv_result = signal.convolve2d(filtered, np.flip(conv_filter), 'valid')
-    corners = conv_result == (conv_filter_size * 2 - 1)
-    xs, ys = np.where(corners)
-    if len(xs) > 0:
-        target_idx = np.argmin(xs)
-        x, y = xs[target_idx], ys[target_idx]
+    if len(start_candidates) > 0 and len(end_candidates) > 0:
+        start = np.array(min(start_candidates))
+        end_candidates_filtered = list(filter(lambda x: np.all(np.array(x) > (start + min_box_size)), end_candidates))
+        try:
+            end = np.array(min(end_candidates_filtered))
+        except ValueError:
+            raise ValueError(
+                'Failed to detect end corner.\n'
+                f'  start_candidates: {start_candidates}, selected: {start}\n'
+                f'  end_candidates: {end_candidates}\n'
+                f'  end_candidates_filtered: {end_candidates_filtered}\n'
+            )
+        box_size = end - start
+        if (
+                (box_size.min() <= min_box_size) or
+                ((box_size[0] * 2) * 0.96 > collective_img.shape[0]) or
+                ((box_size[1] * 3) * 0.96 > collective_img.shape[1])
+        ):
+            raise ValueError(
+                f'Invalid box size {box_size} detected. (start: {start}, end: {end})\n'
+                f'  start_candidates: {start_candidates}\n'
+                f'  end_candidates: {end_candidates}\n'
+                f'  end_candidates_filtered: {end_candidates_filtered}\n'
+            )
+
         # make sure (x,y) is pointing to the top-left corner
-        while x > 200: x -= box_size[0]
-        while y > 60: y -= box_size[1]
+        while start[0] > 200: start[0] -= box_size[0]
+        while start[1] > 60: start[1] -= box_size[1]
+        start += -start * (start < 0)
     else:
-        x, y = find_top_left_fallback(gray)
+        start = np.array(find_top_left_fallback(gray))
         logging.warn('Corner detection failed and falled back to naive method.'
-                     f'Starting point ({x}, {y}) was detected.')
-        if x < 0 or y < 0: raise ValueError('Failed to detect corners')
+                     f'Starting point ({start[0]}, {start[1]}) was detected.')
+        if start.min() < 0: raise ValueError('Failed to detect corners')
 
-    anchor = x, y
-    first_anchor = anchor
+    anchor = start
     boxes = []
     for i in range(num_internals):
-        box_end = anchor[0] + box_size[0], anchor[1] + box_size[1]
-        boxes.append((anchor[0] + 1, anchor[1] + 1, box_end[0], box_end[1]))
+        box_end = anchor + box_size
+        boxes.append((*anchor, *box_end))
         if (i + 1) % nboxes_horizontal == 0:
-            anchor = first_anchor[0] + box_size[0], first_anchor[1]
+            anchor = np.array((start[0] + box_size[0], start[1]))
         else:
-            anchor = anchor[0], anchor[1] + box_size[1]
+            anchor = np.array((anchor[0], anchor[1] + box_size[1]))
 
-    if debug_output is not None:
-        cv2.imwrite(os.path.join(debug_output, 'gray.png'), gray)
-        cv2.imwrite(os.path.join(debug_output, 'conv_filter.png'), conv_filter * 255)
-        cv2.imwrite(os.path.join(debug_output, 'conv_result.png'), conv_result * 255)
-        # pdb.set_trace()
-        # cv2.imwrite(os.path.join(debug_output, 'corners.png'), corners * 255.0)
     return boxes
 
 
@@ -218,7 +248,11 @@ def extract_label(
 def save_output(output, result):
     os.makedirs(output, exist_ok=True)
     for tag, img in result.items():
-        cv2.imwrite(os.path.join(output, f'{tag}.png'), img)
+        try:
+            cv2.imwrite(os.path.join(output, f'{tag}.png'), img)
+        except cv2.error:
+            logging.error(f'Failed to save an image for a tag {tag}.')
+            raise
     return
 
 
