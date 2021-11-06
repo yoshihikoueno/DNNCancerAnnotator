@@ -315,14 +315,26 @@ def tf_prepare_combined_slices(exam_dir, slice_types, return_type='array'):
     else: raise NotImplementedError
 
 
-def prepare_combined_slices(exam_dir, slice_types):
+def prepare_combined_slices(exam_dir, slice_types, shape_variance_torelance=0.007):
     if isinstance(exam_dir, str): pass
     elif isinstance(exam_dir, tf.Tensor): exam_dir = exam_dir.numpy().decode()
     else: raise NotImplementedError
     exam_data = parse_exam(exam_dir, slice_types=slice_types)
     slice_names = exam_data['TRA'].keys()
 
-    slices = tf.stack([tf.stack([exam_data[type_][slice_] for type_ in slice_types], axis=-1) for slice_ in slice_names])
+    shapes = tf.stack(list(exam_data[t][s].shape for t in slice_types for s in slice_names), 0)
+    shape_min, shape_max = tf.reduce_min(shapes, 0), tf.reduce_max(shapes, 0)
+    shape_diff = (shape_max - shape_min) / tf.reduce_mean(shapes, 0)
+    if (tf.reduce_max(shape_diff) > shape_variance_torelance):
+        raise ValueError(
+            'Shape of input image differs greately.\n'
+            f'Exam: {exam_dir}\n'
+            f'Shapes: {shapes}'
+        )
+    slices = tf.stack([
+        tf.stack([exam_data[type_][slice_][:shape_min[0], :shape_min[1]] for type_ in slice_types], axis=-1)
+        for slice_ in slice_names
+    ])
     return dict(
         slices=slices,
         category=exam_data['category'],
