@@ -169,6 +169,7 @@ class TFKerasModel():
             assert 0 <= step_range[0] <= step_range[1]
 
         if viz_ds is not None:
+            casewise_metrics_container = [] if export_csv else None
             viz_callback = custom_callbacks.Visualizer(
                 tag, viz_ds, 1, ignore_test=False,
                 save_dir=export_path,
@@ -177,6 +178,7 @@ class TFKerasModel():
                 visualize_sensitivity=visualize_sensitivity,
                 overlay=overlay,
                 export_casewise_metrics=True,
+                casewise_metrics_container=casewise_metrics_container,
             )
         if export_csv:
             result_container = pd.DataFrame()
@@ -203,6 +205,7 @@ class TFKerasModel():
         if export_csv:
             os.makedirs(os.path.join(export_path, tag), exist_ok=True)
             result_container.to_csv(os.path.join(export_path, tag, 'results.csv'))
+            pd.DataFrame(casewise_metrics_container).to_csv(os.path.join(export_path, tag, 'casewise_results.csv'))
         self._exit_strategy_section()
         return
 
