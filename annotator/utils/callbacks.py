@@ -74,6 +74,29 @@ class Visualizer(Callback):
         pr_nthreshold: the number of thresholds to use for PR curve
         pr_region_nthreshold: the number of thresholds to use for region based PR curve
         ignore_test: whether this callback should do nothing for test events
+        export_images: Whether images are exported as files in addition to tfevents.
+            Default: False
+        export_csv: Whether numerical results should be exported in CSV file in addition to tfevents.
+            Default: False
+        visualize_sensitivity: Whether sensitivity data is visualized.
+            Results are also exported in image files if `export_images=True`.
+            Default: False
+        export_path_depth: The directory depth of the export directory.
+            When Visualizer exports data to files, it organizes files so that directory structure
+                resembles the dataset structure.
+            `export_path_depth` decides to which extent Visualizer should reconstruct the dataset structure
+                in the export path (`save_dir`).
+            Defaul: 3
+            Example: when `export_path_depth=3` and a sample from dataset has path `/A/B/C/D/E/F`,
+                exported files will be placed at `<save_dir>/D/E/F/<exported_files>`
+        overlay: Whether exported segmentation images are overlayed on source image.
+            Default: False
+        export_casewise_metrics: Whether casewise metrics should be evaluated.
+            Default: False
+        casewise_metrics_container (DataFrame): A container where casewise metrics are stored.
+            This feature comes handy if you want casewise evaluations from Visualizer.
+            e.g. to save all casewise evaluations in one file.
+            Default: None (not saving in a container)
     '''
     def __init__(
         self,
@@ -93,6 +116,7 @@ class Visualizer(Callback):
         export_path_depth=3,
         overlay=False,
         export_casewise_metrics=False,
+        casewise_metrics_container=None,
     ):
         self.params = None
         self.model = None
@@ -114,6 +138,7 @@ class Visualizer(Callback):
         self.pr_IoU_threshold = pr_IoU_threshold
         self.ignore_test = ignore_test
         self.export_casewise_metrics = export_casewise_metrics
+        self.casewise_metrics_container = casewise_metrics_container
         self.per_epoch_resources = {}
         self.prediction_threshold = prediction_threshold
         self.internal_metics = [
@@ -342,6 +367,8 @@ class Visualizer(Callback):
         return image
 
     def _emit(self, tag, image, sensitivity_image=None, sensitivity_data=None, metrics_data=None):
+        if self.casewise_metrics_container is not None and metrics_data is not None:
+            self.casewise_metrics_container.append(metrics_data)
         with self.writer.as_default():
             result = tf.summary.image(tag.numpy().decode(), image, step=self.get_current_step())
             if sensitivity_image is not None:
