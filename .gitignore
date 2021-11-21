@@ -4,3 +4,4 @@ env/*
 *_pb2.py
 dockerfile
 /data/
+debug_config*.yaml
