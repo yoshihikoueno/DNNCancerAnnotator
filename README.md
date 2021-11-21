@@ -9,10 +9,7 @@ Tensorflow
 
 ## Install
  ```bash
- # Clone
- git clone https://github.com/yoshihikoueno/DNNCancerAnnotator
- cd DNNCancerAnnotator
- pip3 install -r requirements.txt
+ pip3 install git+https://github.com/yoshihikoueno/DNNCancerAnnotator.git@master
  ```
 
 ## Usage
